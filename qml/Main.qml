@@ -198,6 +198,7 @@ ApplicationWindow {
                     TasksPage       {}
                     BenchmarkPage   {}
                     CharlaPage      {}
+                    StudiaPage      {}
                     SettingsPage    {}
                 }
             }

@@ -5137,6 +5137,7 @@ static const TrEntry k_tr[] = {
     {"nav.research",  "Research",       "Research",     "研究",       "Recherche",      "Ricerca",        "Recherche"},
     {"nav.tasks",     "Tasks",          "Tasks",        "任务",       "Tâches",         "Attività",       "Aufgaben"},
     {"nav.charla",    "Charla",         "Talk",         "对话",       "Parler",         "Parla",          "Sprechen"},
+    {"nav.studia",    "StudIA",         "StudIA",       "StudIA",     "StudIA",         "StudIA",         "StudIA"},
     {"nav.settings",  "Configuración", "Settings",     "设置",       "Paramètres",     "Impostazioni",   "Einstellungen"},
     // Launch page
     {"launch.title",       "Lanzar",          "Launch",          "启动",       "Lancer",          "Avvia",               "Starten"},

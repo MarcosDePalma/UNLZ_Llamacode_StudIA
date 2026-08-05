@@ -43,6 +43,7 @@
 - [Cookbook de modelos (hardware-fit)](#cookbook-de-modelos-recomendaciones-hardware-fit)
 - [Chat integrado](#chat-integrado) · [Harness de Agente](#harness-de-agente-opencode) · [Lanzamiento del servidor](#lanzamiento-del-servidor-launchpage)
 - [Backends cloud + secretos](#backends-cloud--secretos-cifrados) · [Modo Charla (voz)](#modo-charla-voz-a-voz) · [Memoria/RAG](#memoria-rag-y-verificación) · [Maestro/supervisor](#maestro--supervisor-escalado)
+- [StudIA (asistente de estudio)](#studia-asistente-de-estudio-sobre-corpus-académico)
 - [Correo](#cuentas-de-correo) · [Browser (Playwright)](#automatización-de-browser-playwright) · [Adjuntos/visión](#adjuntos-documentos--visión) · [Watchdog + VRAM](#robustez-del-server-watchdog--vram) · [Otras capacidades](#otras-capacidades)
 - [Process Lifecycle](#process-lifecycle) · [Stack técnico](#stack-técnico) · [Build](#build) · [Estructura del repo](#estructura-del-repo)
 - [Fases](#fases) · [Tasks (macros + scheduler)](#tasks-macros-configurables--scheduler-cron) · [Benchmarking](#benchmarking) · [Auto-tuning](#auto-tuning-de-parámetros) · [Seguridad operativa](#seguridad-operativa)
@@ -459,6 +460,68 @@ El agente nativo no solo lee archivos: mantiene memoria y conocimiento estructur
   aceptó, falló o se descartó.
 - **Tools**: `hybrid_search` (búsqueda híbrida léxica+semántica), `verify_claims`
   (chequeo de afirmaciones), memoria por capas. RAG sobre el material del proyecto.
+
+## StudIA (asistente de estudio sobre corpus académico)
+
+Sección **🎓 StudIA** en la NavBar: chat que responde **sólo con documentación
+académica indexada** — apuntes, libros y trabajos prácticos de una carrera — en vez
+de con el conocimiento general del modelo. Desarrollado como PPS de la Facultad
+(Ing. Mecatrónica, UNLZ).
+
+Es un módulo cerrado: `src/core/studia/` + `qml/pages/StudiaPage.qml` +
+`tools/studia/`. No modifica el agente, el chat ni los perfiles; sólo consume el
+`llama-server` que ya levantó LlamaCode (la URL se la pasa QML desde
+`App.serverBaseUrl`).
+
+### Ingesta (offline, `tools/studia/ingest.py`)
+
+Recorre una carpeta de material, extrae texto (PDF/DOCX/PPTX/XLSX/TXT/MD), lo parte
+en fragmentos de ~1200 caracteres con solape y arma un índice **SQLite + FTS5**
+(BM25, `remove_diacritics 2` para que "mecanica" encuentre "mecánica"). Sólo lectura
+sobre el corpus: nunca modifica los originales.
+
+- Filtra instalaciones de software que se cuelan en el material (`site-packages`,
+  `__pycache__`, `*.dist-info`, metadata de paquetes, archivos de bloqueo `~$`).
+- Deduplica por huella (md5 de los primeros 4 MB + tamaño).
+- Los documentos sin texto extraíble quedan registrados como `necesita_ocr` en vez
+  de descartarse, para poder sumarles OCR después sin re-ingestar el resto.
+- Re-ejecutable: saltea lo ya procesado y **reintenta lo que falló**, así corregir
+  una dependencia que faltaba no obliga a rehacer la corrida entera.
+- `tools/studia/estado.py` da el informe del índice y prueba búsquedas;
+  `tools/studia/listar_excluidos.py` audita qué quedó afuera y por qué (importa las
+  reglas de `ingest.py`, así no se desincronizan).
+
+### Consulta (`StudiaIndex` + `StudiaController`)
+
+Pregunta → recuperación BM25 → prompt con fragmentos numerados → `llama-server` →
+respuesta citando `[n]`. Las fuentes se muestran **agrupadas por documento** (un PDF
+que aportó tres páginas aparece como `apunte.pdf · pág. 11, 14, 16`, no repetido tres
+veces) y son clickeables: abren el original. El selector de materia las lista en
+**orden de cursada**, por cuatrimestre — el campo es texto (`"1C".."10C"`), así que
+se castea a entero para que `10C` no quede antes que `1C`.
+
+**Abstención determinística**: si la recuperación no encuentra evidencia suficiente,
+el controlador responde la frase de abstención y **no llega a llamar al modelo**. La
+garantía no depende de que el LLM obedezca el prompt. Tres reglas
+(`StudiaIndex::hayEvidencia`):
+
+1. La pregunta debe tener al menos un **término discriminante** — presente en el
+   corpus y no tan frecuente como para aparecer en todos lados (`esDiscriminante`,
+   tope 1% de los fragmentos con piso absoluto para índices chicos). Una consulta
+   como *"¿cuál es el mejor equipo de trabajo?"* no apunta a nada concreto.
+2. Score BM25 **normalizado por la cantidad de términos discriminantes** contra un
+   umbral configurable. Dividir por el total de términos castigaba a las preguntas
+   naturales: *"explicame de qué se trata un motor a inducción"* arrastra relleno que
+   no aporta al ranking pero agranda el divisor, y quedaba rechazada aunque el
+   material estuviera.
+3. Al menos un fragmento del tope debe cubrir **2 o más términos distintos** de la
+   pregunta — las consultas ajenas suelen enganchar por una única palabra común.
+
+El umbral default (`-7.0`) se calibró midiendo **30 preguntas escritas en lenguaje
+natural** contra un corpus real de 2.690 documentos / 139.000 fragmentos: responde
+las 16 cubiertas y se abstiene en las 14 ajenas. La instrucción de abstención del
+prompt queda como segunda barrera. **Recalibrar `umbralAbstencion` con cada corpus
+nuevo**: los valores de BM25 dependen del tamaño del índice.
 
 ## Maestro / supervisor (escalado)
 

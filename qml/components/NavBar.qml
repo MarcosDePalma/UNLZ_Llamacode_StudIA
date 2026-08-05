@@ -22,7 +22,11 @@ Rectangle {
         { key: "nav.tasks",     icon: "🗒",  serverOnly: false },
         { key: "nav.benchmark", icon: "📊",  serverOnly: false },
         { key: "nav.charla",    icon: "🎙",  serverOnly: true  },
+        { key: "nav.studia",    icon: "🎓",  serverOnly: false },
     ]
+
+    // Ajustes va siempre al final, después de las páginas de la lista.
+    readonly property int settingsIndex: pages.length
 
     ColumnLayout {
         anchors { fill: parent; margins: 0 }
@@ -75,7 +79,7 @@ Rectangle {
         ItemDelegate {
             Layout.fillWidth: true
             height: 48
-            highlighted: root.currentIndex === 10
+            highlighted: root.currentIndex === root.settingsIndex
             background: Rectangle {
                 color: parent.highlighted ? Theme.highlight : (parent.hovered ? Theme.hoverBg : "transparent")
                 Rectangle {
@@ -91,10 +95,10 @@ Rectangle {
                 Text {
                     text: (App.langV, App.l("nav.settings"))
                     font.pixelSize: 14
-                    color: root.currentIndex === 10 ? Theme.textPrimary : Theme.textSecondary
+                    color: root.currentIndex === root.settingsIndex ? Theme.textPrimary : Theme.textSecondary
                 }
             }
-            onClicked: { root.currentIndex = 10; root.pageSelected(10) }
+            onClicked: { root.currentIndex = root.settingsIndex; root.pageSelected(root.settingsIndex) }
         }
 
         Text {

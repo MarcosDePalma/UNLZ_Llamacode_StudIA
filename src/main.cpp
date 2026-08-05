@@ -1,6 +1,7 @@
 #include "AppController.h"
 #include "core/ControlApi.h"
 #include "core/MermaidRenderer.h"
+#include "core/studia/StudiaController.h"
 #include "ThemeProvider.h"
 #include <QApplication>
 #include <QQmlApplicationEngine>
@@ -132,6 +133,9 @@ int main(int argc, char *argv[])
     AppController controller;
     ThemeProvider theme;
     MermaidRenderer mermaid;
+    // StudIA: modulo propio (indice documental + asistente de estudio). No
+    // depende de AppController; la URL del server se la pasa QML.
+    StudiaController studia;
 
     qDebug() << "Controllers ready";
 
@@ -150,6 +154,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("App", &controller);
     engine.rootContext()->setContextProperty("Theme", &theme);
     engine.rootContext()->setContextProperty("Mermaid", &mermaid);
+    engine.rootContext()->setContextProperty("Studia", &studia);
     engine.rootContext()->setContextProperty("AppIconSource", appIconSource);
 
     // Control API headless (espejo de AppController) para tests sin GUI.

@@ -82,6 +82,8 @@ set(CORE_SOURCES
     src/core/tuner/AutoTuner.cpp
     src/core/tuner/TunerEngine.cpp
     src/core/tuner/TunerWorker.cpp
+    src/core/studia/StudiaIndex.cpp
+    src/core/studia/StudiaController.cpp
 )
 
 set(HEADERS
@@ -127,6 +129,8 @@ set(HEADERS
     src/core/tuner/AutoTuner.h
     src/core/tuner/TunerEngine.h
     src/core/tuner/TunerWorker.h
+    src/core/studia/StudiaIndex.h
+    src/core/studia/StudiaController.h
 )
 
 # ── Libreria core compartida (app + tests) ──
@@ -243,6 +247,7 @@ qt_add_qml_module(LlamaCode
         qml/pages/BenchmarkPage.qml
         qml/pages/ResearchPage.qml
         qml/pages/CharlaPage.qml
+        qml/pages/StudiaPage.qml
         qml/pages/SettingsPage.qml
 )
 
@@ -371,4 +376,17 @@ if (BUILD_TESTS)
     add_lc_test(test_voice              tests/test_voice.cpp)
     add_lc_test(test_tasks              tests/test_tasks.cpp)
     add_lc_test(test_cron               tests/test_cron.cpp)
+    add_lc_test(test_studia             tests/test_studia.cpp)
+
+    # Ingestor de StudIA: es Python (usa markitdown/pypdf), asi que su suite es
+    # unittest y se engancha a ctest como un test mas. Si no hay Python en el
+    # sistema, no se registra (el resto de la suite sigue corriendo).
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if (Python3_Interpreter_FOUND)
+        add_test(NAME test_studia_ingest
+                 COMMAND ${Python3_EXECUTABLE}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tools/studia/test_ingest.py)
+    else()
+        message(STATUS "Python3 no encontrado: se omite test_studia_ingest")
+    endif()
 endif()
