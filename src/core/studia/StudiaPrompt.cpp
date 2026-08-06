@@ -27,6 +27,43 @@ QString reglasDeFormato()
         "- No escribas párrafos de más de 5 o 6 líneas: cortá con subtítulos.");
 }
 
+// Los dos tipos de imagen que la app sabe dibujar. Se le explica al modelo el
+// formato exacto porque un 7B no lo adivina.
+QString reglasDeImagenes()
+{
+    return QStringLiteral(
+        "IMÁGENES: la aplicación dibuja figuras por vos. Si el estudiante te pide "
+        "«graficá», «dibujá», «mostrame la curva», «hacé un diagrama» o "
+        "«esquematizá», tu respuesta DEBE incluir el bloque correspondiente. NO "
+        "expliques cómo graficarlo ni le digas que use otra herramienta: emitilo "
+        "y listo. Fuera de esos pedidos, usalas sólo cuando ayuden de verdad.\n\n"
+        "1) GRÁFICO DE FUNCIONES — para ver una curva, comparar dos o mostrar el "
+        "área de una integral. Formato exacto:\n"
+        "```grafico\n"
+        "funcion: x**2 - 3*x + 2\n"
+        "rango: -2, 5\n"
+        "area: 1, 2\n"
+        "titulo: Área bajo la parábola entre 1 y 2\n"
+        "```\n"
+        "Reglas: la expresión es Python/numpy en función de `x` (`**` para "
+        "potencia, `sqrt`, `sin`, `cos`, `exp`, `log`, `pi`). `rango` es "
+        "obligatorio. `area` es opcional y sombrea bajo la primera curva. Podés "
+        "repetir `funcion:` para superponer curvas. Nada de otro código.\n"
+        "Ejemplo de uso. Pedido: «graficame x²−3x+2 entre −2 y 5 y sombreá el área "
+        "entre 1 y 2». Respuesta correcta: una línea de contexto y ACTO SEGUIDO el "
+        "bloque de arriba, tal cual. Respuesta incorrecta: explicarle cómo "
+        "graficarlo en Python o mandarlo a otro programa.\n\n"
+        "2) DIAGRAMA — para procesos, clasificaciones o relaciones entre "
+        "conceptos. Formato Mermaid:\n"
+        "```mermaid\n"
+        "flowchart TD\n"
+        "  A[Entrada] --> B{¿Estable?}\n"
+        "  B -- sí --> C[Salida]\n"
+        "  B -- no --> D[Ajustar ganancia]\n"
+        "```\n"
+        "Usá etiquetas cortas y sin caracteres raros.");
+}
+
 }  // namespace
 
 
@@ -43,9 +80,11 @@ QString fraseAbstencion()
 QVector<Modo> modos()
 {
     static const QVector<Modo> v = {
+        // Flexibles: conversar y entender. Exigentes: producir material de
+        // estudio que se va a usar como si fuera fiel al apunte.
         {QStringLiteral("libre"), QStringLiteral("Conversación"),
          QStringLiteral("Preguntas y respuestas sobre el material."),
-         QString()},
+         QString(), false},
 
         {QStringLiteral("resumen"), QStringLiteral("Resumen"),
          QStringLiteral("Condensa el tema en sus ideas principales."),
@@ -57,7 +96,7 @@ QVector<Modo> modos()
              "significado en una línea.\n"
              "4. `## Para tener en cuenta` con lo que suele confundirse o "
              "preguntarse en un examen, sólo si la documentación lo respalda.\n"
-             "No agregues nada que no esté en los fragmentos.")},
+             "No agregues nada que no esté en los fragmentos."), true},
 
         {QStringLiteral("explicacion"), QStringLiteral("Explicación"),
          QStringLiteral("Desarrolla el concepto de menor a mayor dificultad."),
@@ -70,7 +109,7 @@ QVector<Modo> modos()
              "Si los fragmentos no traen ninguno, decilo en vez de inventarlo.\n"
              "4. `## Errores frecuentes` — confusiones habituales, sólo si la "
              "documentación las menciona.\n"
-             "Asumí que el estudiante ve el tema por primera vez.")},
+             "Asumí que el estudiante ve el tema por primera vez."), false},
 
         {QStringLiteral("autoevaluacion"), QStringLiteral("Autoevaluación"),
          QStringLiteral("Arma preguntas de examen con su solución."),
@@ -82,7 +121,7 @@ QVector<Modo> modos()
              "- Después de las 5 preguntas, `## Respuestas`, con la solución de "
              "cada una y la cita `[n]` del fragmento que la respalda.\n"
              "Cada pregunta debe poder responderse SÓLO con los fragmentos dados. "
-             "Si no alcanza para 5, hacé menos y aclaralo.")},
+             "Si no alcanza para 5, hacé menos y aclaralo."), true},
 
         {QStringLiteral("flashcards"), QStringLiteral("Flashcards"),
          QStringLiteral("Tarjetas de repaso con frente y dorso."),
@@ -97,7 +136,7 @@ QVector<Modo> modos()
              "---\n\n"
              "Reglas: entre 6 y 12 tarjetas; una sola idea por tarjeta; el dorso "
              "tiene que entenderse sin haber leído las otras. Nada que no esté en "
-             "los fragmentos.")},
+             "los fragmentos."), true},
 
         {QStringLiteral("ejercicio"), QStringLiteral("Ejercicio"),
          QStringLiteral("Resuelve un problema paso a paso con el método del apunte."),
@@ -115,7 +154,7 @@ QVector<Modo> modos()
              "Estás aplicando el método a números nuevos: eso es correcto y es lo "
              "que se te pide. Lo que no podés es inventar la fórmula ni los datos. "
              "Si hacés una cuenta de la que no estás seguro, marcala como "
-             "'verificar a mano'.")},
+             "'verificar a mano'."), false},
 
         {QStringLiteral("plan"), QStringLiteral("Plan de estudio"),
          QStringLiteral("Organiza el tema en sesiones de estudio."),
@@ -128,7 +167,7 @@ QVector<Modo> modos()
              "Material `[n]` | Cómo verificar que lo entendiste.\n"
              "4. `## Antes del examen` — el repaso final, en 3 o 4 viñetas.\n"
              "Dimensioná el plan según cuánto material hay; no inventes bibliografía "
-             "que no aparezca en los fragmentos.")},
+             "que no aparezca en los fragmentos."), true},
     };
     return v;
 }
@@ -219,8 +258,29 @@ QString sistema(const QString &materia, const QString &idModo)
         .arg(fraseAbstencion());
 
     s += reglasDeFormato();
+    s += QStringLiteral("\n\n") + reglasDeImagenes();
 
     const Modo m = modoPorId(idModo);
+    // Los modos flexibles priorizan entender por sobre abstenerse: el material
+    // rara vez responde textualmente lo que el estudiante pregunta, y contestar
+    // "no tengo información" ante una repregunta no le sirve de nada.
+    if (!m.exigente) {
+        s += QStringLiteral(
+            "\n\nACTITUD EN ESTE MODO (conversación): tu objetivo es que el "
+            "estudiante ENTIENDA. Antes de abstenerte, agotá lo que podés hacer "
+            "con lo que tenés:\n"
+            "- Si los fragmentos hablan del tema aunque no respondan textualmente, "
+            "usalos y armá la respuesta razonando sobre ellos.\n"
+            "- Si el estudiante se refiere a algo de la conversación previa "
+            "(\"eso\", \"la ecuación anterior\", \"el segundo punto\"), respondé "
+            "sobre eso.\n"
+            "- Si sólo podés responder parcialmente, respondé la parte que podés y "
+            "decí qué falta.\n"
+            "- Marcá lo que sea deducción tuya: «esto no está explícito en el "
+            "apunte, se deduce de [n]».\n"
+            "Reservá la frase de abstención para cuando el tema esté realmente "
+            "fuera del material y tampoco haya nada en la conversación.");
+    }
     if (!m.instruccion.isEmpty())
         s += QStringLiteral("\n\n") + m.instruccion;
     return s;
@@ -254,11 +314,46 @@ QString usuario(const QString &pregunta, const QVector<StudiaFragmento> &frags,
     return out;
 }
 
-QString consultaConContexto(const QString &pregunta, const QStringList &anteriores)
+bool puedeResponderDesdeConversacion(const QVector<Turno> &historial)
+{
+    // Hace falta al menos una respuesta previa de StudIA con contenido: es de
+    // ahi de donde va a salir la respuesta.
+    for (const Turno &t : historial)
+        if (t.rol != QLatin1String("usuario") && t.contenido.trimmed().size() > 40)
+            return true;
+    return false;
+}
+
+QString usuarioSoloConversacion(const QString &pregunta, const QVector<Turno> &historial)
+{
+    QString out = QStringLiteral(
+        "### Conversación hasta ahora\n\n");
+    for (const Turno &t : historial) {
+        const QString quien = (t.rol == QLatin1String("usuario"))
+                                  ? QStringLiteral("Estudiante") : QStringLiteral("Vos");
+        out += QStringLiteral("%1: %2\n\n").arg(quien, t.contenido.trimmed());
+    }
+    out += QStringLiteral(
+        "### Situación\n"
+        "Para este pedido la búsqueda en la documentación no trajo material nuevo. "
+        "Puede ser porque el estudiante se refiere a algo que YA está en la "
+        "conversación de arriba (\"repetí la ecuación anterior\", \"explicalo más "
+        "simple\", \"no entendí el paso 2\", \"dame otro ejemplo de eso\").\n\n"
+        "Respondé usando lo que ya se dijo, sin inventar hechos nuevos ni fórmulas "
+        "que no aparezcan arriba. Si el pedido necesita información que no está ni "
+        "en la conversación ni en el material, ahí sí decilo y sugerí cómo "
+        "reformular la pregunta.\n"
+        "No cites `[n]`: en este turno no hay fragmentos numerados.\n\n"
+        "### Pedido del estudiante\n%1\n").arg(pregunta.trimmed());
+    return out;
+}
+
+QString consultaConContexto(const QString &pregunta, const QStringList &anteriores,
+                            int discriminantes)
 {
     const QStringList propios = StudiaIndex::terminosConsulta(pregunta);
-    // Pregunta autosuficiente: se busca tal cual.
-    if (propios.size() >= kMinTerminosAutonomos)
+    // Pregunta autosuficiente: tiene terminos propios que ubican el tema.
+    if (discriminantes >= kMinDiscriminantesAutonomos)
         return pregunta;
 
     QStringList terminos = propios;

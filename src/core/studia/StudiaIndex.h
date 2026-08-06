@@ -8,6 +8,7 @@
 
 // Un fragmento de documentacion academica recuperado del indice.
 struct StudiaFragmento {
+    int     fragId = 0;  // id del fragmento; clave para fusionar rankings
     int     docId = 0;
     QString documento;   // nombre del archivo original
     QString materia;
@@ -116,6 +117,34 @@ public:
     // estudiante le importa cuanto material tiene de Calculo 2, no el total).
     QVariantMap estadisticas(const QString &materia = QString()) const;
     QStringList materias() const;       // materias con al menos un fragmento
+
+    // ── Busqueda semantica ───────────────────────────────────────────────────
+    // ¿El indice tiene vectores? (los genera tools/studia/vectorizar.py). Si no
+    // los tiene, buscar() usa solo BM25 y todo sigue funcionando.
+    bool tieneVectores() const;
+    int cantidadVectores() const;
+    int dimensionVectores() const;
+
+    // Busqueda HIBRIDA: fusiona el ranking lexico (BM25) con el semantico
+    // (coseno contra `vectorConsulta`) por Reciprocal Rank Fusion.
+    //
+    // Se fusionan RANKINGS y no puntajes porque BM25 y el coseno viven en
+    // escalas distintas y no son comparables. RRF sólo mira en qué posición
+    // quedó cada fragmento en cada lista.
+    //
+    // Si `vectorConsulta` viene vacio o el indice no tiene vectores, equivale a
+    // buscar() lexico.
+    QVector<StudiaFragmento> buscarHibrido(const QString &consulta,
+                                           const QVector<float> &vectorConsulta,
+                                           int k = 6,
+                                           const QString &materia = QString(),
+                                           int maxPorDoc = 3) const;
+
+    // Constante de amortiguacion de RRF. 60 es el valor clasico del paper y el
+    // que ya usa el agente de LlamaCode en su hybrid_search.
+    static constexpr double kRrfK = 60.0;
+    // Cuantos candidatos se traen de cada ranking antes de fusionar.
+    static constexpr int kCandidatosPorRanking = 40;
 
     // Documentos del indice (para listar la bibliografia propia en la UI).
     // Si `materia` no esta vacia, sólo los de esa materia.

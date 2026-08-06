@@ -84,6 +84,19 @@ const QSet<QString> &palabrasVacias()
         QStringLiteral("antes"), QStringLiteral("luego"), QStringLiteral("bien"),
         QStringLiteral("mal"), QStringLiteral("mejor"), QStringLiteral("peor"),
         QStringLiteral("grande"), QStringLiteral("chico"),
+        // Verbos de "¿qué pasa si…?". Son sinónimos entre sí pero BM25 los pesa
+        // distinto según cuán frecuentes sean en el corpus, y eso hacía que
+        // "¿qué pasa si aumento la frecuencia?" y "¿qué sucede si aumento la
+        // frecuencia?" se comportaran distinto. Sacándolos, las dos formas de
+        // preguntar producen la misma consulta. NO se listan verbos con carga
+        // técnica (genera, produce, afecta, influye, varía): esos sí importan.
+        QStringLiteral("pasa"), QStringLiteral("pasan"), QStringLiteral("paso"),
+        QStringLiteral("sucede"), QStringLiteral("suceden"), QStringLiteral("sucedio"),
+        QStringLiteral("ocurre"), QStringLiteral("ocurren"), QStringLiteral("ocurrio"),
+        QStringLiteral("anda"), QStringLiteral("andan"),
+        QStringLiteral("queda"), QStringLiteral("quedan"),
+        QStringLiteral("resulta"), QStringLiteral("resultan"),
+        QStringLiteral("existe"), QStringLiteral("existen"),
     };
     return s;
 }
@@ -289,7 +302,7 @@ QVector<StudiaFragmento> StudiaIndex::buscar(const QString &consulta, int k,
     const int limite = qMax(k * 5, 30);
     QString sql = QStringLiteral(
         "SELECT d.id, d.nombre, d.materia, d.anio, d.ruta, f.pagina, "
-        "       bm25(fragmentos_fts) AS score, f.texto "
+        "       bm25(fragmentos_fts) AS score, f.texto, f.id "
         "FROM fragmentos_fts "
         "JOIN fragmentos f ON f.id = fragmentos_fts.rowid "
         "JOIN documentos d ON d.id = f.doc_id "
@@ -321,6 +334,7 @@ QVector<StudiaFragmento> StudiaIndex::buscar(const QString &consulta, int k,
         f.pagina    = q.value(5).toInt();
         f.score     = q.value(6).toDouble();
         f.texto     = q.value(7).toString();
+        f.fragId    = q.value(8).toInt();
         candidatos.append(f);
     }
     if (candidatos.isEmpty())
@@ -454,6 +468,151 @@ QVariantMap StudiaIndex::estadisticas(const QString &materia) const
     m.insert(QStringLiteral("materia"), filtro);
     m.insert(QStringLiteral("ruta"), m_ruta);
     return m;
+}
+
+// ── Vectores ─────────────────────────────────────────────────────────────────
+
+int StudiaIndex::cantidadVectores() const
+{
+    if (!m_abierto)
+        return 0;
+    QSqlDatabase db = QSqlDatabase::database(m_conn, false);
+    if (!db.isOpen())
+        return 0;
+    QSqlQuery q(db);
+    // La tabla puede no existir: el indice se pudo generar sin vectorizar.
+    if (q.exec(QStringLiteral("SELECT COUNT(*) FROM vectores")) && q.next())
+        return q.value(0).toInt();
+    return 0;
+}
+
+int StudiaIndex::dimensionVectores() const
+{
+    if (!m_abierto)
+        return 0;
+    QSqlDatabase db = QSqlDatabase::database(m_conn, false);
+    if (!db.isOpen())
+        return 0;
+    QSqlQuery q(db);
+    if (q.exec(QStringLiteral("SELECT valor FROM vectores_info WHERE clave='dim'"))
+        && q.next())
+        return q.value(0).toInt();
+    return 0;
+}
+
+bool StudiaIndex::tieneVectores() const
+{
+    return cantidadVectores() > 0;
+}
+
+QVector<StudiaFragmento> StudiaIndex::buscarHibrido(const QString &consulta,
+                                                    const QVector<float> &vectorConsulta,
+                                                    int k, const QString &materia,
+                                                    int maxPorDoc) const
+{
+    // Sin vector de consulta o sin vectores en el indice: lexico puro.
+    if (vectorConsulta.isEmpty() || !tieneVectores())
+        return buscar(consulta, k, materia, maxPorDoc);
+    if (!m_abierto || k <= 0)
+        return {};
+
+    QSqlDatabase db = QSqlDatabase::database(m_conn, false);
+    if (!db.isOpen())
+        return {};
+
+    // ── Ranking 1: lexico. Se pide de mas para tener con que fusionar.
+    const QVector<StudiaFragmento> lexicos =
+        buscar(consulta, kCandidatosPorRanking, materia, 0);
+
+    // ── Ranking 2: semantico. Se recorren los vectores y se rankea por coseno.
+    // Estan normalizados al guardarlos, asi que el coseno es el producto escalar.
+    QString sqlVec = QStringLiteral(
+        "SELECT f.id, v.dim, v.vec FROM vectores v "
+        "JOIN fragmentos f ON f.id = v.frag_id "
+        "JOIN documentos d ON d.id = f.doc_id");
+    if (!materia.trimmed().isEmpty())
+        sqlVec += QStringLiteral(" WHERE d.materia = ?");
+    QSqlQuery qv(db);
+    if (!qv.prepare(sqlVec))
+        return buscar(consulta, k, materia, maxPorDoc);
+    if (!materia.trimmed().isEmpty())
+        qv.addBindValue(materia.trimmed());
+    if (!qv.exec())
+        return buscar(consulta, k, materia, maxPorDoc);
+
+    const int dim = vectorConsulta.size();
+    QVector<QPair<float, int>> porSimilitud;   // (coseno, fragmento_id)
+    while (qv.next()) {
+        if (qv.value(1).toInt() != dim)
+            continue;                          // vector de otro modelo: se ignora
+        const QByteArray blob = qv.value(2).toByteArray();
+        if (blob.size() != dim * int(sizeof(float)))
+            continue;
+        const float *v = reinterpret_cast<const float *>(blob.constData());
+        float dot = 0.f;
+        for (int i = 0; i < dim; ++i)
+            dot += vectorConsulta[i] * v[i];
+        porSimilitud.append({dot, qv.value(0).toInt()});
+    }
+    if (porSimilitud.isEmpty())
+        return buscar(consulta, k, materia, maxPorDoc);
+    std::sort(porSimilitud.begin(), porSimilitud.end(),
+              [](const auto &a, const auto &b) { return a.first > b.first; });
+    if (porSimilitud.size() > kCandidatosPorRanking)
+        porSimilitud.resize(kCandidatosPorRanking);
+
+    // ── Fusion RRF: cada lista aporta 1/(k0 + posicion).
+    QHash<int, double> puntos;                 // fragmento_id → score fusionado
+    for (int i = 0; i < lexicos.size(); ++i)
+        puntos[lexicos[i].fragId] += 1.0 / (kRrfK + i + 1);
+    for (int i = 0; i < porSimilitud.size(); ++i)
+        puntos[porSimilitud[i].second] += 1.0 / (kRrfK + i + 1);
+
+    QVector<int> orden;
+    orden.reserve(puntos.size());
+    for (auto it = puntos.cbegin(); it != puntos.cend(); ++it)
+        orden.append(it.key());
+    std::sort(orden.begin(), orden.end(),
+              [&](int a, int b) { return puntos[a] > puntos[b]; });
+
+    // ── Materializar los top-k respetando el tope por documento.
+    QHash<int, StudiaFragmento> yaTraidos;
+    for (const StudiaFragmento &f : lexicos)
+        yaTraidos.insert(f.fragId, f);
+
+    QVector<StudiaFragmento> salida;
+    QHash<int, int> porDoc;
+    for (int fragId : orden) {
+        if (salida.size() >= k)
+            break;
+        StudiaFragmento f;
+        if (yaTraidos.contains(fragId)) {
+            f = yaTraidos.value(fragId);
+        } else {
+            // Vino sólo del ranking semántico: hay que leerlo.
+            QSqlQuery qf(db);
+            qf.prepare(QStringLiteral(
+                "SELECT d.id, d.nombre, d.materia, d.anio, d.ruta, f.pagina, f.texto "
+                "FROM fragmentos f JOIN documentos d ON d.id = f.doc_id WHERE f.id = ?"));
+            qf.addBindValue(fragId);
+            if (!qf.exec() || !qf.next())
+                continue;
+            f.fragId    = fragId;
+            f.docId     = qf.value(0).toInt();
+            f.documento = qf.value(1).toString();
+            f.materia   = qf.value(2).toString();
+            f.anio      = qf.value(3).toString();
+            f.ruta      = qf.value(4).toString();
+            f.pagina    = qf.value(5).toInt();
+            f.texto     = qf.value(6).toString();
+        }
+        if (maxPorDoc > 0 && porDoc.value(f.docId) >= maxPorDoc)
+            continue;
+        porDoc[f.docId] = porDoc.value(f.docId) + 1;
+        f.score = -puntos.value(fragId);   // negativo = mejor, como bm25
+        salida.append(f);
+    }
+    return salida;
 }
 
 QVariantList StudiaIndex::documentos(const QString &materia) const

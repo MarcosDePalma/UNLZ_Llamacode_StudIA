@@ -6,6 +6,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <functional>
 
 namespace {
 
@@ -329,19 +330,187 @@ QString latexALegible(const QString &texto)
     return s;
 }
 
+bool esLineaEcuacion(const QString &linea)
+{
+    QString s = linea.trimmed();
+    if (s.isEmpty() || s.size() > 220)
+        return false;
+
+    // Si todo el renglon es un span de codigo (`...`), se destapa: el modelo
+    // suele envolver las formulas en backticks aunque se le pida que no.
+    if (s.startsWith(QLatin1Char('`')) && s.endsWith(QLatin1Char('`')) && s.size() > 2) {
+        s = s.mid(1, s.size() - 2).trimmed();
+        s.remove(QLatin1Char('`'));
+    }
+    if (s.isEmpty())
+        return false;
+
+    // Estructura de Markdown: titulos, listas, citas, tablas. No son ecuaciones.
+    static const QRegularExpression estructura(
+        QStringLiteral("^(#{1,6}\\s|[-*+]\\s|>\\s|\\||\\d+[.)]\\s)"));
+    if (estructura.match(s).hasMatch())
+        return false;
+    // Una oracion terminada en punto es prosa.
+    if (s.endsWith(QLatin1Char('.')) || s.endsWith(QLatin1Char(':')))
+        return false;
+
+    // Tiene que haber algun signo matematico.
+    static const QString signos = QStringLiteral("=≤≥≈≠∫∬∮Σ∏√∂∇→⇒·×÷±∞^_");
+    bool hayMatematica = false;
+    for (const QChar c : s) {
+        if (signos.contains(c)) { hayMatematica = true; break; }
+    }
+    // Los superindices/subindices Unicode tambien cuentan (ya convertidos).
+    if (!hayMatematica) {
+        for (const QChar c : s) {
+            const ushort u = c.unicode();
+            if ((u >= 0x2070 && u <= 0x209F) || u == 0x00B2 || u == 0x00B3 || u == 0x00B9) {
+                hayMatematica = true;
+                break;
+            }
+        }
+    }
+    if (!hayMatematica)
+        return false;
+
+    // Y casi nada de prosa: una ecuacion tiene simbolos, no palabras largas.
+    // "La velocidad v = d/t es constante" tiene 2 y NO es un bloque de ecuacion;
+    // "∫∫S f(x,y,z) dS = ∫∫D f(r(u,v)) dA" no tiene ninguna.
+    static const QRegularExpression palabraLarga(
+        QStringLiteral("(?<![\\p{L}])[\\p{L}]{4,}(?![\\p{L}])"));
+    int prosa = 0;
+    QRegularExpressionMatchIterator it = palabraLarga.globalMatch(s);
+    while (it.hasNext()) { it.next(); ++prosa; }
+    return prosa <= 1;
+}
+
+// Parte el texto en tramos, separando los bloques cercados ```mermaid y
+// ```grafico. Sale a la UI como bloques propios que se renderizan a imagen.
+static void separarCercados(const QString &crudo, QVariantList *bloques,
+                            const std::function<void(const QString &, const QString &)> &agregar,
+                            const std::function<void(const QString &)> &procesarTexto)
+{
+    Q_UNUSED(bloques)
+    static const QRegularExpression cercado(
+        QStringLiteral("```[ \\t]*(mermaid|grafico|gráfico|plot)[ \\t]*\\n(.*?)```"),
+        QRegularExpression::DotMatchesEverythingOption
+        | QRegularExpression::CaseInsensitiveOption);
+
+    int desde = 0;
+    QRegularExpressionMatchIterator it = cercado.globalMatch(crudo);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch m = it.next();
+        procesarTexto(crudo.mid(desde, m.capturedStart() - desde));
+        const QString lenguaje = m.captured(1).toLower();
+        const QString cuerpo = m.captured(2).trimmed();
+        if (!cuerpo.isEmpty()) {
+            agregar(lenguaje == QLatin1String("mermaid") ? QStringLiteral("mermaid")
+                                                         : QStringLiteral("grafico"),
+                    cuerpo);
+        }
+        desde = m.capturedEnd();
+    }
+    procesarTexto(crudo.mid(desde));
+}
+
+QVariantList flashcards(const QString &respuesta)
+{
+    QVariantList tarjetas;
+    // Reconoce el rotulo al principio del renglon y devuelve lo que viene
+    // DESPUES en la misma linea. El modelo escribe indistintamente:
+    //   **1. Frente**            (rotulo solo)
+    //   **1. Frente** Pregunta   (rotulo y contenido en el mismo renglon)
+    //   ### Frente:              / Dorso:
+    // `encontrado` queda en false si el renglon no es ese rotulo.
+    auto rotulo = [](const QString &linea, const QString &palabra, bool *encontrado) {
+        *encontrado = false;
+        QString s = linea.trimmed();
+        s.remove(QLatin1Char('#'));
+        s = s.trimmed();
+        // Numeracion opcional, dentro o fuera de los asteriscos: "**1. Frente**".
+        static const QRegularExpression num(QStringLiteral("^\\**\\s*\\d+[.)]\\s*"));
+        s.remove(num);
+        // El rotulo puede venir en negrita: se saca la marca de apertura.
+        while (s.startsWith(QLatin1Char('*')))
+            s.remove(0, 1);
+        if (!s.startsWith(palabra, Qt::CaseInsensitive))
+            return QString();
+        QString resto = s.mid(palabra.size());
+        // Lo que separa el rotulo del contenido: **, : o espacios.
+        static const QRegularExpression sep(QStringLiteral("^[*:\\s.-]+"));
+        const QString limpio = resto;
+        resto.remove(sep);
+        // Si no habia separador y sigue habiendo letras, era otra palabra que
+        // empieza igual ("Frentes", "Dorsal"): no es el rotulo.
+        if (resto == limpio && !resto.isEmpty())
+            return QString();
+        *encontrado = true;
+        return resto.trimmed();
+    };
+
+    QString frente, dorso;
+    int estado = 0;             // 0 = fuera, 1 = leyendo frente, 2 = leyendo dorso
+    auto cerrar = [&]() {
+        const QString f = frente.trimmed(), d = dorso.trimmed();
+        if (!f.isEmpty() && !d.isEmpty())
+            tarjetas.append(QVariantMap{{QStringLiteral("frente"), f},
+                                        {QStringLiteral("dorso"), d}});
+        frente.clear();
+        dorso.clear();
+    };
+
+    for (const QString &linea : respuesta.split(QLatin1Char('\n'))) {
+        bool hay = false;
+        QString resto = rotulo(linea, QStringLiteral("Frente"), &hay);
+        if (hay) {
+            cerrar();
+            estado = 1;
+            if (!resto.isEmpty())
+                frente += resto + QLatin1Char('\n');
+            continue;
+        }
+        resto = rotulo(linea, QStringLiteral("Dorso"), &hay);
+        if (hay) {
+            estado = 2;
+            if (!resto.isEmpty())
+                dorso += resto + QLatin1Char('\n');
+            continue;
+        }
+        if (linea.trimmed().startsWith(QStringLiteral("---"))) {
+            cerrar();
+            estado = 0;
+            continue;
+        }
+        if (estado == 1)      frente += linea + QLatin1Char('\n');
+        else if (estado == 2) dorso  += linea + QLatin1Char('\n');
+    }
+    cerrar();
+    return tarjetas;
+}
+
+QString flashcardsATsv(const QVariantList &tarjetas)
+{
+    QStringList filas;
+    for (const QVariant &v : tarjetas) {
+        const QVariantMap t = v.toMap();
+        // Anki separa campos por TAB y tarjetas por renglon: los saltos de
+        // linea internos van como <br> (Anki interpreta HTML en los campos).
+        auto plano = [](QString s) {
+            s.replace(QLatin1Char('\t'), QLatin1Char(' '));
+            s.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+            s.replace(QLatin1Char('\n'), QStringLiteral("<br>"));
+            return s.trimmed();
+        };
+        const QString f = plano(t.value(QStringLiteral("frente")).toString());
+        const QString d = plano(t.value(QStringLiteral("dorso")).toString());
+        if (!f.isEmpty() && !d.isEmpty())
+            filas << f + QLatin1Char('\t') + d;
+    }
+    return filas.join(QLatin1Char('\n'));
+}
+
 QVariantList enBloques(const QString &textoCrudo)
 {
-    // Patrones de ecuacion "de display": la que el modelo pone en su propio
-    // renglon. Se reconocen las tres formas que emite en la practica.
-    static const QRegularExpression display(
-        QStringLiteral(
-            "\\\\\\[(.+?)\\\\\\]"          // \[ ... \]
-            "|\\$\\$(.+?)\\$\\$"           // $$ ... $$
-            // Renglon entero entre corchetes con al menos un comando LaTeX:
-            // es como llega cuando el markdown se comio las barras.
-            "|(?:^|\\n)[ \\t]*\\[[ \\t]*([^\\]\\n]*\\\\[^\\]\\n]*)\\][ \\t]*(?=\\n|$)"),
-        QRegularExpression::DotMatchesEverythingOption);
-
     QVariantList bloques;
     auto agregar = [&bloques](const QString &tipo, const QString &contenido) {
         const QString c = contenido.trimmed();
@@ -351,26 +520,77 @@ QVariantList enBloques(const QString &textoCrudo)
                                    {QStringLiteral("contenido"), c}});
     };
 
+    // 0) Diagramas y gráficos: se sacan primero para que su contenido no pase
+    //    por la conversión de LaTeX ni por el detector de ecuaciones.
+    if (textoCrudo.contains(QStringLiteral("```"))) {
+        separarCercados(textoCrudo, &bloques, agregar,
+                        [&](const QString &tramo) {
+                            for (const QVariant &b : enBloquesTexto(tramo))
+                                bloques.append(b);
+                        });
+        return bloques;
+    }
+    return enBloquesTexto(textoCrudo);
+}
+
+// Igual que enBloques pero sin mirar bloques cercados: texto y ecuaciones.
+QVariantList enBloquesTexto(const QString &textoCrudo)
+{
+    QVariantList bloques;
+    auto agregar = [&bloques](const QString &tipo, const QString &contenido) {
+        const QString c = contenido.trimmed();
+        if (c.isEmpty())
+            return;
+        bloques.append(QVariantMap{{QStringLiteral("tipo"), tipo},
+                                   {QStringLiteral("contenido"), c}});
+    };
+
+    // 1) Regiones explicitas de display math, que pueden ocupar varios renglones.
+    static const QRegularExpression display(
+        QStringLiteral("\\\\\\[(.+?)\\\\\\]"          // \[ ... \]
+                       "|\\$\\$(.+?)\\$\\$"),         // $$ ... $$
+        QRegularExpression::DotMatchesEverythingOption);
+
+    QStringList tramos;          // texto suelto entre ecuaciones explicitas
+    QVariantList explicitas;     // ecuaciones ya resueltas, intercaladas
     int desde = 0;
     QRegularExpressionMatchIterator it = display.globalMatch(textoCrudo);
     while (it.hasNext()) {
         const QRegularExpressionMatch m = it.next();
-        // Cuerpo de la ecuacion: el grupo que haya capturado.
-        QString cuerpo;
-        for (int g = 1; g <= 3; ++g) {
-            if (!m.captured(g).isNull()) { cuerpo = m.captured(g); break; }
-        }
+        const QString cuerpo = m.captured(1).isNull() ? m.captured(2) : m.captured(1);
         if (cuerpo.trimmed().isEmpty())
             continue;
-        agregar(QStringLiteral("texto"),
-                latexALegible(textoCrudo.mid(desde, m.capturedStart() - desde)));
-        agregar(QStringLiteral("ecuacion"), latexALegible(cuerpo));
+        tramos << textoCrudo.mid(desde, m.capturedStart() - desde);
+        explicitas.append(latexALegible(cuerpo));
         desde = m.capturedEnd();
     }
-    agregar(QStringLiteral("texto"), latexALegible(textoCrudo.mid(desde)));
+    tramos << textoCrudo.mid(desde);
 
-    if (bloques.isEmpty() && !textoCrudo.trimmed().isEmpty())
-        agregar(QStringLiteral("texto"), latexALegible(textoCrudo));
+    // 2) Dentro de cada tramo, los renglones que por si solos son una ecuacion
+    //    (el modelo tambien las escribe sin delimitadores o entre backticks).
+    for (int i = 0; i < tramos.size(); ++i) {
+        QStringList acumulado;
+        const QStringList lineas = tramos.at(i).split(QLatin1Char('\n'));
+        for (const QString &cruda : lineas) {
+            const QString convertida = latexALegible(cruda);
+            if (esLineaEcuacion(convertida)) {
+                agregar(QStringLiteral("texto"), acumulado.join(QLatin1Char('\n')));
+                acumulado.clear();
+                QString limpia = convertida.trimmed();
+                if (limpia.startsWith(QLatin1Char('`')) && limpia.endsWith(QLatin1Char('`')))
+                    limpia = limpia.mid(1, limpia.size() - 2).trimmed();
+                // Los corchetes de \[ \] que el markdown dejo sueltos.
+                if (limpia.startsWith(QLatin1Char('[')) && limpia.endsWith(QLatin1Char(']')))
+                    limpia = limpia.mid(1, limpia.size() - 2).trimmed();
+                agregar(QStringLiteral("ecuacion"), limpia);
+            } else {
+                acumulado << convertida;
+            }
+        }
+        agregar(QStringLiteral("texto"), acumulado.join(QLatin1Char('\n')));
+        if (i < explicitas.size())
+            agregar(QStringLiteral("ecuacion"), explicitas.at(i).toString());
+    }
     return bloques;
 }
 

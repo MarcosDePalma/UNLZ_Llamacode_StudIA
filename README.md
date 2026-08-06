@@ -530,6 +530,102 @@ o un renglón entre corchetes con comandos LaTeX) del texto que las rodea, y la 
 muestra centradas y en cuerpo mayor, como una ecuación insertada en Word. Un renglón
 entre corchetes *sin* LaTeX (una cita, una lista) no se toma como ecuación.
 
+### Búsqueda semántica (embeddings)
+
+BM25 compara **palabras**, no significado: *«¿qué pasa si…?»* y *«¿qué sucede si…?»*
+dan resultados distintos sólo porque una de las dos palabras es más frecuente en el
+corpus. Ampliar la lista de palabras vacías tapa casos puntuales; la solución de
+fondo es comparar por sentido.
+
+`StudiaIndex::buscarHibrido` fusiona el ranking **léxico** (BM25) con el **semántico**
+(coseno contra el vector de la pregunta) por **Reciprocal Rank Fusion**. Se fusionan
+rankings y no puntajes porque BM25 y el coseno viven en escalas distintas y no son
+comparables — RRF sólo mira la posición en cada lista.
+
+Hacen falta dos cosas, y **si falta alguna todo sigue funcionando con búsqueda léxica**:
+
+1. **Un servidor de embeddings** — otro `llama-server`, en otro puerto, con un modelo
+   de embeddings chico:
+   ```
+   llama-server -m nomic-embed-text-v1.5.Q8_0.gguf --embeddings --port 8081
+   ```
+   Se configura desde el panel de StudIA (click en el cartel de búsqueda semántica).
+2. **Vectorizar el índice**, una vez:
+   ```
+   python tools/studia/vectorizar.py --db <ruta a studia.db> --url http://127.0.0.1:8081
+   ```
+   Es incremental y re-ejecutable: sólo procesa lo que falta. Los vectores se guardan
+   normalizados en la tabla `vectores` de la misma base, así el coseno es un producto
+   escalar. `vectores_info` registra dimensión y modelo, y los vectores de otra
+   dimensión se ignoran en vez de dar resultados sin sentido.
+
+La pregunta se vectoriza **en el momento** (`StudiaEmbed`, async para no congelar la
+ventana). Si esa llamada falla, se avisa y se responde igual con búsqueda léxica.
+
+### Figuras: gráficos de funciones y diagramas
+
+El prompt le enseña al modelo dos formatos de figura y la UI los renderiza a PNG:
+
+| Bloque | Motor | Para qué |
+|---|---|---|
+| ```` ```grafico ```` | `tools/studia/graficar.py` (matplotlib) | curvas, comparar funciones, sombrear el área de una integral |
+| ```` ```mermaid ```` | `MermaidRenderer` (ya existente en el repo) | procesos, clasificaciones, relaciones entre conceptos |
+
+El spec de `grafico` es **declarativo**, no código:
+
+```grafico
+funcion: x**2 - 3*x + 2
+rango: -2, 5
+area: 1, 2
+titulo: Área bajo la parábola entre 1 y 2
+```
+
+El sidecar **no ejecuta código Python del modelo**: evalúa la expresión en un
+espacio de nombres cerrado (sin `__builtins__`, sólo funciones de numpy). Mientras
+se genera —o si falla— se muestra el fuente del bloque, así nunca se pierde
+información. `StudiaPlot` cachea por md5 del source, igual que `MermaidRenderer`.
+
+Requisitos: `pip install matplotlib` para los gráficos;
+`npm install -g @mermaid-js/mermaid-cli` para los diagramas. Si falta alguno, esa
+figura se muestra como texto y el resto de la respuesta funciona igual.
+
+### Flashcards → Anki
+
+Las respuestas del modo Flashcards se exportan a un `.txt` separado por
+tabulaciones, que Anki importa de fábrica (Archivo → Importar). Se eligió ese
+formato en vez de generar un `.apkg` para no sumar dependencias: el parser tolera
+las variantes de rótulo que emite el modelo y convierte los saltos de línea
+internos a `<br>`, que Anki interpreta.
+
+### Rigor por modo
+
+Los modos se dividen en **flexibles** (Conversación, Explicación, Ejercicio) y
+**exigentes** (Resumen, Autoevaluación, Flashcards, Plan de estudio). Los exigentes
+generan material que después se estudia como si fuera fiel al apunte: ahí conviene
+abstenerse antes que arriesgar. Los flexibles son conversación, y responder «no tengo
+información» ante una repregunta no le sirve a nadie.
+
+En los modos flexibles:
+
+- el umbral de abstención se afloja 2 puntos,
+- el prompt pide **agotar** lo disponible antes de abstenerse (usar fragmentos que
+  hablen del tema aunque no respondan textualmente, responder parcialmente, deducir
+  marcándolo),
+- y si la recuperación no trae **nada**, se intenta responder desde la conversación
+  antes de abstenerse (ver abajo).
+
+### Repreguntas que no tocan el corpus
+
+«Repetí la ecuación anterior», «explicalo más simple», «no entendí el paso 2»: la
+respuesta está en la conversación, no en la documentación, así que buscar en el
+índice no sirve. Si la recuperación vuelve vacía, hay historial útil y el modo es
+flexible, se genera con `StudiaPrompt::usuarioSoloConversacion` — un prompt que pasa
+la conversación, prohíbe inventar y aclara que en ese turno no hay `[n]` que citar.
+
+La decisión de **expandir la consulta** con el tema anterior se toma sobre los
+términos **discriminantes**, no sobre cuántas palabras tiene la pregunta: *«¿qué pasa
+si aumento la frecuencia?»* tiene tres términos y ninguno ubica el tema.
+
 ### Qué puede razonar y qué no
 
 La regla de grounding distingue **hechos** de **razonamiento**. Fórmulas, datos y

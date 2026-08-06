@@ -633,16 +633,71 @@ void ProfileManager::save() const
     QTimer::singleShot(400, const_cast<ProfileManager*>(this), [this]() { m_saving = false; });
 }
 
-QString ProfileManager::storagePath(const QString &entity) const
+QString ProfileManager::rutaPerfilesLegacy()
 {
-    // Profiles live in the project root (Documents\LlamaCode\profiles) so they
-    // are easy to inspect and back up alongside the source. Overridable via the
-    // LLAMACODE_PROFILES_DIR env var; otherwise the fixed project path is used.
+    // Hasta esta versión la ruta estaba escrita a mano y apuntaba a la carpeta
+    // del usuario del desarrollador original. En otras máquinas la app creaba
+    // igual ese árbol —C:\Users\cristian\…— y ahí terminaban los perfiles del
+    // usuario real. Se conserva sólo para migrar de ahí una vez.
+    return QStringLiteral("C:/Users/cristian/Documents/LlamaCode/profiles");
+}
+
+int ProfileManager::migrarPerfiles(const QString &destino, const QString &origen)
+{
+    static const QStringList entidades{
+        QStringLiteral("backends"), QStringLiteral("models"),
+        QStringLiteral("runtimes"), QStringLiteral("harnesses"),
+        QStringLiteral("workspaces"), QStringLiteral("launches")};
+
+    const QDir dirOrigen(origen);
+    if (!dirOrigen.exists() || QDir::cleanPath(origen) == QDir::cleanPath(destino))
+        return 0;
+
+    // Si el destino ya tiene perfiles, no se toca nada: lo del usuario manda.
+    const QDir dirDestino(destino);
+    for (const QString &e : entidades) {
+        if (dirDestino.exists(e + QStringLiteral(".json")))
+            return 0;
+    }
+
+    int copiados = 0;
+    for (const QString &e : entidades) {
+        const QString archivo = e + QStringLiteral(".json");
+        if (!dirOrigen.exists(archivo))
+            continue;
+        if (!QDir().mkpath(destino))
+            return copiados;
+        if (QFile::copy(dirOrigen.filePath(archivo), dirDestino.filePath(archivo)))
+            ++copiados;
+    }
+    return copiados;
+}
+
+QString ProfileManager::profilesRoot()
+{
+    // Se resuelve una sola vez por proceso (los tests setean
+    // LLAMACODE_PROFILES_DIR en initTestCase, antes del primer ProfileManager).
     static const QString root = []() {
         const QByteArray env = qgetenv("LLAMACODE_PROFILES_DIR");
         if (!env.isEmpty())
             return QString::fromLocal8Bit(env);
-        return QStringLiteral("C:/Users/cristian/Documents/LlamaCode/profiles");
+        // Documentos del usuario ACTUAL. Antes esto estaba fijo a la carpeta de
+        // otro usuario, lo que obligaba a permisos de administrador para editar
+        // los perfiles propios.
+        const QString actual =
+            QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+            + QStringLiteral("/LlamaCode/profiles");
+        const int migrados = migrarPerfiles(actual, rutaPerfilesLegacy());
+        if (migrados > 0) {
+            qInfo() << "[ProfileManager] perfiles migrados desde"
+                    << rutaPerfilesLegacy() << "->" << actual << "(" << migrados << "archivos)";
+        }
+        return actual;
     }();
-    return root + "/" + entity + ".json";
+    return root;
+}
+
+QString ProfileManager::storagePath(const QString &entity) const
+{
+    return profilesRoot() + "/" + entity + ".json";
 }

@@ -18,8 +18,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ingest import (DIRS_IGNORADOS, EXT_SOPORTADAS, MIN_CHARS_FRAGMENTO,
-                    abrir_db, extraer_texto_plano, fragmentar, guardar,
-                    ingestar_archivo, listar, normalizar, pagina_en,
+                    abrir_db, extraer_ipynb, extraer_texto_plano, fragmentar,
+                    guardar, ingestar_archivo, listar, normalizar, pagina_en,
                     partes_ruta, quitar_archivo, ruta_ignorada, sin_acentos,
                     unir_paginas)
 
@@ -361,6 +361,69 @@ class TestArchivoSuelto(unittest.TestCase):
         ingestar_archivo(self.db, p, 'X')
         con = sqlite3.connect(self.db)
         self.assertEqual(con.execute('SELECT COUNT(*) FROM documentos').fetchone()[0], 1)
+        con.close()
+
+
+class TestNotebooks(unittest.TestCase):
+    """Los .ipynb de la carrera traen parciales y apuntes reales."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _nb(self, celdas):
+        import json
+        p = os.path.join(self.tmp.name, 'apunte.ipynb')
+        with open(p, 'w', encoding='utf-8') as f:
+            json.dump({'cells': celdas, 'nbformat': 4}, f)
+        return p
+
+    def test_toma_markdown_y_codigo(self):
+        p = self._nb([
+            {'cell_type': 'markdown', 'source': ['# Integrales\n', 'La integral definida...']},
+            {'cell_type': 'code', 'source': 'import numpy as np\nnp.trapz(y, x)',
+             'outputs': [{'text': 'ruido de salida'}]},
+        ])
+        paginas, n = extraer_ipynb(p)
+        self.assertEqual(n, 2)
+        texto = '\n'.join(t for _p, t in paginas)
+        self.assertIn('Integrales', texto)
+        self.assertIn('np.trapz', texto)
+        self.assertIn('Código:', texto)
+
+    def test_descarta_las_salidas_de_ejecucion(self):
+        p = self._nb([{'cell_type': 'code', 'source': 'print(1)',
+                       'outputs': [{'text': 'BASE64_GIGANTE_DE_IMAGEN'}]}])
+        texto = '\n'.join(t for _p, t in extraer_ipynb(p)[0])
+        self.assertNotIn('BASE64_GIGANTE', texto)
+
+    def test_saltea_celdas_vacias(self):
+        p = self._nb([{'cell_type': 'markdown', 'source': ''},
+                      {'cell_type': 'markdown', 'source': 'contenido'}])
+        paginas, _n = extraer_ipynb(p)
+        self.assertEqual(len(paginas), 1)
+
+    def test_cada_celda_es_una_pagina_citable(self):
+        p = self._nb([{'cell_type': 'markdown', 'source': 'uno'},
+                      {'cell_type': 'markdown', 'source': 'dos'},
+                      {'cell_type': 'markdown', 'source': 'tres'}])
+        paginas, _n = extraer_ipynb(p)
+        self.assertEqual([n for n, _t in paginas], [1, 2, 3])
+
+    def test_extension_registrada(self):
+        self.assertIn('.ipynb', EXT_SOPORTADAS)
+
+    def test_se_ingesta_de_punta_a_punta(self):
+        p = self._nb([{'cell_type': 'markdown',
+                       'source': 'La integral definida mide el area bajo la curva. ' * 10}])
+        db = os.path.join(self.tmp.name, 'idx.db')
+        self.assertEqual(ingestar_archivo(db, p, 'Cálculo 2'), 0)
+        con = sqlite3.connect(db)
+        n = con.execute("SELECT COUNT(*) FROM fragmentos_fts "
+                        "WHERE fragmentos_fts MATCH '\"integral\"'").fetchone()[0]
+        self.assertEqual(n, 1)
         con.close()
 
 

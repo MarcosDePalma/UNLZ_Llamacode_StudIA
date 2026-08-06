@@ -158,6 +158,21 @@ public:
     WorkspaceProfile resolveWorkspace(const QString &id) const;
     LaunchProfile resolveLaunch(const QString &id) const;
 
+    // Carpeta donde viven los JSON de perfiles. Se resuelve una sola vez:
+    //   1. LLAMACODE_PROFILES_DIR, si está seteada.
+    //   2. Documentos del usuario ACTUAL (…/Documents/LlamaCode/profiles).
+    // La primera vez migra los perfiles desde la ruta vieja, que estaba fija a
+    // la carpeta del usuario del desarrollador original.
+    static QString profilesRoot();
+
+    // Copia los .json de perfiles de `origen` a `destino` si destino todavía no
+    // tiene ninguno y origen sí. Devuelve cuántos archivos copió. Pública y
+    // estática para poder testear la migración sin tocar el disco del usuario.
+    static int migrarPerfiles(const QString &destino, const QString &origen);
+
+    // Ruta que usaban las versiones anteriores. Sólo se lee, para migrar.
+    static QString rutaPerfilesLegacy();
+
 signals:
     void errorOccurred(const QString &message);
     // Emitida cuando los perfiles se recargaron por un cambio externo del archivo.

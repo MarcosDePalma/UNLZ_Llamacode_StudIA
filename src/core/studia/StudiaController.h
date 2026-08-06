@@ -1,5 +1,7 @@
 #pragma once
+#include "StudiaEmbed.h"
 #include "StudiaIndex.h"
+#include "StudiaPlot.h"
 #include "StudiaPrompt.h"
 #include "StudiaSessionStore.h"
 
@@ -44,6 +46,13 @@ class StudiaController : public QObject
     Q_PROPERTY(int      adjuntosPendientes READ adjuntosPendientes          NOTIFY bibliotecaChanged)
     // Documentos que subió el estudiante para la materia activa.
     Q_PROPERTY(QVariantList bibliografiaPropia READ bibliografiaPropia      NOTIFY bibliotecaChanged)
+    // Renderizador de los bloques ```grafico. Se expone acá para no sumar otra
+    // propiedad global en main.cpp: es parte del módulo.
+    Q_PROPERTY(StudiaPlot *graficos READ graficos                           CONSTANT)
+    // Búsqueda semántica: URL del servidor de embeddings y estado del índice.
+    Q_PROPERTY(QString  urlEmbeddings READ urlEmbeddings WRITE setUrlEmbeddings NOTIFY semanticaChanged)
+    Q_PROPERTY(QVariantMap estadoSemantico READ estadoSemantico             NOTIFY semanticaChanged)
+    Q_PROPERTY(bool     semanticaActiva READ semanticaActiva                NOTIFY semanticaChanged)
     // Materia activa. Cambiarla conmuta de conversacion (o crea una nueva).
     Q_PROPERTY(QString  materia      READ materia      WRITE setMateria     NOTIFY materiaChanged)
     Q_PROPERTY(bool     materiaElegida READ materiaElegida                  NOTIFY materiaChanged)
@@ -78,6 +87,21 @@ public:
     QString ultimoAdjunto() const { return m_ultimoAdjunto; }
     int adjuntosPendientes() const { return int(m_colaAdjuntos.size()); }
     QVariantList bibliografiaPropia() const { return m_propio.documentos(m_materia); }
+    StudiaPlot *graficos() { return &m_graficos; }
+    QString urlEmbeddings() const { return m_embed.url(); }
+    void setUrlEmbeddings(const QString &u);
+    // Servidor que se va a usar realmente. Si no se configuró uno aparte, se
+    // usa el MISMO llama-server del chat: alcanza con arrancarlo con
+    // --embeddings y no hace falta levantar un segundo proceso. Un servidor
+    // dedicado con un modelo de embeddings da mejor calidad, pero es opcional.
+    QString urlEmbeddingsEfectiva() const {
+        return m_embed.url().isEmpty() ? m_serverUrl : m_embed.url();
+    }
+    // ¿Se está usando búsqueda semántica? Necesita índice vectorizado Y servidor.
+    bool semanticaActiva() const {
+        return !urlEmbeddingsEfectiva().isEmpty() && m_index.tieneVectores();
+    }
+    QVariantMap estadoSemantico() const;
 
     QString materia() const { return m_materia; }
     void setMateria(const QString &m);
@@ -132,6 +156,13 @@ public:
     // Ruta del ingestor Python. Vacia si no se encuentra el script.
     Q_INVOKABLE QString rutaIngestor() const;
 
+    // Exporta las flashcards de una respuesta a un .txt separado por
+    // tabulaciones, que Anki importa de fábrica. Devuelve la ruta escrita o ""
+    // si la respuesta no traía tarjetas reconocibles o se canceló el diálogo.
+    Q_INVOKABLE QString exportarFlashcards(const QString &respuesta);
+    // ¿Esta respuesta tiene tarjetas exportables? Para mostrar u ocultar el botón.
+    Q_INVOKABLE int contarFlashcards(const QString &respuesta) const;
+
     // Fuentes para la UI, AGRUPADAS por documento: si un mismo PDF aportó las
     // páginas 11, 14 y 16 se muestra una sola entrada "doc · pág. 11, 14, 16"
     // en vez de repetir el nombre del archivo tres veces. Cada entrada trae:
@@ -142,6 +173,7 @@ public:
 
 signals:
     void indiceChanged();
+    void semanticaChanged();
     void bibliotecaChanged();
     void materiaChanged();
     void sesionesChanged();
@@ -173,11 +205,29 @@ private:
     void correrIngestor(const QStringList &args, const QString &queHace);
     // Toma el siguiente archivo de la cola de adjuntos, si hay.
     void procesarSiguienteAdjunto();
-    // Reparte los k fragmentos entre catedra y bibliografia propia.
-    QVector<StudiaFragmento> recuperar(const QString &consulta) const;
+    // Reparte los k fragmentos entre catedra y bibliografia propia. Si el vector
+    // de la consulta no viene vacio, la busqueda es hibrida (lexica + semantica).
+    QVector<StudiaFragmento> recuperar(const QString &consulta,
+                                       const QVector<float> &vector) const;
+    // Segunda mitad de preguntar(), una vez resuelto el vector de la consulta
+    // (o descartado, si no hay busqueda semantica disponible).
+    void continuarPregunta(const QVector<float> &vector);
+
+    // Estado de la pregunta que espera su vector. preguntar() lo arma y
+    // continuarPregunta() lo consume: entre medio hay una request HTTP.
+    struct Pendiente {
+        bool activo = false;
+        QString pregunta;
+        QString idModo;
+        QString consulta;
+        QVector<StudiaPrompt::Turno> historial;
+    };
+    Pendiente m_pendiente;
 
     StudiaIndex        m_index;    // corpus de la catedra (solo lectura)
     StudiaIndex        m_propio;   // bibliografia que subio el estudiante
+    StudiaPlot         m_graficos;
+    StudiaEmbed        m_embed;
     StudiaSessionStore m_sesiones;
     QString            m_errorIndice;
     QString            m_ultimoAdjunto;

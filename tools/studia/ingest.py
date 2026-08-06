@@ -20,6 +20,7 @@ que se puede cortar y retomar sin perder trabajo.
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import sqlite3
@@ -31,7 +32,7 @@ from datetime import datetime
 # ── Que archivos entran ───────────────────────────────────────────────────────
 
 # Formatos que sabemos leer hoy.
-EXT_SOPORTADAS = {'.pdf', '.docx', '.pptx', '.xlsx', '.txt', '.md'}
+EXT_SOPORTADAS = {'.pdf', '.docx', '.pptx', '.xlsx', '.txt', '.md', '.ipynb'}
 # Formatos viejos de Office: se registran pero no se pueden leer con estas libs.
 EXT_VIEJAS = {'.doc', '.ppt', '.xls', '.rtf', '.odt'}
 
@@ -229,6 +230,31 @@ def extraer_xlsx(path):
     return paginas, n
 
 
+def extraer_ipynb(path):
+    """Notebook de Jupyter: se queda con la PROSA (celdas markdown) y con el
+    codigo, que en los apuntes de la carrera trae los procedimientos.
+
+    Las salidas de ejecucion se descartan: suelen ser volcados de arrays o
+    imagenes en base64 que solo ensucian el indice. Cada celda cuenta como una
+    "pagina" para poder citarla."""
+    with open(path, 'r', encoding='utf-8-sig') as f:
+        nb = json.load(f)
+    paginas = []
+    for i, celda in enumerate(nb.get('cells', []), 1):
+        fuente = celda.get('source', '')
+        if isinstance(fuente, list):
+            fuente = ''.join(fuente)
+        fuente = (fuente or '').strip()
+        if not fuente:
+            continue
+        tipo = celda.get('cell_type', '')
+        if tipo == 'code':
+            # Se marca como codigo para que el modelo sepa que esta leyendo.
+            fuente = 'Código:\n' + fuente
+        paginas.append((i, fuente))
+    return paginas, max(1, len(paginas))
+
+
 def extraer_texto_plano(path):
     for enc in ('utf-8', 'utf-8-sig', 'cp1252', 'latin-1'):
         try:
@@ -246,6 +272,7 @@ EXTRACTORES = {
     '.xlsx': extraer_xlsx,
     '.txt':  extraer_texto_plano,
     '.md':   extraer_texto_plano,
+    '.ipynb': extraer_ipynb,
 }
 
 

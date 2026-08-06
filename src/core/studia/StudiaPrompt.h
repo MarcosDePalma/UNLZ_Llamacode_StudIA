@@ -21,6 +21,12 @@ struct Modo {
     QString etiqueta;      // "Flashcards"  → lo que ve en el menu
     QString descripcion;   // ayuda corta para la UI
     QString instruccion;   // lo que se agrega al prompt de sistema
+    // Rigor del modo. Los modos EXIGENTES producen material de estudio que se
+    // va a usar como si fuera fiel al apunte (flashcards, autoevaluacion,
+    // resumen, plan): ahi conviene abstenerse antes que arriesgar. Los modos
+    // FLEXIBLES son conversacion: el estudiante quiere entender, y contestar
+    // "no tengo informacion" ante una repregunta es inutil.
+    bool exigente = true;
 };
 
 // Catalogo completo, en el orden en que se muestra.
@@ -54,18 +60,33 @@ QString usuario(const QString &pregunta,
                 const QVector<StudiaFragmento> &frags,
                 const QVector<Turno> &historial = {});
 
+// Variante SIN fragmentos: la recuperacion no encontro nada nuevo pero la
+// pregunta se puede contestar con lo que ya se hablo ("repetí la ecuación
+// anterior", "explicalo más simple", "no entendí el paso 2"). Se usa sólo en
+// modos flexibles y deja claro que no hay documentacion nueva de respaldo.
+QString usuarioSoloConversacion(const QString &pregunta,
+                                const QVector<Turno> &historial);
+// ¿Vale la pena intentar responder desde la conversacion? Necesita historial
+// util (al menos una respuesta previa con contenido).
+bool puedeResponderDesdeConversacion(const QVector<Turno> &historial);
+
 // ── Consulta de recuperacion ─────────────────────────────────────────────────
 
-// Arma la consulta con la que se busca en el indice. Una repregunta corta
-// ("¿y como funciona?") no tiene terminos propios suficientes: se completa con
-// los de las preguntas anteriores para no perder el tema.
-//   `pregunta`   texto actual del usuario
-//   `anteriores` preguntas previas del usuario, de la mas reciente a la mas vieja
-// Devuelve el texto a pasarle a StudiaIndex::buscar.
-QString consultaConContexto(const QString &pregunta, const QStringList &anteriores);
-// A partir de cuantos terminos propios se considera que la pregunta se sostiene
-// sola y no hace falta arrastrar el tema anterior.
-constexpr int kMinTerminosAutonomos = 3;
+// Arma la consulta con la que se busca en el indice. Una repregunta
+// ("¿y como funciona?", "¿que pasa si aumento la frecuencia?") no aporta
+// terminos propios que sirvan para buscar: se completa con los de las preguntas
+// anteriores para no perder el tema.
+//   `pregunta`       texto actual del usuario
+//   `anteriores`     preguntas previas del usuario, de la mas reciente a la mas vieja
+//   `discriminantes` cuantos terminos de la pregunta son especificos del corpus
+//                    (lo calcula el llamador con el indice). La decision se toma
+//                    sobre ESTO y no sobre la cantidad bruta de terminos:
+//                    "¿que pasa si aumento la frecuencia?" tiene tres palabras
+//                    pero ninguna que ubique el tema.
+QString consultaConContexto(const QString &pregunta, const QStringList &anteriores,
+                            int discriminantes);
+// Con menos de esto la pregunta no se sostiene sola y se le suma el contexto.
+constexpr int kMinDiscriminantesAutonomos = 2;
 // Tope de terminos de la consulta expandida.
 constexpr int kMaxTerminosExpandida = 8;
 

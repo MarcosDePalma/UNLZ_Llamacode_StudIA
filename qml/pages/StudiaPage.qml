@@ -50,6 +50,31 @@ Item {
         entrada.forceActiveFocus()
     }
 
+    // ── Imágenes generadas: gráficos (matplotlib) y diagramas (mermaid) ──
+    // Se guardan por hash del source, igual que hace ChatPage con Mermaid.
+    property var imagenes: ({})
+    property var erroresImagen: ({})
+    function urlLocal(p) { return "file:///" + String(p).replace(/\\/g, "/") }
+
+    Connections {
+        target: Studia.graficos
+        function onRenderReady(hash, path) {
+            const m = root.imagenes; m[hash] = root.urlLocal(path); root.imagenes = m
+        }
+        function onRenderFailed(hash, motivo) {
+            const e = root.erroresImagen; e[hash] = motivo; root.erroresImagen = e
+        }
+    }
+    Connections {
+        target: Mermaid
+        function onRenderReady(hash, path) {
+            const m = root.imagenes; m[hash] = root.urlLocal(path); root.imagenes = m
+        }
+        function onRenderFailed(hash, motivo) {
+            const e = root.erroresImagen; e[hash] = motivo; root.erroresImagen = e
+        }
+    }
+
     Connections {
         target: Studia
         function onMensajesChanged() { listaMsgs.positionViewAtEnd() }
@@ -58,6 +83,63 @@ Item {
             if (it && it.actualizarTexto) it.actualizarTexto(contenido, bloques)
         }
         function onErrorOcurrido(msg) { aviso.mostrar(msg) }
+    }
+
+    // Config del servidor de embeddings (búsqueda semántica).
+    LcDialog {
+        id: dlgEmbed
+        title: "Búsqueda semántica"
+        standardButtons: Dialog.Save | Dialog.Cancel
+        onOpened: campoEmbed.text = Studia.urlEmbeddings
+        onAccepted: Studia.urlEmbeddings = campoEmbed.text.trim()
+
+        ColumnLayout {
+            width: 460
+            spacing: 10
+
+            Text {
+                Layout.fillWidth: true
+                text: "La búsqueda por palabras no entiende sinónimos: «¿qué pasa si…?» "
+                    + "y «¿qué sucede si…?» dan resultados distintos. Los embeddings "
+                    + "comparan por significado y resuelven eso.\n\n"
+                    + "Hacen falta dos cosas:"
+                color: Theme.textMuted
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "1. Un servidor de embeddings (otro llama-server, en otro puerto):\n"
+                    + "     llama-server -m <modelo-embeddings>.gguf --embeddings --port 8081\n\n"
+                    + "2. Vectorizar el índice una vez:\n"
+                    + "     python tools/studia/vectorizar.py --db <ruta> --url http://127.0.0.1:8081"
+                color: Theme.textSecondary
+                font { pixelSize: 11; family: "Consolas" }
+                wrapMode: Text.WordWrap
+            }
+
+            Text { text: "URL del servidor de embeddings"; color: Theme.dialogLabel
+                   font.pixelSize: 11 }
+            LcTextField {
+                id: campoEmbed
+                Layout.fillWidth: true
+                placeholderText: "http://127.0.0.1:8081  (vacío = búsqueda por palabras)"
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: {
+                    const e = Studia.estadoSemantico
+                    return "Estado del índice: " + (e.vectores || 0) + " de "
+                           + (e.fragmentos || 0) + " fragmentos vectorizados"
+                           + ((e.dimension || 0) > 0 ? "  ·  dimensión " + e.dimension : "")
+                }
+                color: Theme.textDim
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+            }
+        }
     }
 
     ColumnLayout {
@@ -252,6 +334,42 @@ Item {
                 ColumnLayout {
                     anchors { fill: parent; margins: 14 }
                     spacing: 10
+
+                    // Estado de la búsqueda semántica. Click para configurarla.
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: semTxt.implicitHeight + 14
+                        visible: Studia.indiceListo
+                        radius: 6
+                        color: Studia.semanticaActiva ? Theme.successBg : Theme.surfaceBg
+                        border.color: Studia.semanticaActiva ? "transparent" : Theme.borderColor
+
+                        Text {
+                            id: semTxt
+                            anchors { fill: parent; margins: 7 }
+                            text: {
+                                const e = Studia.estadoSemantico
+                                if (Studia.semanticaActiva)
+                                    return "🧠 Búsqueda semántica activa — "
+                                           + e.vectores + " de " + e.fragmentos
+                                           + " fragmentos vectorizados"
+                                if ((e.vectores || 0) === 0)
+                                    return "Búsqueda por palabras. El índice no está "
+                                           + "vectorizado: corré tools/studia/vectorizar.py"
+                                return "Búsqueda por palabras. Falta el servidor de "
+                                       + "embeddings (click para configurarlo)"
+                            }
+                            color: Studia.semanticaActiva ? Theme.successText : Theme.textMuted
+                            font.pixelSize: 10
+                            wrapMode: Text.WordWrap
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            hoverEnabled: true
+                            onClicked: dlgEmbed.open()
+                        }
+                    }
 
                     Text {
                         text: "MATERIA"
@@ -570,6 +688,11 @@ Item {
                             property string textoPlano: modelData.contenido
                             property var bloques: modelData.bloques !== undefined
                                                   ? modelData.bloques : []
+                            // Cuántas flashcards exportables trae la respuesta.
+                            // Se recalcula sólo al cambiar el texto, no en cada
+                            // repintado (es una llamada a C++).
+                            property int tarjetas: esUsuario ? 0
+                                                             : Studia.contarFlashcards(textoPlano)
                             function actualizarTexto(t, bs) {
                                 textoPlano = t
                                 bloques = bs
@@ -590,21 +713,6 @@ Item {
                                     color: Theme.accent
                                     font { pixelSize: 9; bold: true }
                                 }
-                                Text {
-                                    // Se usa Text (no TextEdit) para poder dar
-                                    // interlineado: TextEdit no expone lineHeight.
-                                    // El copiado va por este botón.
-                                    visible: !burbuja.esUsuario && areaBurbuja.containsMouse
-                                             && burbuja.textoPlano.length > 0
-                                    text: "⧉ copiar"
-                                    color: Theme.textDim
-                                    font.pixelSize: 9
-                                    MouseArea {
-                                        anchors { fill: parent; margins: -4 }
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: App.copyToClipboard(burbuja.textoPlano)
-                                    }
-                                }
                             }
 
                             Rectangle {
@@ -612,13 +720,6 @@ Item {
                                 height: contenidoCol.implicitHeight + 28
                                 radius: 8
                                 color: burbuja.esUsuario ? Theme.chatUserBubble : Theme.chatAsstBubble
-
-                                MouseArea {
-                                    id: areaBurbuja
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    acceptedButtons: Qt.NoButton
-                                }
 
                                 Column {
                                     id: contenidoCol
@@ -638,8 +739,8 @@ Item {
                                                  ? "⏳ Buscando en la documentación…" : "")
                                         color: burbuja.esUsuario ? Theme.chatUserText
                                                                  : Theme.chatAsstText
-                                        font.pixelSize: 15
-                                        lineHeight: 1.45
+                                        font.pixelSize: 16
+                                        lineHeight: 1.5
                                         lineHeightMode: Text.ProportionalHeight
                                         wrapMode: Text.Wrap
                                         textFormat: Text.PlainText
@@ -651,8 +752,73 @@ Item {
                                         model: burbuja.esUsuario ? [] : burbuja.bloques
                                         delegate: Loader {
                                             width: contenidoCol.width
-                                            sourceComponent: modelData.tipo === "ecuacion"
-                                                             ? compEcuacion : compTexto
+                                            sourceComponent: {
+                                                if (modelData.tipo === "ecuacion") return compEcuacion
+                                                if (modelData.tipo === "grafico"
+                                                    || modelData.tipo === "mermaid") return compImagen
+                                                return compTexto
+                                            }
+
+                                            // Diagramas y gráficos: se renderizan a PNG
+                                            // por su sidecar y se muestran acá.
+                                            Component {
+                                                id: compImagen
+                                                Column {
+                                                    width: contenidoCol.width
+                                                    spacing: 4
+
+                                                    readonly property bool esGrafico:
+                                                        modelData.tipo === "grafico"
+                                                    readonly property var motor:
+                                                        esGrafico ? Studia.graficos : Mermaid
+                                                    readonly property string hash:
+                                                        motor.sourceHash(modelData.contenido)
+                                                    readonly property string listo:
+                                                        root.imagenes[hash] !== undefined
+                                                        ? root.imagenes[hash] : ""
+                                                    readonly property string fallo:
+                                                        root.erroresImagen[hash] !== undefined
+                                                        ? root.erroresImagen[hash] : ""
+
+                                                    Component.onCompleted: motor.requestRender(modelData.contenido)
+
+                                                    Image {
+                                                        visible: listo.length > 0
+                                                        source: listo
+                                                        width: Math.min(implicitWidth,
+                                                                        contenidoCol.width)
+                                                        fillMode: Image.PreserveAspectFit
+                                                        smooth: true
+                                                    }
+
+                                                    // Mientras se genera, o si falló, se
+                                                    // muestra el fuente: nunca se pierde
+                                                    // la información.
+                                                    Rectangle {
+                                                        visible: listo.length === 0
+                                                        width: parent.width
+                                                        height: fuente.implicitHeight + 16
+                                                        radius: 6
+                                                        color: Theme.baseBg
+                                                        border.color: fallo.length > 0
+                                                                      ? Theme.errorBorder
+                                                                      : Theme.borderColor
+                                                        Text {
+                                                            id: fuente
+                                                            anchors { fill: parent; margins: 8 }
+                                                            text: (fallo.length > 0
+                                                                   ? (esGrafico ? "No se pudo graficar: "
+                                                                                : "No se pudo dibujar el diagrama: ")
+                                                                     + fallo + "\n\n"
+                                                                   : "⏳ Generando…\n\n")
+                                                                  + modelData.contenido
+                                                            color: Theme.textMuted
+                                                            font { pixelSize: 11; family: "Consolas" }
+                                                            wrapMode: Text.WrapAnywhere
+                                                        }
+                                                    }
+                                                }
+                                            }
 
                                             Component {
                                                 id: compTexto
@@ -660,8 +826,8 @@ Item {
                                                     width: contenidoCol.width
                                                     text: modelData.contenido
                                                     color: Theme.chatAsstText
-                                                    font.pixelSize: 15
-                                                    lineHeight: 1.45
+                                                    font.pixelSize: 16
+                                                    lineHeight: 1.5
                                                     lineHeightMode: Text.ProportionalHeight
                                                     wrapMode: Text.Wrap
                                                     // Markdown: títulos, negritas y listas
@@ -684,6 +850,8 @@ Item {
                                                         color: Theme.textPrimary
                                                         // Cuerpo mayor y centrada, como
                                                         // una ecuación insertada en Word.
+                                                        // Sólo un escalón sobre el texto
+                                                        // (16 px) para que no desentone.
                                                         font.pixelSize: 19
                                                         lineHeight: 1.5
                                                         lineHeightMode: Text.ProportionalHeight
@@ -693,6 +861,51 @@ Item {
                                                     }
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Acciones del mensaje: SIEMPRE visibles y debajo del
+                            // cuerpo. Antes estaban arriba y sólo al pasar el mouse
+                            // por la burbuja, así que al ir a clickearlas se salía
+                            // del área y desaparecían.
+                            Row {
+                                spacing: 14
+                                visible: burbuja.textoPlano.length > 0
+
+                                Text {
+                                    text: "⧉ Copiar"
+                                    color: areaCopiar.containsMouse ? Theme.accent : Theme.textDim
+                                    font.pixelSize: 11
+                                    MouseArea {
+                                        id: areaCopiar
+                                        anchors { fill: parent; margins: -6 }
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            App.copyToClipboard(burbuja.textoPlano)
+                                            aviso.mostrarOk("Copiado al portapapeles.")
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    // Sólo cuando la respuesta trae tarjetas.
+                                    visible: !burbuja.esUsuario && burbuja.tarjetas > 0
+                                    text: "⇩ Exportar a Anki (" + burbuja.tarjetas + ")"
+                                    color: areaAnki.containsMouse ? Theme.accent : Theme.textDim
+                                    font.pixelSize: 11
+                                    MouseArea {
+                                        id: areaAnki
+                                        anchors { fill: parent; margins: -6 }
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            const p = Studia.exportarFlashcards(burbuja.textoPlano)
+                                            if (p.length > 0)
+                                                aviso.mostrarOk("Flashcards guardadas en " + p
+                                                    + " — importalas en Anki con Archivo → Importar.")
                                         }
                                     }
                                 }
@@ -749,13 +962,19 @@ Item {
                         Layout.preferredHeight: visible ? avisoTxt.implicitHeight + 16 : 0
                         visible: false
                         radius: 6
-                        color: Theme.errorBg
-                        function mostrar(m) { avisoTxt.text = m; visible = true; ocultar.restart() }
-                        Timer { id: ocultar; interval: 7000; onTriggered: aviso.visible = false }
+                        property bool esError: true
+                        color: esError ? Theme.errorBg : Theme.successBg
+                        function mostrar(m) {
+                            avisoTxt.text = m; esError = true; visible = true; ocultar.restart()
+                        }
+                        function mostrarOk(m) {
+                            avisoTxt.text = m; esError = false; visible = true; ocultar.restart()
+                        }
+                        Timer { id: ocultar; interval: 9000; onTriggered: aviso.visible = false }
                         Text {
                             id: avisoTxt
                             anchors { fill: parent; margins: 8 }
-                            color: Theme.errorText
+                            color: aviso.esError ? Theme.errorText : Theme.successText
                             font.pixelSize: 11
                             wrapMode: Text.WordWrap
                         }

@@ -28,6 +28,7 @@ namespace {
 // Claves de QSettings.
 const char *kClaveRuta    = "studia/rutaIndice";
 const char *kClaveMateria = "studia/materia";
+const char *kClaveEmbed   = "studia/urlEmbeddings";
 
 // Cuantos turnos previos se le pasan al modelo como contexto y cuanto se
 // recorta cada uno. Alcanza para que entienda una repregunta sin inflar el
@@ -37,6 +38,13 @@ constexpr int kMaxCharsTurno      = 700;
 // Cuantas preguntas previas se miran para expandir una repregunta corta.
 constexpr int kPreguntasParaExpandir = 3;
 
+// Cuanto se afloja el umbral de abstencion en los modos flexibles. Medido sobre
+// el corpus real con 30 preguntas: pasar de -7 a -5 recupera una pregunta
+// legitima mas y deja entrar 2 ajenas de 10. Es un intercambio aceptable en
+// conversacion —donde la instruccion del prompt actua de segunda barrera— pero
+// no en los modos que generan material de estudio.
+constexpr double kAflojarUmbralFlexible = 2.0;
+
 }  // namespace
 
 
@@ -44,6 +52,17 @@ StudiaController::StudiaController(QObject *parent) : QObject(parent)
 {
     m_nam = new QNetworkAccessManager(this);
     m_sesiones.cargar();
+    m_embed.setUrl(QSettings().value(QLatin1String(kClaveEmbed)).toString());
+    // La vectorización de la pregunta llega async; ahí sigue la consulta. Si
+    // falla se continúa igual, con búsqueda léxica: nunca deja al usuario sin
+    // respuesta por un problema del servidor de embeddings.
+    connect(&m_embed, &StudiaEmbed::listo, this,
+            [this](const QString &, const QVector<float> &v) { continuarPregunta(v); });
+    connect(&m_embed, &StudiaEmbed::fallo, this, [this](const QString &motivo) {
+        emit errorOcurrido(QStringLiteral("Búsqueda semántica no disponible (%1). "
+                                          "Se usó búsqueda por palabras.").arg(motivo));
+        continuarPregunta({});
+    });
     refrescarIndicePropio();
     const QString guardada = rutaGuardada();
     if (!guardada.isEmpty() && QFileInfo::exists(guardada))
@@ -174,12 +193,6 @@ QString StudiaController::prefijoDeModo(const QString &idModo) const
     return QStringLiteral("/%1/ ").arg(m.id);
 }
 
-void StudiaController::setServerUrl(const QString &u)
-{
-    if (u == m_serverUrl) return;
-    m_serverUrl = u;
-    emit serverUrlChanged();
-}
 
 void StudiaController::setModelo(const QString &m)
 {
@@ -355,9 +368,77 @@ void StudiaController::procesarSiguienteAdjunto()
                    QStringLiteral("agregar «%1»").arg(m_ultimoAdjunto));
 }
 
-QVector<StudiaFragmento> StudiaController::recuperar(const QString &consulta) const
+int StudiaController::contarFlashcards(const QString &respuesta) const
 {
-    QVector<StudiaFragmento> frags = m_index.buscar(consulta, m_k, m_materia);
+    return int(StudiaTexto::flashcards(respuesta).size());
+}
+
+QString StudiaController::exportarFlashcards(const QString &respuesta)
+{
+    const QVariantList tarjetas = StudiaTexto::flashcards(respuesta);
+    if (tarjetas.isEmpty()) {
+        emit errorOcurrido(QStringLiteral("No encontré tarjetas con formato de "
+                                          "flashcard en esta respuesta."));
+        return {};
+    }
+    const QString sugerido = QStringLiteral("flashcards-%1.txt")
+        .arg(m_materia.isEmpty() ? QStringLiteral("studia")
+                                 : QString(m_materia).replace(QLatin1Char(' '),
+                                                              QLatin1Char('-')));
+    QWidget *padre = QApplication::activeWindow();
+    const QString destino = QFileDialog::getSaveFileName(
+        padre, QStringLiteral("Guardar flashcards para Anki"),
+        QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
+            .filePath(sugerido),
+        QStringLiteral("Texto separado por tabulaciones (*.txt)"));
+    if (destino.isEmpty())
+        return {};
+
+    QFile f(destino);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        emit errorOcurrido(QStringLiteral("No se pudo escribir %1").arg(destino));
+        return {};
+    }
+    // UTF-8 sin BOM: es lo que espera el importador de Anki.
+    f.write(StudiaTexto::flashcardsATsv(tarjetas).toUtf8());
+    f.close();
+    return destino;
+}
+
+QVariantMap StudiaController::estadoSemantico() const
+{
+    return {
+        {QStringLiteral("url"),        m_embed.url()},
+        {QStringLiteral("vectores"),   m_index.cantidadVectores()},
+        {QStringLiteral("fragmentos"), m_index.totalFragmentos()},
+        {QStringLiteral("dimension"),  m_index.dimensionVectores()},
+        {QStringLiteral("activa"),     semanticaActiva()},
+    };
+}
+
+void StudiaController::setUrlEmbeddings(const QString &u)
+{
+    if (u.trimmed() == m_embed.url())
+        return;
+    m_embed.setUrl(u);
+    QSettings().setValue(QLatin1String(kClaveEmbed), m_embed.url());
+    emit semanticaChanged();
+}
+
+void StudiaController::setServerUrl(const QString &u)
+{
+    if (u == m_serverUrl) return;
+    m_serverUrl = u;
+    emit serverUrlChanged();
+    // Sin servidor de embeddings propio, la semántica depende del del chat.
+    emit semanticaChanged();
+}
+
+QVector<StudiaFragmento> StudiaController::recuperar(const QString &consulta,
+                                                     const QVector<float> &vector) const
+{
+    QVector<StudiaFragmento> frags =
+        m_index.buscarHibrido(consulta, vector, m_k, m_materia);
 
     // La bibliografia propia se consulta APARTE y se le reservan unos pocos
     // lugares. Los scores BM25 de dos indices distintos no son comparables
@@ -512,14 +593,66 @@ void StudiaController::preguntar(const QString &texto)
 
     agregarMensaje(QStringLiteral("usuario"), pregunta, {}, false, idModo);
 
-    // Una repregunta corta ("¿y cómo funciona?") no tiene terminos propios para
-    // buscar: se completa con el tema de las preguntas anteriores.
-    const QString consulta = StudiaPrompt::consultaConContexto(pregunta, previas);
-    const QVector<StudiaFragmento> frags = recuperar(consulta);
+    // ¿La pregunta ubica el tema por si sola? Se mide por terminos
+    // DISCRIMINANTES, no por cantidad: "¿que pasa si aumento la frecuencia?"
+    // tiene tres palabras y ninguna dice de que se esta hablando.
+    const int total = m_index.totalFragmentos();
+    int discriminantes = 0;
+    for (const QString &t : StudiaIndex::terminosConsulta(pregunta))
+        if (StudiaIndex::esDiscriminante(m_index.frecuenciaDocumental(t), total))
+            ++discriminantes;
 
-    // Sin evidencia no se consulta al modelo: se responde la abstencion. Asi la
-    // garantia no depende de que el modelo obedezca el prompt.
+    const QString consulta =
+        StudiaPrompt::consultaConContexto(pregunta, previas, discriminantes);
+
+    // Si hay búsqueda semántica, primero hay que vectorizar la pregunta. Es una
+    // request HTTP: se hace async y la segunda mitad sigue en continuarPregunta.
+    m_pendiente = {true, pregunta, idModo, consulta, historial};
+    if (semanticaActiva()) {
+        // Si no hay servidor de embeddings propio, se usa el del chat.
+        m_embed.setUrl(urlEmbeddingsEfectiva());
+        m_embed.vectorizar(consulta);
+        return;
+    }
+    continuarPregunta({});
+}
+
+void StudiaController::continuarPregunta(const QVector<float> &vector)
+{
+    if (!m_pendiente.activo)
+        return;
+    const Pendiente p = m_pendiente;
+    m_pendiente = {};
+
+    // Los modos flexibles (conversacion, explicacion, ejercicio) buscan con un
+    // criterio mas permisivo; los que generan material de estudio conservan el
+    // umbral calibrado.
+    const StudiaPrompt::Modo modoActual = StudiaPrompt::modoPorId(p.idModo);
+    const double umbralPrevio = m_index.umbralAbstencion();
+    if (!modoActual.exigente)
+        m_index.setUmbralAbstencion(umbralPrevio + kAflojarUmbralFlexible);
+    const QVector<StudiaFragmento> frags = recuperar(p.consulta, vector);
+    m_index.setUmbralAbstencion(umbralPrevio);
+
+    const QString pregunta = p.pregunta;
+    const QString idModo = p.idModo;
+    const QVector<StudiaPrompt::Turno> historial = p.historial;
+
     if (frags.isEmpty()) {
+        // Sin material nuevo, pero puede que el pedido se refiera a algo que ya
+        // esta en la conversacion ("repetí la ecuación anterior"). En los modos
+        // flexibles se intenta responder con eso antes de abstenerse.
+        if (!modoActual.exigente
+            && StudiaPrompt::puedeResponderDesdeConversacion(historial)) {
+            agregarMensaje(QStringLiteral("asistente"), QString(), {}, true, idModo);
+            StudiaSesion *s = sesionActual();
+            m_idxRespuesta = s ? int(s->mensajes.size()) - 1 : -1;
+            generar(StudiaPrompt::sistema(m_materia, idModo),
+                    StudiaPrompt::usuarioSoloConversacion(pregunta, historial));
+            return;
+        }
+        // Sin evidencia ni contexto no se consulta al modelo: se responde la
+        // abstencion. Asi la garantia no depende de que el modelo obedezca.
         agregarMensaje(QStringLiteral("asistente"), StudiaPrompt::fraseAbstencion());
         m_sesiones.guardar();
         return;

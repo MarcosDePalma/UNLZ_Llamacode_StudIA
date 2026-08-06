@@ -6,6 +6,7 @@
 #include <QTemporaryDir>
 
 #include "core/studia/StudiaController.h"
+#include "core/studia/StudiaEmbed.h"
 #include "core/studia/StudiaIndex.h"
 #include "core/studia/StudiaPrompt.h"
 #include "core/studia/StudiaSessionStore.h"
@@ -696,10 +697,10 @@ private slots:
 
     void contexto_preguntaAutonomaNoSeExpande()
     {
-        // 3 términos propios: se sostiene sola, se busca tal cual.
+        // 2+ términos discriminantes: la pregunta ubica el tema sola.
         const QString original = QStringLiteral("qué es el criterio de Routh Hurwitz");
         QCOMPARE(StudiaPrompt::consultaConContexto(
-                     original, {QStringLiteral("hablame de termodinámica")}),
+                     original, {QStringLiteral("hablame de termodinámica")}, 3),
                  original);
     }
 
@@ -709,17 +710,28 @@ private slots:
         // abstenía aunque el material estuviera. Ahora hereda el tema anterior.
         const QString q = StudiaPrompt::consultaConContexto(
             QStringLiteral("¿y cómo funciona?"),
-            {QStringLiteral("qué es un motor a inducción")});
+            {QStringLiteral("qué es un motor a inducción")}, 0);
         QVERIFY(q.contains(QStringLiteral("motor")));
         QVERIFY(q.contains(QStringLiteral("induccion"))
                 || q.contains(QStringLiteral("inducción")));
+    }
+
+    void contexto_preguntaVagaConPalabrasGenericasSeExpande()
+    {
+        // El caso que fallaba: tres palabras, ninguna que ubique el tema.
+        // Con la regla vieja (contar términos) NO se expandía y se abstenía.
+        const QString q = StudiaPrompt::consultaConContexto(
+            QStringLiteral("¿qué pasa si aumento la frecuencia?"),
+            {QStringLiteral("explicame el motor de inducción")}, 1);
+        QVERIFY2(q.contains(QStringLiteral("motor")), qPrintable(q));
+        QVERIFY2(q.contains(QStringLiteral("frecuencia")), qPrintable(q));
     }
 
     void contexto_repreguntaConservaSusPropiosTerminos()
     {
         const QString q = StudiaPrompt::consultaConContexto(
             QStringLiteral("¿y el rotor?"),
-            {QStringLiteral("qué es un motor a inducción")});
+            {QStringLiteral("qué es un motor a inducción")}, 1);
         QVERIFY(q.contains(QStringLiteral("rotor")));   // lo propio va primero
         QVERIFY(q.startsWith(QStringLiteral("rotor")));
         QVERIFY(q.contains(QStringLiteral("motor")));
@@ -728,7 +740,7 @@ private slots:
     void contexto_sinAnterioresDevuelveLoQueHay()
     {
         // Primera pregunta de la sesión, corta y sin historial.
-        const QString q = StudiaPrompt::consultaConContexto(QStringLiteral("¿y eso?"), {});
+        const QString q = StudiaPrompt::consultaConContexto(QStringLiteral("¿y eso?"), {}, 0);
         QVERIFY(q.trimmed().isEmpty());   // no hay términos: el gate se abstiene
     }
 
@@ -737,7 +749,8 @@ private slots:
         QStringList previas;
         for (int i = 0; i < 10; ++i)
             previas << QStringLiteral("termino%1 motor motor motor").arg(i);
-        const QString q = StudiaPrompt::consultaConContexto(QStringLiteral("¿y eso?"), previas);
+        const QString q = StudiaPrompt::consultaConContexto(
+            QStringLiteral("¿y eso?"), previas, 0);
         const QStringList t = q.split(QLatin1Char(' '), Qt::SkipEmptyParts);
         QVERIFY(t.size() <= StudiaPrompt::kMaxTerminosExpandida);
         QCOMPARE(t.count(QStringLiteral("motor")), 1);   // sin repetidos
@@ -809,10 +822,14 @@ private slots:
                                                 QStringLiteral("flashcards"));
         QVERIFY(s.contains(QStringLiteral("MODO FLASHCARDS")));
         QVERIFY(s.contains(QStringLiteral("Sistemas de Control")));
-        // El modo libre no agrega consigna.
+        // El modo libre no agrega la consigna de ningún modo con formato fijo.
         const QString libre = StudiaPrompt::sistema(QStringLiteral("X"),
                                                     StudiaPrompt::idModoLibre());
-        QVERIFY(!libre.contains(QStringLiteral("MODO ")));
+        for (const StudiaPrompt::Modo &m : StudiaPrompt::modos()) {
+            if (m.instruccion.isEmpty()) continue;
+            const QString cabecera = m.instruccion.section(QLatin1Char('.'), 0, 0);
+            QVERIFY2(!libre.contains(cabecera), qPrintable(m.id));
+        }
     }
 
     void prompt_sistemaPideMarkdownYProhibeLatex()
@@ -1135,6 +1152,359 @@ private slots:
         QCOMPARE(b.size(), 1);
         QCOMPARE(b.first().toMap().value(QStringLiteral("tipo")).toString(),
                  QStringLiteral("ecuacion"));
+    }
+
+    void bloques_lineaSueltaConFormulaEsEcuacion()
+    {
+        // El modelo escribe la fórmula en su renglón, sin delimitadores.
+        const QVariantList b = StudiaTexto::enBloques(QStringLiteral(
+            "Se calcula así:\n2x/2 = 43/2\nY se despeja x"));
+        bool hayEcuacion = false;
+        for (const QVariant &v : b)
+            if (v.toMap().value(QStringLiteral("tipo")).toString()
+                == QLatin1String("ecuacion"))
+                hayEcuacion = true;
+        QVERIFY(hayEcuacion);
+    }
+
+    void bloques_formulaEntreBackticksEsEcuacion()
+    {
+        // El caso de la captura: el modelo la envuelve como si fuera código.
+        QVERIFY(StudiaTexto::esLineaEcuacion(
+            QStringLiteral("`∫∫S f(x, y, z) dS = ∫∫D f(r(u, v)) · ‖ru × rv‖ dA`")));
+    }
+
+    void esLineaEcuacion_rechazaProsa()
+    {
+        // Prosa con una fórmula adentro: no es un bloque de ecuación.
+        QVERIFY(!StudiaTexto::esLineaEcuacion(
+            QStringLiteral("La velocidad v = d/t es constante durante el tramo")));
+        QVERIFY(!StudiaTexto::esLineaEcuacion(
+            QStringLiteral("Donde D es el dominio de la parametrización.")));
+        QVERIFY(!StudiaTexto::esLineaEcuacion(QStringLiteral("En resumen, las integrales")));
+    }
+
+    void esLineaEcuacion_rechazaEstructuraMarkdown()
+    {
+        QVERIFY(!StudiaTexto::esLineaEcuacion(QStringLiteral("## Título = importante")));
+        QVERIFY(!StudiaTexto::esLineaEcuacion(QStringLiteral("- item con x = 2")));
+        QVERIFY(!StudiaTexto::esLineaEcuacion(QStringLiteral("1. paso con x = 2")));
+        QVERIFY(!StudiaTexto::esLineaEcuacion(QStringLiteral("| a | b = c |")));
+    }
+
+    void esLineaEcuacion_aceptaFormulasTipicas()
+    {
+        QVERIFY(StudiaTexto::esLineaEcuacion(QStringLiteral("2x/2 = 43/2")));
+        QVERIFY(StudiaTexto::esLineaEcuacion(QStringLiteral("V = I · R")));
+        QVERIFY(StudiaTexto::esLineaEcuacion(QStringLiteral("n = 120·f/p")));
+        QVERIFY(StudiaTexto::esLineaEcuacion(QStringLiteral("aₙ x² + bₙ x + c = 0")));
+    }
+
+    void esLineaEcuacion_rechazaTextoSinMatematica()
+    {
+        QVERIFY(!StudiaTexto::esLineaEcuacion(QStringLiteral("hola")));
+        QVERIFY(!StudiaTexto::esLineaEcuacion(QString()));
+        // Y algo larguísimo tampoco: sería un párrafo, no una fórmula.
+        QVERIFY(!StudiaTexto::esLineaEcuacion(QString(300, QLatin1Char('=')) ));
+    }
+
+    // ── Búsqueda semántica ──
+
+    void embed_normalizaANorma1()
+    {
+        const QVector<float> v = StudiaEmbed::normalizar({3.0f, 4.0f});
+        QVERIFY(qAbs(v[0] - 0.6f) < 1e-5f);
+        QVERIFY(qAbs(v[1] - 0.8f) < 1e-5f);
+        // El vector nulo no se puede normalizar: se devuelve tal cual.
+        QCOMPARE(StudiaEmbed::normalizar({0.0f, 0.0f}), QVector<float>({0.0f, 0.0f}));
+    }
+
+    void embed_parseaLaRespuestaDelServidor()
+    {
+        QString err;
+        const QVector<float> v = StudiaEmbed::parsearRespuesta(
+            R"({"data":[{"index":0,"embedding":[0.1,0.2,0.3]}]})", &err);
+        QCOMPARE(v.size(), 3);
+        QVERIFY(err.isEmpty());
+    }
+
+    void embed_avisaSiElServidorNoTieneEmbeddings()
+    {
+        QString err;
+        // llama-server sin --embeddings responde 200 con un error adentro.
+        QVERIFY(StudiaEmbed::parsearRespuesta(
+            R"({"error":{"message":"embeddings disabled"}})", &err).isEmpty());
+        QVERIFY2(err.contains(QStringLiteral("embeddings")), qPrintable(err));
+
+        QVERIFY(StudiaEmbed::parsearRespuesta(QByteArrayLiteral("{}"), &err).isEmpty());
+        QVERIFY(!err.isEmpty());
+        QVERIFY(StudiaEmbed::parsearRespuesta(QByteArrayLiteral("no es json"), &err).isEmpty());
+        QVERIFY(!err.isEmpty());
+    }
+
+    void indice_sinVectoresElHibridoCaeALexico()
+    {
+        StudiaIndex idx;
+        QVERIFY(idx.abrir(m_db));
+        idx.setUmbralAbstencion(0.0);
+        QVERIFY(!idx.tieneVectores());        // el índice de prueba no está vectorizado
+        // Con vector vacío o sin vectores en la base, el resultado es el léxico.
+        const auto lexico  = idx.buscar(QStringLiteral("criterio de estabilidad de Routh"), 5);
+        const auto hibrido = idx.buscarHibrido(
+            QStringLiteral("criterio de estabilidad de Routh"), {}, 5);
+        QCOMPARE(hibrido.size(), lexico.size());
+        QVERIFY(!hibrido.isEmpty());
+        QCOMPARE(hibrido.first().documento, lexico.first().documento);
+    }
+
+    void indice_losFragmentosTraenSuId()
+    {
+        // El id es la clave con la que se fusionan los dos rankings.
+        StudiaIndex idx;
+        QVERIFY(idx.abrir(m_db));
+        idx.setUmbralAbstencion(0.0);
+        const auto r = idx.buscar(QStringLiteral("criterio de estabilidad de Routh"), 3);
+        QVERIFY(!r.isEmpty());
+        for (const auto &f : r)
+            QVERIFY2(f.fragId > 0, qPrintable(f.documento));
+    }
+
+    void controlador_estadoSemanticoSeReporta()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setUrlEmbeddings(QString());
+        QVERIFY(!c.semanticaActiva());        // sin servidor no hay semántica
+        const QVariantMap e = c.estadoSemantico();
+        QCOMPARE(e.value(QStringLiteral("vectores")).toInt(), 0);
+        QVERIFY(e.value(QStringLiteral("fragmentos")).toInt() > 0);
+
+        // Con servidor pero sin índice vectorizado, tampoco.
+        c.setUrlEmbeddings(QStringLiteral("http://127.0.0.1:8081"));
+        QVERIFY(!c.semanticaActiva());
+        QCOMPARE(c.urlEmbeddings(), QStringLiteral("http://127.0.0.1:8081"));
+        c.setUrlEmbeddings(QString());
+    }
+
+    // ── Sinónimos coloquiales: las dos formas de preguntar deben coincidir ──
+
+    void terminos_pasaYSucedeNoAlteranLaConsulta()
+    {
+        // Eran sinónimos que BM25 pesaba distinto según su frecuencia, y por eso
+        // "¿qué pasa si…?" y "¿qué sucede si…?" se comportaban distinto.
+        const QStringList a = StudiaIndex::terminosConsulta(
+            QStringLiteral("¿qué pasa si aumento la frecuencia?"));
+        const QStringList b = StudiaIndex::terminosConsulta(
+            QStringLiteral("¿qué sucede si aumento la frecuencia?"));
+        const QStringList c = StudiaIndex::terminosConsulta(
+            QStringLiteral("¿qué ocurre si aumento la frecuencia?"));
+        QCOMPARE(a, b);
+        QCOMPARE(a, c);
+        QCOMPARE(a, QStringList({QStringLiteral("aumento"), QStringLiteral("frecuencia")}));
+    }
+
+    void terminos_conservaLosVerbosTecnicos()
+    {
+        // "genera", "produce", "afecta" SÍ discriminan en un corpus técnico:
+        // no deben caer en la lista de palabras vacías.
+        const QStringList t = StudiaIndex::terminosConsulta(
+            QStringLiteral("qué genera el estator y cómo afecta al rotor"));
+        QVERIFY(t.contains(QStringLiteral("genera")));
+        QVERIFY(t.contains(QStringLiteral("afecta")));
+        QVERIFY(t.contains(QStringLiteral("estator")));
+    }
+
+    // ── Bloques de imagen: diagramas y gráficos ──
+
+    void bloques_reconoceGraficoYMermaid()
+    {
+        const QVariantList b = StudiaTexto::enBloques(QStringLiteral(
+            "Mirá la curva:\n"
+            "```grafico\nfuncion: x**2\nrango: -3, 3\n```\n"
+            "Y el proceso:\n"
+            "```mermaid\nflowchart TD\n  A --> B\n```\n"
+            "Eso es todo."));
+        QStringList tipos;
+        for (const QVariant &v : b)
+            tipos << v.toMap().value(QStringLiteral("tipo")).toString();
+        QVERIFY2(tipos.contains(QStringLiteral("grafico")), qPrintable(tipos.join(',')));
+        QVERIFY2(tipos.contains(QStringLiteral("mermaid")), qPrintable(tipos.join(',')));
+        QVERIFY(tipos.contains(QStringLiteral("texto")));
+    }
+
+    void bloques_elContenidoDelGraficoNoSeToca()
+    {
+        // El spec lo consume matplotlib: no debe pasar por la conversión de
+        // LaTeX (x**2 no es un superíndice).
+        const QVariantList b = StudiaTexto::enBloques(QStringLiteral(
+            "```grafico\nfuncion: x**2 - 3*x\nrango: -2, 5\n```"));
+        QCOMPARE(b.size(), 1);
+        const QString c = b.first().toMap().value(QStringLiteral("contenido")).toString();
+        QVERIFY2(c.contains(QStringLiteral("x**2")), qPrintable(c));
+        QVERIFY(c.contains(QStringLiteral("rango: -2, 5")));
+    }
+
+    void bloques_otrosLenguajesDeCodigoNoSonImagen()
+    {
+        const QVariantList b = StudiaTexto::enBloques(QStringLiteral(
+            "Ejemplo:\n```python\nprint(1)\n```\nfin"));
+        for (const QVariant &v : b) {
+            const QString t = v.toMap().value(QStringLiteral("tipo")).toString();
+            QVERIFY2(t == QLatin1String("texto"), qPrintable(t));
+        }
+    }
+
+    // ── Flashcards → Anki ──
+
+    void flashcards_rotuloYContenidoEnLaMismaLinea()
+    {
+        // Como lo escribe el modelo en la práctica: "**1. Frente** Pregunta".
+        // Con el parser anterior no reconocía ninguna tarjeta y el botón de
+        // exportar nunca aparecía.
+        const QString respuesta = QStringLiteral(
+            "**1. Frente** Fórmulas del producto\n\n"
+            "**Dorso** Las fórmulas del producto son: sen x cos y = ... [2]\n\n"
+            "---\n");
+        const QVariantList t = StudiaTexto::flashcards(respuesta);
+        QCOMPARE(t.size(), 1);
+        QCOMPARE(t.first().toMap().value(QStringLiteral("frente")).toString(),
+                 QStringLiteral("Fórmulas del producto"));
+        QVERIFY(t.first().toMap().value(QStringLiteral("dorso")).toString()
+                    .startsWith(QStringLiteral("Las fórmulas")));
+    }
+
+    void flashcards_noConfundePalabrasQueEmpiezanIgual()
+    {
+        // "Frentes de onda" no es el rótulo "Frente".
+        QVERIFY(StudiaTexto::flashcards(
+            QStringLiteral("Frentes de onda planos\ny su propagación")).isEmpty());
+    }
+
+    void flashcards_extraeLasTarjetas()
+    {
+        const QString respuesta = QStringLiteral(
+            "**1. Frente**\n¿Qué es el deslizamiento?\n\n"
+            "**Dorso**\nLa diferencia relativa entre velocidad de sincronismo y "
+            "la real. [1]\n\n---\n\n"
+            "**2. Frente**\n¿Qué es el par motor?\n\n"
+            "**Dorso**\nLa cuota de torque que entrega el eje. [2]\n\n---\n");
+        const QVariantList t = StudiaTexto::flashcards(respuesta);
+        QCOMPARE(t.size(), 2);
+        QCOMPARE(t.first().toMap().value(QStringLiteral("frente")).toString(),
+                 QStringLiteral("¿Qué es el deslizamiento?"));
+        QVERIFY(t.first().toMap().value(QStringLiteral("dorso")).toString()
+                    .contains(QStringLiteral("sincronismo")));
+    }
+
+    void flashcards_toleraOtrosFormatosDeRotulo()
+    {
+        const QString respuesta = QStringLiteral(
+            "### Frente:\npregunta uno\n### Dorso:\nrespuesta uno\n---\n");
+        QCOMPARE(StudiaTexto::flashcards(respuesta).size(), 1);
+    }
+
+    void flashcards_respuestaSinTarjetasDaVacio()
+    {
+        QVERIFY(StudiaTexto::flashcards(
+            QStringLiteral("## Resumen\nEsto es un resumen normal.")).isEmpty());
+        QVERIFY(StudiaTexto::flashcards(QString()).isEmpty());
+    }
+
+    void flashcards_tsvUsaTabYUnaLineaPorTarjeta()
+    {
+        QVariantList t;
+        t.append(QVariantMap{{QStringLiteral("frente"), QStringLiteral("¿Qué es X?")},
+                             {QStringLiteral("dorso"),  QStringLiteral("Es algo.")}});
+        t.append(QVariantMap{{QStringLiteral("frente"), QStringLiteral("¿Y Z?")},
+                             {QStringLiteral("dorso"),  QStringLiteral("Línea 1\nLínea 2")}});
+        const QString tsv = StudiaTexto::flashcardsATsv(t);
+        const QStringList filas = tsv.split(QLatin1Char('\n'));
+        QCOMPARE(filas.size(), 2);
+        QVERIFY(filas.first().contains(QLatin1Char('\t')));
+        QCOMPARE(filas.first().count(QLatin1Char('\t')), 1);
+        // Los saltos internos van como <br>: si no, romperían el renglón.
+        QVERIFY(filas.at(1).contains(QStringLiteral("<br>")));
+        QCOMPARE(filas.at(1).count(QLatin1Char('\t')), 1);
+    }
+
+    void flashcards_descartaTarjetasIncompletas()
+    {
+        QVariantList t;
+        t.append(QVariantMap{{QStringLiteral("frente"), QStringLiteral("sola")},
+                             {QStringLiteral("dorso"),  QString()}});
+        QVERIFY(StudiaTexto::flashcardsATsv(t).isEmpty());
+    }
+
+    // ── Prompt de imágenes ──
+
+    void prompt_explicaComoPedirGraficosYDiagramas()
+    {
+        const QString s = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                StudiaPrompt::idModoLibre());
+        // Los dos formatos y las claves obligatorias del spec.
+        QVERIFY(s.contains(QStringLiteral("```grafico")));
+        QVERIFY(s.contains(QStringLiteral("```mermaid")));
+        QVERIFY(s.contains(QStringLiteral("funcion:")));
+        QVERIFY(s.contains(QStringLiteral("rango:")));
+        // Y es IMPERATIVO ante un pedido de graficar: el modelo estaba
+        // explicando cómo hacerlo en vez de emitir el bloque.
+        QVERIFY2(s.contains(QStringLiteral("DEBE")), "falta la instrucción imperativa");
+        QVERIFY(s.contains(QStringLiteral("graficá")));
+    }
+
+    // ── Rigor por modo y respuesta desde la conversación ──
+
+    void modos_conversacionEsFlexibleYFlashcardsExigente()
+    {
+        QVERIFY(!StudiaPrompt::modoPorId(QStringLiteral("libre")).exigente);
+        QVERIFY(!StudiaPrompt::modoPorId(QStringLiteral("explicacion")).exigente);
+        QVERIFY(!StudiaPrompt::modoPorId(QStringLiteral("ejercicio")).exigente);
+        QVERIFY(StudiaPrompt::modoPorId(QStringLiteral("flashcards")).exigente);
+        QVERIFY(StudiaPrompt::modoPorId(QStringLiteral("autoevaluacion")).exigente);
+        QVERIFY(StudiaPrompt::modoPorId(QStringLiteral("resumen")).exigente);
+        QVERIFY(StudiaPrompt::modoPorId(QStringLiteral("plan")).exigente);
+    }
+
+    void prompt_modoFlexiblePideAgotarAntesDeAbstenerse()
+    {
+        const QString libre = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                    StudiaPrompt::idModoLibre());
+        QVERIFY(libre.contains(QStringLiteral("ACTITUD EN ESTE MODO")));
+        QVERIFY(libre.contains(QStringLiteral("Reservá la frase de abstención")));
+        // El modo exigente NO lleva esa licencia.
+        const QString fc = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                 QStringLiteral("flashcards"));
+        QVERIFY(!fc.contains(QStringLiteral("ACTITUD EN ESTE MODO")));
+    }
+
+    void conversacion_detectaSiHayDeQueAgarrarse()
+    {
+        QVERIFY(!StudiaPrompt::puedeResponderDesdeConversacion({}));
+        // Sólo preguntas del usuario no alcanzan: hace falta una respuesta previa.
+        QVERIFY(!StudiaPrompt::puedeResponderDesdeConversacion(
+            {{QStringLiteral("usuario"), QStringLiteral("hola, qué tal todo por acá")}}));
+        // Una respuesta corta tampoco.
+        QVERIFY(!StudiaPrompt::puedeResponderDesdeConversacion(
+            {{QStringLiteral("asistente"), QStringLiteral("ok")}}));
+        QVERIFY(StudiaPrompt::puedeResponderDesdeConversacion(
+            {{QStringLiteral("asistente"),
+              QStringLiteral("El motor de inducción tiene un rotor jaula de ardilla "
+                             "y un estator con bobinado trifásico.")}}));
+    }
+
+    void prompt_soloConversacionNoPideCitas()
+    {
+        const QVector<StudiaPrompt::Turno> h{
+            {QStringLiteral("usuario"),   QStringLiteral("¿qué es un motor?")},
+            {QStringLiteral("asistente"), QStringLiteral("Es una máquina que convierte "
+                                                         "energía eléctrica en mecánica.")}};
+        const QString p = StudiaPrompt::usuarioSoloConversacion(
+            QStringLiteral("repetí la ecuación anterior"), h);
+        QVERIFY(p.contains(QStringLiteral("Conversación hasta ahora")));
+        QVERIFY(p.contains(QStringLiteral("repetí la ecuación anterior")));
+        QVERIFY(p.contains(QStringLiteral("no trajo material nuevo")));
+        // No debe pedir citas [n]: en ese turno no hay fragmentos numerados.
+        QVERIFY(p.contains(QStringLiteral("No cites")));
     }
 
     // ── Modo Ejercicio ──

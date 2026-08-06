@@ -23,10 +23,31 @@ QString latexALegible(const QString &texto);
 // cuerpo mas grande, como una ecuacion insertada en Word. El resto sigue siendo
 // texto Markdown normal.
 //
-// Devuelve una lista de mapas {tipo, contenido} con tipo = "texto" | "ecuacion",
-// en el orden original. El contenido ya viene pasado por latexALegible().
-// Si no hay ecuaciones de display devuelve un unico bloque de texto.
+// Devuelve una lista de mapas {tipo, contenido} en el orden original, con
+// tipo = "texto" | "ecuacion" | "mermaid" | "grafico". El contenido de texto y
+// ecuacion ya viene pasado por latexALegible(); el de mermaid/grafico se
+// entrega crudo, porque lo consume un renderizador y no el lector.
 QVariantList enBloques(const QString &textoCrudo);
+// Sólo texto y ecuaciones, sin mirar bloques cercados. Uso interno y de tests.
+QVariantList enBloquesTexto(const QString &textoCrudo);
+
+// ¿Este renglón, solo, es una ecuación? Se usa para las que el modelo escribe
+// sin delimitadores (o entre backticks, como si fueran código). La heurística:
+// tiene algún signo matemático y casi nada de prosa. Expuesta para testearla.
+bool esLineaEcuacion(const QString &linea);
+
+// ── Flashcards ───────────────────────────────────────────────────────────────
+
+// Extrae las tarjetas de una respuesta del modo Flashcards. Tolerante al
+// formato: busca los rotulos "Frente"/"Dorso" y, si no estan, cae a separar por
+// la linea "---". Devuelve mapas {frente, dorso}; lista vacia si no reconoce
+// ninguna tarjeta.
+QVariantList flashcards(const QString &respuesta);
+
+// Serializa las tarjetas al formato que importa Anki: un renglon por tarjeta,
+// frente y dorso separados por TAB. Es el camino sin dependencias — Anki lo
+// importa de fabrica (Archivo → Importar, separado por tabulaciones).
+QString flashcardsATsv(const QVariantList &tarjetas);
 
 // Piezas expuestas para poder testearlas por separado.
 QString convertirFracciones(const QString &s);
