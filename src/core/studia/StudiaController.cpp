@@ -1,30 +1,41 @@
 #include "StudiaController.h"
+#include "StudiaTexto.h"
 
 #include <QApplication>
+#include <QCoreApplication>
+#include <QDateTime>
 #include <QDesktopServices>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QHash>
+#include <QProcess>
+#include <QStandardPaths>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QHash>
 #include <QSettings>
 #include <QUrl>
 #include <QWidget>
+
 #include <algorithm>
 
 namespace {
 
-// Clave de QSettings donde se recuerda el indice elegido.
-const char *kClaveRuta = "studia/rutaIndice";
+// Claves de QSettings.
+const char *kClaveRuta    = "studia/rutaIndice";
+const char *kClaveMateria = "studia/materia";
 
-// Cuanto texto de cada fragmento se manda al modelo. Los fragmentos son de
-// ~1200 caracteres; con 6 fragmentos son ~7 KB ≈ 1800 tokens, holgado dentro
-// de los 32k de contexto del perfil Qwen y deja lugar para la respuesta.
-constexpr int kMaxCharsFragmento = 1400;
+// Cuantos turnos previos se le pasan al modelo como contexto y cuanto se
+// recorta cada uno. Alcanza para que entienda una repregunta sin inflar el
+// prompt (el grueso del contexto son los fragmentos).
+constexpr int kTurnosContexto     = 4;
+constexpr int kMaxCharsTurno      = 700;
+// Cuantas preguntas previas se miran para expandir una repregunta corta.
+constexpr int kPreguntasParaExpandir = 3;
 
 }  // namespace
 
@@ -32,19 +43,18 @@ constexpr int kMaxCharsFragmento = 1400;
 StudiaController::StudiaController(QObject *parent) : QObject(parent)
 {
     m_nam = new QNetworkAccessManager(this);
-    // Reabrir el ultimo indice usado, si sigue existiendo.
+    m_sesiones.cargar();
+    refrescarIndicePropio();
     const QString guardada = rutaGuardada();
     if (!guardada.isEmpty() && QFileInfo::exists(guardada))
         abrirIndice(guardada);
+    // Restaurar la ultima materia, si sigue existiendo en el indice.
+    const QString mat = QSettings().value(QLatin1String(kClaveMateria)).toString();
+    if (!mat.isEmpty() && materias().contains(mat))
+        setMateria(mat);
 }
 
 StudiaController::~StudiaController() { detener(); }
-
-QString StudiaController::fraseAbstencion()
-{
-    return QStringLiteral("No encontré información suficiente en la documentación "
-                          "disponible para responder con seguridad.");
-}
 
 // ── Indice ───────────────────────────────────────────────────────────────────
 
@@ -59,10 +69,12 @@ bool StudiaController::abrirIndice(const QString &dbPath)
     if (ok) {
         m_errorIndice.clear();
         QSettings().setValue(QLatin1String(kClaveRuta), dbPath);
-        // Si el indice cambio, el filtro de materia anterior puede no existir.
-        if (!m_materiaFiltro.isEmpty() && !m_index.materias().contains(m_materiaFiltro)) {
-            m_materiaFiltro.clear();
-            emit materiaFiltroChanged();
+        // Si la materia activa no existe en el indice nuevo, se deselecciona:
+        // preguntar sin materia valida no tiene sentido.
+        if (!m_materia.isEmpty() && !m_index.materias().contains(m_materia)) {
+            m_materia.clear();
+            emit materiaChanged();
+            emit mensajesChanged();
         }
     }
     emit indiceChanged();
@@ -72,18 +84,94 @@ bool StudiaController::abrirIndice(const QString &dbPath)
 QString StudiaController::elegirIndice()
 {
     QWidget *padre = QApplication::activeWindow();
-    const QString f = QFileDialog::getOpenFileName(
+    return QFileDialog::getOpenFileName(
         padre, QStringLiteral("Elegí el índice de StudIA"),
         QFileInfo(rutaGuardada()).absolutePath(),
         QStringLiteral("Índice de StudIA (*.db);;Todos los archivos (*)"));
-    return f;
 }
 
-void StudiaController::setMateriaFiltro(const QString &m)
+// ── Materia y sesiones ───────────────────────────────────────────────────────
+
+void StudiaController::setMateria(const QString &m)
 {
-    if (m == m_materiaFiltro) return;
-    m_materiaFiltro = m;
-    emit materiaFiltroChanged();
+    const QString nueva = m.trimmed();
+    if (nueva == m_materia)
+        return;
+    // Cambiar de materia interrumpe lo que se este generando: la respuesta
+    // pertenece a la conversacion anterior.
+    detener();
+    m_materia = nueva;
+    QSettings().setValue(QLatin1String(kClaveMateria), m_materia);
+    if (!m_materia.isEmpty()) {
+        m_sesiones.obtenerOCrear(m_materia);   // crea "StudIA: <materia>" si no estaba
+        m_sesiones.guardar();
+        emit sesionesChanged();
+    }
+    emit materiaChanged();
+    emit mensajesChanged();
+}
+
+StudiaSesion *StudiaController::sesionActual()
+{
+    if (m_materia.trimmed().isEmpty())
+        return nullptr;
+    return &m_sesiones.obtenerOCrear(m_materia);
+}
+
+QVariantList StudiaController::mensajes() const
+{
+    const StudiaSesion *s = m_sesiones.buscar(m_materia);
+    return s ? s->mensajes : QVariantList{};
+}
+
+void StudiaController::limpiar()
+{
+    detener();
+    if (m_sesiones.limpiar(m_materia)) {
+        m_sesiones.guardar();
+        emit mensajesChanged();
+        emit sesionesChanged();
+    }
+}
+
+void StudiaController::borrarSesion(const QString &materia)
+{
+    const QString objetivo = materia.trimmed();
+    const bool eraLaActiva = (objetivo == m_materia);
+    if (eraLaActiva)
+        detener();
+    if (!m_sesiones.borrar(objetivo))
+        return;
+    m_sesiones.guardar();
+    // Si se borró la conversación abierta hay que soltar la materia: si no,
+    // sesionActual() la volvería a crear y el chat reaparecería solo.
+    if (eraLaActiva) {
+        m_materia.clear();
+        QSettings().setValue(QLatin1String(kClaveMateria), QString());
+        emit materiaChanged();
+        emit mensajesChanged();
+    }
+    emit sesionesChanged();
+}
+
+// ── Ajustes ──────────────────────────────────────────────────────────────────
+
+void StudiaController::setModo(const QString &m)
+{
+    const QString id = StudiaPrompt::modoPorId(m).id.isEmpty()
+                           ? StudiaPrompt::idModoLibre() : m;
+    if (id == m_modo)
+        return;
+    m_modo = id;
+    emit modoChanged();
+}
+
+QString StudiaController::prefijoDeModo(const QString &idModo) const
+{
+    const StudiaPrompt::Modo m = StudiaPrompt::modoPorId(idModo);
+    if (m.id.isEmpty() || m.id == StudiaPrompt::idModoLibre())
+        return {};
+    return QStringLiteral("/%1/ ").arg(m.id);
 }
 
 void StudiaController::setServerUrl(const QString &u)
@@ -105,14 +193,14 @@ void StudiaController::setFragmentosK(int k)
     const int v = qBound(2, k, 15);
     if (v == m_k) return;
     m_k = v;
-    emit fragmentosKChanged();
+    emit ajustesChanged();
 }
 
 void StudiaController::setUmbralAbstencion(double u)
 {
     if (qFuzzyCompare(u, m_index.umbralAbstencion())) return;
     m_index.setUmbralAbstencion(u);
-    emit fragmentosKChanged();
+    emit ajustesChanged();
 }
 
 bool StudiaController::abrirDocumento(const QString &ruta) const
@@ -122,10 +210,179 @@ bool StudiaController::abrirDocumento(const QString &ruta) const
     return QDesktopServices::openUrl(QUrl::fromLocalFile(ruta));
 }
 
+// ── Bibliografia propia (indice aparte) ──────────────────────────────────────
+
+QString StudiaController::rutaIndicePropio() const
+{
+    const QString d = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+                      + QStringLiteral("/studia");
+    QDir().mkpath(d);
+    return d + QStringLiteral("/mi_biblioteca.db");
+}
+
+QString StudiaController::rutaIngestor() const
+{
+    // En desarrollo el script vive en el repo; en una instalacion, junto al exe.
+    const QStringList candidatos{
+        QCoreApplication::applicationDirPath() + QStringLiteral("/tools/studia/ingest.py"),
+        QCoreApplication::applicationDirPath() + QStringLiteral("/../../tools/studia/ingest.py"),
+        QCoreApplication::applicationDirPath() + QStringLiteral("/../../../tools/studia/ingest.py"),
+    };
+    for (const QString &c : candidatos) {
+        const QString limpio = QDir::cleanPath(c);
+        if (QFileInfo::exists(limpio))
+            return limpio;
+    }
+    return {};
+}
+
+void StudiaController::refrescarIndicePropio()
+{
+    const QString ruta = rutaIndicePropio();
+    if (QFileInfo::exists(ruta)) {
+        m_propio.abrir(ruta);          // si falla queda cerrado: no es critico
+        // El gate de abstencion esta calibrado para el corpus grande; en un
+        // indice de pocos fragmentos dejaria afuera todo (ver setExigirEvidencia).
+        m_propio.setExigirEvidencia(false);
+    }
+    emit bibliotecaChanged();
+}
+
+// Lanza el ingestor Python con los argumentos dados. Centraliza la validacion
+// de Python/script y el manejo del proceso, comun a adjuntar y quitar.
+void StudiaController::correrIngestor(const QStringList &args, const QString &queHace)
+{
+    if (m_procAdjunto)
+        return;
+    const QString script = rutaIngestor();
+    if (script.isEmpty()) {
+        emit errorOcurrido(QStringLiteral("No se encontró tools/studia/ingest.py, "
+                                          "que es quien maneja el índice."));
+        return;
+    }
+    const QString py = QStandardPaths::findExecutable(QStringLiteral("python"));
+    if (py.isEmpty()) {
+        emit errorOcurrido(QStringLiteral("No se encontró Python, necesario para "
+                                          "procesar documentos."));
+        return;
+    }
+    // El indice propio se abre en modo lectura para consultar; hay que cerrarlo
+    // mientras el ingestor escribe y volver a abrirlo al terminar.
+    m_propio.cerrar();
+
+    m_procAdjunto = new QProcess(this);
+    m_procAdjunto->setProcessChannelMode(QProcess::MergedChannels);
+    connect(m_procAdjunto, &QProcess::finished, this,
+            [this, queHace](int code, QProcess::ExitStatus) {
+        const QString salida = QString::fromUtf8(m_procAdjunto->readAll()).trimmed();
+        m_procAdjunto->deleteLater();
+        m_procAdjunto = nullptr;
+        refrescarIndicePropio();
+        if (code != 0) {
+            const QString detalle = salida.section(QLatin1Char('\n'), -1).trimmed();
+            emit errorOcurrido(QStringLiteral("No se pudo %1: %2")
+                                   .arg(queHace,
+                                        detalle.isEmpty() ? QStringLiteral("error desconocido")
+                                                          : detalle));
+        }
+        m_ultimoAdjunto.clear();
+        emit bibliotecaChanged();
+        // Si venían varios archivos, sigue con el próximo de la cola.
+        procesarSiguienteAdjunto();
+    });
+    m_procAdjunto->start(py, QStringList{script} + args);
+    emit bibliotecaChanged();
+}
+
+void StudiaController::quitarBibliografia(const QString &ruta)
+{
+    if (ruta.trimmed().isEmpty() || m_procAdjunto)
+        return;
+    m_ultimoAdjunto = QFileInfo(ruta).fileName();
+    correrIngestor({QStringLiteral("--db"), rutaIndicePropio(),
+                    QStringLiteral("--quitar"), ruta},
+                   QStringLiteral("quitar «%1»").arg(m_ultimoAdjunto));
+}
+
+QStringList StudiaController::elegirArchivos()
+{
+    QWidget *padre = QApplication::activeWindow();
+    return QFileDialog::getOpenFileNames(
+        padre, QStringLiteral("Elegí los archivos a agregar a tu bibliografía"),
+        QString(),
+        QStringLiteral("Documentos (*.pdf *.docx *.pptx *.xlsx *.txt *.md);;"
+                       "Todos los archivos (*)"));
+}
+
+void StudiaController::adjuntarBibliografia(const QStringList &rutas)
+{
+    if (rutas.isEmpty())
+        return;
+    if (!materiaElegida()) {
+        emit errorOcurrido(QStringLiteral("Elegí primero la materia a la que "
+                                          "pertenece esta bibliografía."));
+        return;
+    }
+    QStringList validos;
+    QStringList faltantes;
+    for (const QString &r : rutas) {
+        if (!r.trimmed().isEmpty() && QFileInfo::exists(r))
+            validos << r;
+        else if (!r.trimmed().isEmpty())
+            faltantes << QFileInfo(r).fileName();
+    }
+    if (!faltantes.isEmpty())
+        emit errorOcurrido(QStringLiteral("No se encontraron: %1")
+                               .arg(faltantes.join(QStringLiteral(", "))));
+    if (validos.isEmpty())
+        return;
+
+    // El ingestor escribe en la misma base: los archivos van de a uno.
+    m_colaAdjuntos += validos;
+    emit bibliotecaChanged();
+    procesarSiguienteAdjunto();
+}
+
+void StudiaController::procesarSiguienteAdjunto()
+{
+    if (m_procAdjunto || m_colaAdjuntos.isEmpty())
+        return;
+    const QString ruta = m_colaAdjuntos.takeFirst();
+    m_ultimoAdjunto = QFileInfo(ruta).fileName();
+    correrIngestor({QStringLiteral("--db"), rutaIndicePropio(),
+                    QStringLiteral("--archivo"), ruta,
+                    QStringLiteral("--materia"), m_materia},
+                   QStringLiteral("agregar «%1»").arg(m_ultimoAdjunto));
+}
+
+QVector<StudiaFragmento> StudiaController::recuperar(const QString &consulta) const
+{
+    QVector<StudiaFragmento> frags = m_index.buscar(consulta, m_k, m_materia);
+
+    // La bibliografia propia se consulta APARTE y se le reservan unos pocos
+    // lugares. Los scores BM25 de dos indices distintos no son comparables
+    // entre si (dependen del tamano del corpus), asi que no se fusionan por
+    // score: se asignan cupos y se marca el origen de cada fragmento.
+    if (m_propio.abierto()) {
+        const int cupo = qMax(1, m_k / 3);
+        QVector<StudiaFragmento> propios = m_propio.buscar(consulta, cupo, m_materia);
+        for (StudiaFragmento &f : propios)
+            f.propio = true;
+        if (!propios.isEmpty()) {
+            // Se le hace lugar recortando los de la catedra, no ampliando el
+            // total: el presupuesto de contexto del modelo es el mismo.
+            while (frags.size() + propios.size() > m_k && !frags.isEmpty())
+                frags.removeLast();
+            frags += propios;
+        }
+    }
+    return frags;
+}
+
 QVariantList StudiaController::buscar(const QString &consulta, int k) const
 {
     QVariantList out;
-    for (const StudiaFragmento &f : m_index.buscar(consulta, k, m_materiaFiltro)) {
+    for (const StudiaFragmento &f : m_index.buscar(consulta, k, m_materia)) {
         out.append(QVariantMap{
             {QStringLiteral("documento"), f.documento},
             {QStringLiteral("materia"),   f.materia},
@@ -139,51 +396,7 @@ QVariantList StudiaController::buscar(const QString &consulta, int k) const
     return out;
 }
 
-// ── Prompt ───────────────────────────────────────────────────────────────────
-
-QString StudiaController::promptSistema()
-{
-    return QStringLiteral(
-        "Sos StudIA, un asistente de estudio para estudiantes de Ingeniería "
-        "Mecatrónica de la Universidad Nacional de Lomas de Zamora.\n\n"
-        "Respondés APOYÁNDOTE ÚNICAMENTE en los fragmentos de documentación "
-        "académica que te paso en cada consulta. Esos fragmentos salen de los "
-        "apuntes, libros y trabajos prácticos de la carrera.\n\n"
-        "REGLAS:\n"
-        "1. Si los fragmentos no alcanzan para responder con seguridad, "
-        "respondé exactamente esta frase y nada más: \"%1\"\n"
-        "2. No completes con conocimiento general lo que no esté en los "
-        "fragmentos. Si sabés algo por tu cuenta pero no está en la "
-        "documentación, no lo afirmes.\n"
-        "3. Citá siempre de dónde sacaste cada cosa con la referencia [n] del "
-        "fragmento correspondiente.\n"
-        "4. Explicá de forma clara y progresiva: primero la idea general, "
-        "después el detalle técnico. Escribís para alguien que está estudiando "
-        "el tema, no para un experto.\n"
-        "5. Los fragmentos vienen de PDFs y algunas fórmulas pueden estar mal "
-        "transcriptas (símbolos cambiados). Si una fórmula se ve corrupta, "
-        "decilo y remití al documento original en vez de reconstruirla.\n"
-        "6. Respondé en español rioplatense, en el mismo registro de la "
-        "pregunta. Sin relleno ni cortesías innecesarias.")
-        .arg(fraseAbstencion());
-}
-
-QString StudiaController::construirPrompt(const QString &pregunta,
-                                          const QVector<StudiaFragmento> &frags)
-{
-    QString out = QStringLiteral("### Fragmentos de la documentación académica\n\n");
-    for (int i = 0; i < frags.size(); ++i) {
-        const StudiaFragmento &f = frags[i];
-        out += QStringLiteral("[%1] %2 · %3").arg(i + 1).arg(f.materia, f.documento);
-        if (f.pagina > 0)
-            out += QStringLiteral(" · pág. %1").arg(f.pagina);
-        out += QLatin1Char('\n');
-        out += f.texto.left(kMaxCharsFragmento).trimmed();
-        out += QStringLiteral("\n\n");
-    }
-    out += QStringLiteral("### Pregunta del estudiante\n%1\n").arg(pregunta.trimmed());
-    return out;
-}
+// ── Fuentes ──────────────────────────────────────────────────────────────────
 
 QVariantList StudiaController::agruparFuentes(const QVector<StudiaFragmento> &frags)
 {
@@ -192,7 +405,7 @@ QVariantList StudiaController::agruparFuentes(const QVector<StudiaFragmento> &fr
     // mismo nombre).
     QStringList orden;
     QHash<QString, QVariantMap> datos;
-    QHash<QString, QList<int>> refs;      // [n] del prompt
+    QHash<QString, QList<int>> refs;
     QHash<QString, QList<int>> paginas;
 
     for (int i = 0; i < frags.size(); ++i) {
@@ -204,6 +417,7 @@ QVariantList StudiaController::agruparFuentes(const QVector<StudiaFragmento> &fr
                 {QStringLiteral("documento"), f.documento},
                 {QStringLiteral("materia"),   f.materia},
                 {QStringLiteral("ruta"),      f.ruta},
+                {QStringLiteral("propio"),    f.propio},
             });
         }
         refs[clave].append(i + 1);
@@ -231,56 +445,96 @@ QVariantList StudiaController::agruparFuentes(const QVector<StudiaFragmento> &fr
 // ── Conversacion ─────────────────────────────────────────────────────────────
 
 void StudiaController::agregarMensaje(const QString &rol, const QString &contenido,
-                                      const QVariantList &fuentes, bool escribiendo)
+                                      const QVariantList &fuentes, bool escribiendo,
+                                      const QString &modo)
 {
-    m_mensajes.append(QVariantMap{
+    StudiaSesion *s = sesionActual();
+    if (!s)
+        return;
+    s->mensajes.append(QVariantMap{
         {QStringLiteral("rol"), rol},
         {QStringLiteral("contenido"), contenido},
         {QStringLiteral("escribiendo"), escribiendo},
         {QStringLiteral("fuentes"), fuentes},
+        {QStringLiteral("modo"), modo},
     });
+    s->usada = double(QDateTime::currentMSecsSinceEpoch());
     emit mensajesChanged();
 }
 
-void StudiaController::limpiar()
+QVector<StudiaPrompt::Turno> StudiaController::historialReciente() const
 {
-    detener();
-    m_mensajes.clear();
-    m_idxRespuesta = -1;
-    emit mensajesChanged();
+    QVector<StudiaPrompt::Turno> out;
+    const StudiaSesion *s = m_sesiones.buscar(m_materia);
+    if (!s)
+        return out;
+    // Se toman los ultimos turnos completos, sin contar el mensaje que se acaba
+    // de agregar (lo excluye el llamador enviando el historial antes).
+    const int desde = qMax(0, int(s->mensajes.size()) - kTurnosContexto);
+    for (int i = desde; i < s->mensajes.size(); ++i) {
+        const QVariantMap m = s->mensajes.at(i).toMap();
+        const QString contenido = m.value(QStringLiteral("contenido")).toString().trimmed();
+        if (contenido.isEmpty())
+            continue;
+        out.append({m.value(QStringLiteral("rol")).toString(),
+                    contenido.left(kMaxCharsTurno)});
+    }
+    return out;
 }
 
 void StudiaController::preguntar(const QString &texto)
 {
-    const QString pregunta = texto.trimmed();
-    if (pregunta.isEmpty() || m_reply)
+    if (m_reply)
         return;
 
-    agregarMensaje(QStringLiteral("usuario"), pregunta);
+    // El menu de modos prellena "/flashcards/ ..."; tambien se puede tipear.
+    QString idModo, pregunta;
+    StudiaPrompt::separarModo(texto, &idModo, &pregunta);
+    if (pregunta.isEmpty())
+        return;
 
     if (!m_index.abierto()) {
-        agregarMensaje(QStringLiteral("asistente"),
-                       QStringLiteral("No hay un índice documental abierto. "
-                                      "Elegí el archivo del índice para empezar."));
+        // Sin sesion no hay donde escribir el aviso: se emite como error.
+        emit errorOcurrido(QStringLiteral("No hay un índice documental abierto. "
+                                          "Elegí el archivo del índice para empezar."));
+        return;
+    }
+    if (!materiaElegida()) {
+        emit errorOcurrido(QStringLiteral("Elegí primero la materia sobre la que "
+                                          "querés estudiar."));
         return;
     }
 
-    const QVector<StudiaFragmento> frags =
-        m_index.buscar(pregunta, m_k, m_materiaFiltro);
+    // El contexto se arma ANTES de sumar la pregunta nueva.
+    const QVector<StudiaPrompt::Turno> historial = historialReciente();
+    const QStringList previas =
+        m_sesiones.ultimasPreguntas(m_materia, kPreguntasParaExpandir);
+
+    agregarMensaje(QStringLiteral("usuario"), pregunta, {}, false, idModo);
+
+    // Una repregunta corta ("¿y cómo funciona?") no tiene terminos propios para
+    // buscar: se completa con el tema de las preguntas anteriores.
+    const QString consulta = StudiaPrompt::consultaConContexto(pregunta, previas);
+    const QVector<StudiaFragmento> frags = recuperar(consulta);
 
     // Sin evidencia no se consulta al modelo: se responde la abstencion. Asi la
     // garantia no depende de que el modelo obedezca el prompt.
     if (frags.isEmpty()) {
-        agregarMensaje(QStringLiteral("asistente"), fraseAbstencion());
+        agregarMensaje(QStringLiteral("asistente"), StudiaPrompt::fraseAbstencion());
+        m_sesiones.guardar();
         return;
     }
 
-    agregarMensaje(QStringLiteral("asistente"), QString(), agruparFuentes(frags), true);
-    m_idxRespuesta = m_mensajes.size() - 1;
-    generar(construirPrompt(pregunta, frags));
+    agregarMensaje(QStringLiteral("asistente"), QString(),
+                   agruparFuentes(frags), true, idModo);
+    StudiaSesion *s = sesionActual();
+    m_idxRespuesta = s ? int(s->mensajes.size()) - 1 : -1;
+
+    generar(StudiaPrompt::sistema(m_materia, idModo),
+            StudiaPrompt::usuario(pregunta, frags, historial));
 }
 
-void StudiaController::generar(const QString &promptUsuario)
+void StudiaController::generar(const QString &promptSistema, const QString &promptUsuario)
 {
     if (m_serverUrl.trimmed().isEmpty()) {
         cerrarStream(false, QStringLiteral("El servidor no está activo. "
@@ -290,7 +544,7 @@ void StudiaController::generar(const QString &promptUsuario)
 
     QJsonArray msgs;
     msgs.append(QJsonObject{{QStringLiteral("role"), QStringLiteral("system")},
-                            {QStringLiteral("content"), promptSistema()}});
+                            {QStringLiteral("content"), promptSistema}});
     msgs.append(QJsonObject{{QStringLiteral("role"), QStringLiteral("user")},
                             {QStringLiteral("content"), promptUsuario}});
 
@@ -298,7 +552,7 @@ void StudiaController::generar(const QString &promptUsuario)
         {QStringLiteral("model"), m_modelo},
         {QStringLiteral("messages"), msgs},
         {QStringLiteral("stream"), true},
-        // Temperatura baja: la tarea es resumir documentación, no inventar.
+        // Temperatura baja: la tarea es explicar documentación, no inventar.
         {QStringLiteral("temperature"), 0.3},
         // Sin razonamiento interno: queremos la respuesta directa.
         {QStringLiteral("reasoning_budget"), 0},
@@ -334,11 +588,17 @@ void StudiaController::generar(const QString &promptUsuario)
                                       .value(QStringLiteral("content")).toString();
             if (trozo.isEmpty()) continue;
             m_acumulado += trozo;
-            if (m_idxRespuesta >= 0 && m_idxRespuesta < m_mensajes.size()) {
-                QVariantMap msg = m_mensajes[m_idxRespuesta].toMap();
-                msg[QStringLiteral("contenido")] = m_acumulado;
-                m_mensajes[m_idxRespuesta] = msg;
-                emit textoParcial(m_idxRespuesta, m_acumulado);
+            StudiaSesion *s = sesionActual();
+            if (s && m_idxRespuesta >= 0 && m_idxRespuesta < s->mensajes.size()) {
+                // El modelo emite LaTeX aunque el prompt se lo prohiba; se
+                // convierte a texto legible antes de mostrarlo y de guardarlo.
+                const QString visible = StudiaTexto::latexALegible(m_acumulado);
+                const QVariantList bloques = StudiaTexto::enBloques(m_acumulado);
+                QVariantMap msg = s->mensajes[m_idxRespuesta].toMap();
+                msg[QStringLiteral("contenido")] = visible;
+                msg[QStringLiteral("bloques")] = bloques;
+                s->mensajes[m_idxRespuesta] = msg;
+                emit textoParcial(m_idxRespuesta, visible, bloques);
             }
         }
     });
@@ -362,19 +622,27 @@ void StudiaController::cerrarStream(bool ok, const QString &err)
         m_reply->deleteLater();
         m_reply = nullptr;
     }
-    if (m_idxRespuesta >= 0 && m_idxRespuesta < m_mensajes.size()) {
-        QVariantMap msg = m_mensajes[m_idxRespuesta].toMap();
+    StudiaSesion *s = sesionActual();
+    if (s && m_idxRespuesta >= 0 && m_idxRespuesta < s->mensajes.size()) {
+        QVariantMap msg = s->mensajes[m_idxRespuesta].toMap();
         msg[QStringLiteral("escribiendo")] = false;
         if (!ok && m_acumulado.isEmpty()) {
             msg[QStringLiteral("contenido")] = QStringLiteral("[error: %1]").arg(err);
             msg[QStringLiteral("fuentes")] = QVariantList{};
+        } else if (!m_acumulado.isEmpty()) {
+            // Conversión final sobre el texto completo: durante el streaming
+            // una fórmula puede quedar a medio escribir.
+            msg[QStringLiteral("contenido")] = StudiaTexto::latexALegible(m_acumulado);
+            msg[QStringLiteral("bloques")] = StudiaTexto::enBloques(m_acumulado);
         }
-        m_mensajes[m_idxRespuesta] = msg;
+        s->mensajes[m_idxRespuesta] = msg;
     }
     m_idxRespuesta = -1;
     m_acumulado.clear();
     m_sseBuf.clear();
+    m_sesiones.guardar();
     emit mensajesChanged();
+    emit sesionesChanged();
     emit generandoChanged();
     if (!ok && !err.isEmpty())
         emit errorOcurrido(err);
@@ -388,14 +656,16 @@ void StudiaController::detener()
     m_reply = nullptr;
     r->abort();
     r->deleteLater();
-    if (m_idxRespuesta >= 0 && m_idxRespuesta < m_mensajes.size()) {
-        QVariantMap msg = m_mensajes[m_idxRespuesta].toMap();
+    StudiaSesion *s = sesionActual();
+    if (s && m_idxRespuesta >= 0 && m_idxRespuesta < s->mensajes.size()) {
+        QVariantMap msg = s->mensajes[m_idxRespuesta].toMap();
         msg[QStringLiteral("escribiendo")] = false;
-        m_mensajes[m_idxRespuesta] = msg;
+        s->mensajes[m_idxRespuesta] = msg;
     }
     m_idxRespuesta = -1;
     m_acumulado.clear();
     m_sseBuf.clear();
+    m_sesiones.guardar();
     emit mensajesChanged();
     emit generandoChanged();
 }

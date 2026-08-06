@@ -16,6 +16,9 @@ struct StudiaFragmento {
     int     pagina = 0;
     double  score = 0.0; // bm25 de SQLite: mas negativo = mas relevante
     QString texto;
+    // true = salio de la bibliografia que subio el estudiante, no del corpus
+    // de la catedra. Se muestra distinto en las citas.
+    bool    propio = false;
 };
 
 // Acceso de SOLO LECTURA al indice documental que genera
@@ -60,6 +63,17 @@ public:
     void setUmbralAbstencion(double u) { m_umbral = u; }
     double umbralAbstencion() const { return m_umbral; }
 
+    // Desactiva la regla de abstencion para este indice. Se usa en el indice de
+    // bibliografia PROPIA: ahi el gate no aplica por dos razones.
+    //  1. BM25 pesa cada termino por lo raro que es en el corpus. En un indice
+    //     de 3 fragmentos todos los terminos aparecen en todos, el peso da 0 y
+    //     el score queda en -0.00: con el umbral calibrado para 139.000
+    //     fragmentos, el material adjuntado NUNCA superaria el corte.
+    //  2. El estudiante subio ese documento a proposito, y el corpus de la
+    //     catedra ya aporta la garantia de no responder sin evidencia.
+    void setExigirEvidencia(bool exigir) { m_exigirEvidencia = exigir; }
+    bool exigirEvidencia() const { return m_exigirEvidencia; }
+
     // ¿Los candidatos alcanzan para responder? Estatica y pura para poder
     // testear la regla sin base de datos.
     //  - `mejorScore`: bm25 crudo del mejor fragmento.
@@ -97,8 +111,16 @@ public:
     // tokens de 1-2 caracteres, sin repetidos).
     static QStringList terminosConsulta(const QString &texto);
 
-    QVariantMap estadisticas() const;   // documentos por estado, fragmentos, paginas
+    // Documentos por estado, fragmentos y paginas. Si `materia` no esta vacia,
+    // cuenta SOLO esa materia (es lo que se muestra al elegirla en la UI: al
+    // estudiante le importa cuanto material tiene de Calculo 2, no el total).
+    QVariantMap estadisticas(const QString &materia = QString()) const;
     QStringList materias() const;       // materias con al menos un fragmento
+
+    // Documentos del indice (para listar la bibliografia propia en la UI).
+    // Si `materia` no esta vacia, sólo los de esa materia.
+    // Cada entrada: {nombre, ruta, materia, estado, paginas, fragmentos}.
+    QVariantList documentos(const QString &materia = QString()) const;
 
     // Traduce una pregunta en lenguaje natural a una expresion FTS5 valida:
     // baja a minusculas, descarta palabras vacias y terminos de 1-2 letras,
@@ -115,6 +137,7 @@ private:
     QString m_ruta;
     bool    m_abierto = false;
     double  m_umbral = -7.0;
+    bool    m_exigirEvidencia = true;
     // Caches de solo lectura: el indice no cambia mientras esta abierto.
     mutable QHash<QString, int> m_dfCache;
     mutable int m_totalFragmentos = -1;

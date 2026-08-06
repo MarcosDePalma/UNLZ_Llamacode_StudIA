@@ -86,3 +86,7 @@ result.txt
 # tuner selftest build artifacts
 build_tuner/
 tuner_selftest.exe
+
+# Python bytecode (tools/studia y demas scripts)
+__pycache__/
+*.pyc

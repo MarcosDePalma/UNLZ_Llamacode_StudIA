@@ -471,7 +471,82 @@ de con el conocimiento general del modelo. Desarrollado como PPS de la Facultad
 Es un módulo cerrado: `src/core/studia/` + `qml/pages/StudiaPage.qml` +
 `tools/studia/`. No modifica el agente, el chat ni los perfiles; sólo consume el
 `llama-server` que ya levantó LlamaCode (la URL se la pasa QML desde
-`App.serverBaseUrl`).
+`App.serverBaseUrl`). Cuatro piezas con una responsabilidad cada una:
+
+| Clase | De qué se ocupa |
+|---|---|
+| `StudiaIndex` | De dónde sale la documentación: búsqueda BM25 sobre el índice y regla de abstención. |
+| `StudiaPrompt` | Qué se le dice al modelo: reglas, modos de tutor, contexto. Sin estado, todo estático. |
+| `StudiaSessionStore` | Una conversación por materia, persistida en `AppLocalData/LlamaCode/studia/`. |
+| `StudiaController` | Fachada hacia QML: orquesta las tres y mantiene el streaming SSE. |
+
+### Materia obligatoria, una conversación por materia
+
+No hay modo "todas las materias": estudiar es siempre sobre una asignatura. Elegir
+una en el selector abre (o retoma) la conversación **`StudIA: <materia>`**, y cambiar
+de materia conmuta de conversación. Así no se mezclan conceptos ni contexto entre
+asignaturas, y cada una conserva su historial entre sesiones. El selector las lista
+en orden de cursada.
+
+### Modos de tutor
+
+Además de la conversación libre, el panel ofrece **Resumen**, **Explicación**,
+**Autoevaluación**, **Flashcards** y **Plan de estudio**. Elegir uno prefija la barra
+de entrada con `/modo/ ` y cambia la consigna del prompt — **no** la recuperación:
+se buscan los mismos fragmentos y sobre ellos se pide resumir, explicar, tomar examen
+o armar tarjetas. El prefijo también se puede tipear a mano.
+
+### Bibliografía propia (índice aparte)
+
+El botón 📎 junto a la barra de entrada suma un documento del estudiante. Va a un
+**índice separado** (`AppLocalData/LlamaCode/studia/mi_biblioteca.db`), nunca al de
+la cátedra: regenerar uno no pisa al otro, y en las citas se distingue el origen. La
+extracción la hace el mismo ingestor (`ingest.py --archivo <ruta> --materia <m>`), así
+que no hay dos implementaciones del chunking que puedan divergir.
+
+Al recuperar, los dos índices se consultan **por separado** y la bibliografía propia
+recibe un cupo de los `k` fragmentos. No se fusionan por score: BM25 depende del
+tamaño del corpus, así que los puntajes de dos índices distintos no son comparables.
+
+Por la misma razón, **el índice propio corre con `setExigirEvidencia(false)`**. BM25
+pesa cada término por lo raro que es en el corpus; en un índice de 3 fragmentos todos
+los términos aparecen en todos y el score da `-0.00`, con lo cual el umbral calibrado
+para 139.000 fragmentos dejaría afuera absolutamente todo lo adjuntado. La garantía
+anti-alucinación no se pierde: la aporta el índice de cátedra, que sí mantiene el gate.
+
+Desde la UI se puede **listar y quitar** lo adjuntado (`ingest.py --quitar <ruta>`).
+El índice de la carpeta DATA nunca se modifica.
+
+### Fórmulas
+
+El prompt le prohíbe LaTeX al modelo, pero igual lo emite. `StudiaTexto::latexALegible`
+convierte lo que llega a notación legible antes de mostrarlo y de guardarlo:
+`\frac{d^n y(t)}{dt^n}` → `(dⁿ y(t))/(dtⁿ)`, `a_{n-1}` → `aₙ₋₁`, `\alpha` → `α`,
+`\ldots` → `…`. No es un motor de LaTeX: cubre fracciones, índices, griegas y
+operadores, y lo que no reconoce lo deja intacto en vez de romperlo.
+
+`StudiaTexto::enBloques` separa además las **ecuaciones de display** (`\[…\]`, `$$…$$`
+o un renglón entre corchetes con comandos LaTeX) del texto que las rodea, y la UI las
+muestra centradas y en cuerpo mayor, como una ecuación insertada en Word. Un renglón
+entre corchetes *sin* LaTeX (una cita, una lista) no se toma como ecuación.
+
+### Qué puede razonar y qué no
+
+La regla de grounding distingue **hechos** de **razonamiento**. Fórmulas, datos y
+definiciones tienen que estar en los fragmentos. Aplicar un método a un caso nuevo,
+hacer las cuentas, relacionar dos conceptos que aparecen por separado o sacar una
+conclusión que se deduce del material **sí** está permitido, con la obligación de
+marcarlo (*«esto no está explícito en el apunte, se deduce de [n]»*). El modo
+**Ejercicio** lleva eso a un formato de resolución paso a paso: datos → método citado
+→ desarrollo → resultado → verificación.
+
+### Repreguntas
+
+Una repregunta corta (*"¿y cómo funciona?"*) no tiene términos propios para buscar.
+`StudiaPrompt::consultaConContexto` completa la consulta con el tema de las preguntas
+anteriores de esa materia, y el prompt incluye los últimos turnos etiquetados como
+contexto — explícitamente **no** como documentación, para que el modelo no los cite
+como fuente.
 
 ### Ingesta (offline, `tools/studia/ingest.py`)
 

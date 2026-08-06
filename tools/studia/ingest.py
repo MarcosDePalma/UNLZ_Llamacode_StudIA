@@ -461,14 +461,123 @@ def procesar(con, corpus, archivos, verbose_cada=25):
     return stats, total_frags, total_chars, time.time() - t0
 
 
+def ingestar_archivo(db_path, archivo, materia):
+    """Suma UN documento suelto al indice (bibliografia propia del estudiante).
+
+    Se usa desde la app cuando el usuario adjunta un PDF con el clip. La materia
+    llega por parametro porque el archivo no cuelga del arbol anio/cuatri/materia
+    del corpus: lo elige el estudiante en la UI.
+    Devuelve 0 si quedo indexado, !=0 si no se pudo."""
+    if not os.path.isfile(archivo):
+        print('ERROR: no existe el archivo %s' % archivo)
+        return 2
+    ext = os.path.splitext(archivo)[1].lower()
+    if ext not in EXT_SOPORTADAS and ext not in EXT_VIEJAS:
+        print('ERROR: formato no soportado (%s). Soportados: %s'
+              % (ext, ', '.join(sorted(EXT_SOPORTADAS))))
+        return 3
+
+    con = abrir_db(db_path)
+    size = os.path.getsize(archivo)
+    meta = {'ruta': os.path.abspath(archivo), 'nombre': os.path.basename(archivo),
+            'anio': '', 'cuatri': '', 'materia_cod': '', 'materia': materia,
+            'subruta': '', 'ext': ext, 'bytes': size,
+            'huella': huella_archivo(archivo, size), 'paginas': 0, 'chars': 0,
+            'estado': 'error', 'detalle': ''}
+
+    if ext in EXT_VIEJAS:
+        meta['estado'] = 'formato_viejo'
+        meta['detalle'] = 'formato %s no soportado por las librerias actuales' % ext
+        guardar(con, meta, [])
+        con.commit(); con.close()
+        print('FORMATO_VIEJO %s' % meta['nombre'])
+        return 4
+
+    try:
+        paginas, n = EXTRACTORES[ext](archivo)
+        meta['paginas'] = n
+        texto, mapa = unir_paginas(paginas)
+        meta['chars'] = len(texto)
+        if len(texto) < MIN_CHARS_UTIL:
+            meta['estado'] = 'necesita_ocr'
+            meta['detalle'] = 'sin texto extraible (%d chars)' % len(texto)
+            guardar(con, meta, [])
+            con.commit(); con.close()
+            print('SIN_TEXTO %s' % meta['nombre'])
+            return 5
+        frags = fragmentar(texto, mapa)
+        meta['estado'] = 'ok'
+        guardar(con, meta, frags)
+        con.commit(); con.close()
+        print('OK %s | %d paginas | %d fragmentos' % (meta['nombre'], n, len(frags)))
+        return 0
+    except Exception as e:
+        meta['estado'] = 'error'
+        meta['detalle'] = '%s: %s' % (type(e).__name__, str(e)[:200])
+        guardar(con, meta, [])
+        con.commit(); con.close()
+        print('ERROR %s: %s' % (meta['nombre'], meta['detalle']))
+        return 6
+
+
+def quitar_archivo(db_path, ruta):
+    """Saca un documento del indice (y sus fragmentos). Lo usa la app cuando el
+    estudiante elimina algo de su bibliografia propia. Nunca se aplica al indice
+    de la carpeta DATA: ese es de solo lectura."""
+    if not os.path.exists(db_path):
+        print('ERROR: no existe el indice %s' % db_path)
+        return 2
+    con = abrir_db(db_path)
+    cur = con.cursor()
+    objetivo = os.path.abspath(ruta)
+    fila = cur.execute('SELECT id, nombre FROM documentos WHERE ruta=?',
+                       (objetivo,)).fetchone()
+    if not fila:
+        # Segundo intento por nombre de archivo: la UI puede pasar la ruta con
+        # separadores distintos.
+        fila = cur.execute('SELECT id, nombre FROM documentos WHERE nombre=?',
+                           (os.path.basename(ruta),)).fetchone()
+    if not fila:
+        con.close()
+        print('ERROR: el documento no esta en el indice')
+        return 3
+    doc_id, nombre = fila
+    cur.execute('DELETE FROM fragmentos_fts WHERE rowid IN '
+                '(SELECT id FROM fragmentos WHERE doc_id=?)', (doc_id,))
+    cur.execute('DELETE FROM fragmentos WHERE doc_id=?', (doc_id,))
+    cur.execute('DELETE FROM documentos WHERE id=?', (doc_id,))
+    con.commit()
+    con.close()
+    print('QUITADO %s' % nombre)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description='Ingestor de StudIA')
-    ap.add_argument('--corpus', required=True, help='carpeta raiz del material')
+    ap.add_argument('--corpus', help='carpeta raiz del material')
     ap.add_argument('--db', required=True, help='ruta del indice SQLite a generar')
     ap.add_argument('--materia', default=None, help='filtrar por materia (subcadena)')
     ap.add_argument('--limpiar', action='store_true', help='borrar el indice y rehacerlo')
+    ap.add_argument('--archivo', default=None,
+                    help='ingestar UN archivo suelto en vez de recorrer --corpus '
+                         '(bibliografia propia; requiere --materia)')
+    ap.add_argument('--quitar', default=None,
+                    help='sacar del indice el documento de esa ruta')
     args = ap.parse_args()
 
+    if args.quitar:
+        return quitar_archivo(args.db, args.quitar)
+
+    # Modo archivo suelto: lo usa la app al adjuntar bibliografia.
+    if args.archivo:
+        if not args.materia:
+            print('ERROR: --archivo requiere --materia')
+            return 2
+        return ingestar_archivo(args.db, args.archivo, args.materia)
+
+    if not args.corpus:
+        print('ERROR: falta --corpus (o --archivo para un documento suelto)')
+        return 2
     if not os.path.isdir(args.corpus):
         print('ERROR: no existe la carpeta %s' % args.corpus)
         return 2

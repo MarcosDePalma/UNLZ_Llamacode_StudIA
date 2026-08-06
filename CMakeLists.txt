@@ -83,6 +83,9 @@ set(CORE_SOURCES
     src/core/tuner/TunerEngine.cpp
     src/core/tuner/TunerWorker.cpp
     src/core/studia/StudiaIndex.cpp
+    src/core/studia/StudiaTexto.cpp
+    src/core/studia/StudiaPrompt.cpp
+    src/core/studia/StudiaSessionStore.cpp
     src/core/studia/StudiaController.cpp
 )
 
@@ -130,6 +133,9 @@ set(HEADERS
     src/core/tuner/TunerEngine.h
     src/core/tuner/TunerWorker.h
     src/core/studia/StudiaIndex.h
+    src/core/studia/StudiaTexto.h
+    src/core/studia/StudiaPrompt.h
+    src/core/studia/StudiaSessionStore.h
     src/core/studia/StudiaController.h
 )
 

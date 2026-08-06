@@ -10,6 +10,8 @@
 #include <QSqlQuery>
 #include <QThread>
 
+#include <memory>
+
 namespace {
 
 // Palabras vacias del castellano + verbos tipicos de una consulta ("explicame",
@@ -328,17 +330,19 @@ QVector<StudiaFragmento> StudiaIndex::buscar(const QString &consulta, int k,
     for (int i = 0; i < qMin(candidatos.size(), kCandidatosCobertura); ++i)
         textos << candidatos[i].texto;
 
-    const int total = totalFragmentos();
-    int discriminantes = 0;
-    for (const QString &t : terminos)
-        if (esDiscriminante(frecuenciaDocumental(t), total))
-            ++discriminantes;
-
     // Sin evidencia suficiente se devuelve vacio: el controlador lo traduce en
-    // la abstencion, sin llegar a molestar al modelo.
-    if (!hayEvidencia(candidatos.first().score, terminos, discriminantes,
-                      textos, m_umbral))
-        return salida;
+    // la abstencion, sin llegar a molestar al modelo. En el indice auxiliar de
+    // bibliografia propia el gate esta desactivado (ver setExigirEvidencia).
+    if (m_exigirEvidencia) {
+        const int total = totalFragmentos();
+        int discriminantes = 0;
+        for (const QString &t : terminos)
+            if (esDiscriminante(frecuenciaDocumental(t), total))
+                ++discriminantes;
+        if (!hayEvidencia(candidatos.first().score, terminos, discriminantes,
+                          textos, m_umbral))
+            return salida;
+    }
 
     QHash<int, int> porDoc;
     for (const StudiaFragmento &f : candidatos) {
@@ -391,7 +395,7 @@ int StudiaIndex::frecuenciaDocumental(const QString &termino) const
     return n;
 }
 
-QVariantMap StudiaIndex::estadisticas() const
+QVariantMap StudiaIndex::estadisticas(const QString &materia) const
 {
     QVariantMap m;
     if (!m_abierto)
@@ -400,29 +404,92 @@ QVariantMap StudiaIndex::estadisticas() const
     if (!db.isOpen())
         return m;
 
-    QSqlQuery q(db);
+    const QString filtro = materia.trimmed();
+    const bool acotada = !filtro.isEmpty();
+    // Sufijo de WHERE reutilizado por todas las consultas de abajo.
+    const QString whereMat = acotada ? QStringLiteral(" WHERE materia=?") : QString();
+    auto correr = [&](const QString &sql) {
+        auto q = std::make_unique<QSqlQuery>(db);
+        if (!q->prepare(sql))
+            return std::unique_ptr<QSqlQuery>{};
+        if (acotada)
+            q->addBindValue(filtro);
+        if (!q->exec())
+            return std::unique_ptr<QSqlQuery>{};
+        return q;
+    };
+
     QVariantMap porEstado;
     int totalDocs = 0;
-    if (q.exec(QStringLiteral("SELECT estado, COUNT(*) FROM documentos GROUP BY estado"))) {
-        while (q.next()) {
-            porEstado.insert(q.value(0).toString(), q.value(1).toInt());
-            totalDocs += q.value(1).toInt();
+    if (auto q = correr(QStringLiteral("SELECT estado, COUNT(*) FROM documentos%1 "
+                                       "GROUP BY estado").arg(whereMat))) {
+        while (q->next()) {
+            porEstado.insert(q->value(0).toString(), q->value(1).toInt());
+            totalDocs += q->value(1).toInt();
         }
     }
     m.insert(QStringLiteral("porEstado"), porEstado);
     m.insert(QStringLiteral("documentos"), totalDocs);
     m.insert(QStringLiteral("indexados"), porEstado.value(QStringLiteral("ok")).toInt());
 
-    if (q.exec(QStringLiteral("SELECT COUNT(*) FROM fragmentos")) && q.next())
-        m.insert(QStringLiteral("fragmentos"), q.value(0).toInt());
-    if (q.exec(QStringLiteral("SELECT COALESCE(SUM(paginas),0) FROM documentos "
-                              "WHERE estado='ok'")) && q.next())
-        m.insert(QStringLiteral("paginas"), q.value(0).toInt());
-    if (q.exec(QStringLiteral("SELECT COUNT(DISTINCT materia) FROM documentos "
-                              "WHERE estado='ok'")) && q.next())
-        m.insert(QStringLiteral("materias"), q.value(0).toInt());
+    if (auto q = correr(acotada
+            ? QStringLiteral("SELECT COUNT(*) FROM fragmentos f "
+                             "JOIN documentos d ON d.id=f.doc_id WHERE d.materia=?")
+            : QStringLiteral("SELECT COUNT(*) FROM fragmentos")); q && q->next())
+        m.insert(QStringLiteral("fragmentos"), q->value(0).toInt());
+
+    if (auto q = correr(QStringLiteral("SELECT COALESCE(SUM(paginas),0) FROM documentos "
+                                       "WHERE estado='ok'%1")
+                            .arg(acotada ? QStringLiteral(" AND materia=?") : QString()));
+        q && q->next())
+        m.insert(QStringLiteral("paginas"), q->value(0).toInt());
+
+    // La cantidad de materias sólo tiene sentido en el total.
+    if (!acotada) {
+        QSqlQuery q(db);
+        if (q.exec(QStringLiteral("SELECT COUNT(DISTINCT materia) FROM documentos "
+                                  "WHERE estado='ok'")) && q.next())
+            m.insert(QStringLiteral("materias"), q.value(0).toInt());
+    }
+    m.insert(QStringLiteral("materia"), filtro);
     m.insert(QStringLiteral("ruta"), m_ruta);
     return m;
+}
+
+QVariantList StudiaIndex::documentos(const QString &materia) const
+{
+    QVariantList out;
+    if (!m_abierto)
+        return out;
+    QSqlDatabase db = QSqlDatabase::database(m_conn, false);
+    if (!db.isOpen())
+        return out;
+    const QString filtro = materia.trimmed();
+    QSqlQuery q(db);
+    QString sql = QStringLiteral(
+        "SELECT nombre, ruta, materia, estado, paginas, fragmentos, detalle "
+        "FROM documentos");
+    if (!filtro.isEmpty())
+        sql += QStringLiteral(" WHERE materia=?");
+    sql += QStringLiteral(" ORDER BY ingestado_en DESC, nombre");
+    if (!q.prepare(sql))
+        return out;
+    if (!filtro.isEmpty())
+        q.addBindValue(filtro);
+    if (!q.exec())
+        return out;
+    while (q.next()) {
+        out.append(QVariantMap{
+            {QStringLiteral("nombre"),     q.value(0).toString()},
+            {QStringLiteral("ruta"),       q.value(1).toString()},
+            {QStringLiteral("materia"),    q.value(2).toString()},
+            {QStringLiteral("estado"),     q.value(3).toString()},
+            {QStringLiteral("paginas"),    q.value(4).toInt()},
+            {QStringLiteral("fragmentos"), q.value(5).toInt()},
+            {QStringLiteral("detalle"),    q.value(6).toString()},
+        });
+    }
+    return out;
 }
 
 QStringList StudiaIndex::materias() const

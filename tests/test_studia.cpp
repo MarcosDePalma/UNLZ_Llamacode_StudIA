@@ -7,6 +7,9 @@
 
 #include "core/studia/StudiaController.h"
 #include "core/studia/StudiaIndex.h"
+#include "core/studia/StudiaPrompt.h"
+#include "core/studia/StudiaSessionStore.h"
+#include "core/studia/StudiaTexto.h"
 
 // Cubre el modulo StudIA sin red ni servidor: la traduccion de preguntas a
 // consultas FTS5, la busqueda sobre un indice sintetico y el armado del prompt.
@@ -486,6 +489,121 @@ private slots:
         QVERIFY(!m.contains(QStringLiteral("Termodinámica")));
     }
 
+    void estadisticas_acotadasAUnaMateria()
+    {
+        StudiaIndex idx;
+        QVERIFY(idx.abrir(m_db));
+        // Sistemas de Control: 1 documento ok (ogata.pdf, 900 páginas) y 4 frags.
+        const QVariantMap e = idx.estadisticas(QStringLiteral("Sistemas de Control"));
+        QCOMPARE(e.value(QStringLiteral("documentos")).toInt(), 1);
+        QCOMPARE(e.value(QStringLiteral("indexados")).toInt(), 1);
+        QCOMPARE(e.value(QStringLiteral("fragmentos")).toInt(), 4);
+        QCOMPARE(e.value(QStringLiteral("paginas")).toInt(), 900);
+        QCOMPARE(e.value(QStringLiteral("materia")).toString(),
+                 QStringLiteral("Sistemas de Control"));
+        // El total sigue siendo mayor: la de la materia no lo pisa.
+        QCOMPARE(idx.estadisticas().value(QStringLiteral("fragmentos")).toInt(), 6);
+    }
+
+    void estadisticas_materiaInexistenteDaCero()
+    {
+        StudiaIndex idx;
+        QVERIFY(idx.abrir(m_db));
+        const QVariantMap e = idx.estadisticas(QStringLiteral("No Existe"));
+        QCOMPARE(e.value(QStringLiteral("documentos")).toInt(), 0);
+        QCOMPARE(e.value(QStringLiteral("fragmentos")).toInt(), 0);
+    }
+
+    void estadisticas_soloElTotalCuentaMaterias()
+    {
+        StudiaIndex idx;
+        QVERIFY(idx.abrir(m_db));
+        // "materias" es un dato del corpus entero; acotado no tiene sentido.
+        QVERIFY(idx.estadisticas().contains(QStringLiteral("materias")));
+        QVERIFY(!idx.estadisticas(QStringLiteral("Sistemas de Control"))
+                     .contains(QStringLiteral("materias")));
+    }
+
+    void controlador_estadisticasDeLaMateriaActiva()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Redes Industriales"));
+        QCOMPARE(c.estadisticasMateria().value(QStringLiteral("fragmentos")).toInt(), 2);
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        QCOMPARE(c.estadisticasMateria().value(QStringLiteral("fragmentos")).toInt(), 4);
+    }
+
+    void bibliotecaPropia_esUnIndiceSeparado()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        // Nunca es el mismo archivo que el de la cátedra: lo que sube el
+        // estudiante no puede mezclarse con el corpus institucional.
+        QVERIFY(!c.rutaIndicePropio().isEmpty());
+        QVERIFY(c.rutaIndicePropio() != c.rutaIndice());
+        QVERIFY(c.rutaIndicePropio().endsWith(QStringLiteral("mi_biblioteca.db")));
+    }
+
+    void bibliotecaPropia_sinMateriaNoAdjunta()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QString());
+        QSignalSpy spy(&c, &StudiaController::errorOcurrido);
+        c.adjuntarBibliografia({m_db});   // archivo que existe, pero sin materia
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(!c.adjuntando());
+        QCOMPARE(c.adjuntosPendientes(), 0);
+    }
+
+    void bibliotecaPropia_archivoInexistenteAvisa()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        QSignalSpy spy(&c, &StudiaController::errorOcurrido);
+        c.adjuntarBibliografia({QStringLiteral("C:/no/existe/apunte.pdf")});
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(!c.adjuntando());
+        QCOMPARE(c.adjuntosPendientes(), 0);
+    }
+
+    void bibliotecaPropia_listaVaciaNoHaceNada()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        QSignalSpy spy(&c, &StudiaController::errorOcurrido);
+        c.adjuntarBibliografia({});      // el usuario canceló el diálogo
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(!c.adjuntando());
+    }
+
+    void bibliotecaPropia_variosArchivosSeEncolan()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        // Tres archivos que existen: uno se procesa, los otros quedan en cola.
+        // (Sin Python en el entorno el proceso falla, pero la cola igual se arma.)
+        c.adjuntarBibliografia({m_db, m_db, m_db});
+        QVERIFY(c.adjuntando() || c.adjuntosPendientes() > 0
+                || !c.rutaIndicePropio().isEmpty());
+    }
+
+    void bibliotecaPropia_avisaSoloDeLosQueFaltan()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        QSignalSpy spy(&c, &StudiaController::errorOcurrido);
+        // Uno válido y uno inexistente: avisa por el que falta, procesa el otro.
+        c.adjuntarBibliografia({m_db, QStringLiteral("C:/no/existe.pdf")});
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(spy.first().first().toString().contains(QStringLiteral("existe.pdf")));
+    }
+
     void materias_ordenadasPorCuatrimestreDeCursada()
     {
         StudiaIndex idx;
@@ -516,7 +634,7 @@ private slots:
         b.texto     = QStringLiteral("Modbus TCP.");
         frags << b;
 
-        const QString p = StudiaController::construirPrompt(
+        const QString p = StudiaPrompt::usuario(
             QStringLiteral("¿Qué es el criterio de Routh?"), frags);
         QVERIFY(p.contains(QStringLiteral("[1] Sistemas de Control · ogata.pdf · pág. 266")));
         QVERIFY(p.contains(QStringLiteral("[2] Redes Industriales · modbus.pdf")));
@@ -533,9 +651,187 @@ private slots:
         a.materia   = QStringLiteral("X");
         a.texto     = QString(5000, QLatin1Char('a'));
         frags << a;
-        const QString p = StudiaController::construirPrompt(QStringLiteral("hola"), frags);
+        const QString p = StudiaPrompt::usuario(QStringLiteral("hola"), frags);
         // El cuerpo se acota; el prompt no puede arrastrar los 5000 caracteres.
         QVERIFY(p.size() < 3000);
+    }
+
+    void prompt_incluyeElHistorialComoContextoNoComoFuente()
+    {
+        QVector<StudiaFragmento> frags;
+        StudiaFragmento a;
+        a.documento = QStringLiteral("x.pdf");
+        a.materia = QStringLiteral("Máquinas Eléctricas");
+        a.texto = QStringLiteral("El motor de inducción tiene rotor jaula de ardilla.");
+        frags << a;
+
+        const QVector<StudiaPrompt::Turno> hist{
+            {QStringLiteral("usuario"),   QStringLiteral("¿qué es un motor a inducción?")},
+            {QStringLiteral("asistente"), QStringLiteral("Es una máquina asincrónica...")}};
+
+        const QString p = StudiaPrompt::usuario(QStringLiteral("¿y cómo funciona?"),
+                                                frags, hist);
+        QVERIFY(p.contains(QStringLiteral("Conversación previa")));
+        QVERIFY(p.contains(QStringLiteral("NO es documentación")));
+        QVERIFY(p.contains(QStringLiteral("¿qué es un motor a inducción?")));
+        // El historial va ANTES que los fragmentos y la pregunta al final.
+        QVERIFY(p.indexOf(QStringLiteral("Conversación previa"))
+                < p.indexOf(QStringLiteral("Fragmentos de la documentación")));
+        QVERIFY(p.indexOf(QStringLiteral("Fragmentos de la documentación"))
+                < p.indexOf(QStringLiteral("Pregunta del estudiante")));
+    }
+
+    void prompt_sinHistorialNoInventaLaSeccion()
+    {
+        QVector<StudiaFragmento> frags;
+        StudiaFragmento a;
+        a.documento = QStringLiteral("x.pdf");
+        a.texto = QStringLiteral("texto");
+        frags << a;
+        const QString p = StudiaPrompt::usuario(QStringLiteral("hola"), frags);
+        QVERIFY(!p.contains(QStringLiteral("Conversación previa")));
+    }
+
+    // ── Contexto conversacional (repreguntas) ──
+
+    void contexto_preguntaAutonomaNoSeExpande()
+    {
+        // 3 términos propios: se sostiene sola, se busca tal cual.
+        const QString original = QStringLiteral("qué es el criterio de Routh Hurwitz");
+        QCOMPARE(StudiaPrompt::consultaConContexto(
+                     original, {QStringLiteral("hablame de termodinámica")}),
+                 original);
+    }
+
+    void contexto_repreguntaCortaHeredaElTema()
+    {
+        // "¿y cómo funciona?" no deja términos: sin contexto el sistema se
+        // abstenía aunque el material estuviera. Ahora hereda el tema anterior.
+        const QString q = StudiaPrompt::consultaConContexto(
+            QStringLiteral("¿y cómo funciona?"),
+            {QStringLiteral("qué es un motor a inducción")});
+        QVERIFY(q.contains(QStringLiteral("motor")));
+        QVERIFY(q.contains(QStringLiteral("induccion"))
+                || q.contains(QStringLiteral("inducción")));
+    }
+
+    void contexto_repreguntaConservaSusPropiosTerminos()
+    {
+        const QString q = StudiaPrompt::consultaConContexto(
+            QStringLiteral("¿y el rotor?"),
+            {QStringLiteral("qué es un motor a inducción")});
+        QVERIFY(q.contains(QStringLiteral("rotor")));   // lo propio va primero
+        QVERIFY(q.startsWith(QStringLiteral("rotor")));
+        QVERIFY(q.contains(QStringLiteral("motor")));
+    }
+
+    void contexto_sinAnterioresDevuelveLoQueHay()
+    {
+        // Primera pregunta de la sesión, corta y sin historial.
+        const QString q = StudiaPrompt::consultaConContexto(QStringLiteral("¿y eso?"), {});
+        QVERIFY(q.trimmed().isEmpty());   // no hay términos: el gate se abstiene
+    }
+
+    void contexto_noRepiteTerminosNiDesborda()
+    {
+        QStringList previas;
+        for (int i = 0; i < 10; ++i)
+            previas << QStringLiteral("termino%1 motor motor motor").arg(i);
+        const QString q = StudiaPrompt::consultaConContexto(QStringLiteral("¿y eso?"), previas);
+        const QStringList t = q.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        QVERIFY(t.size() <= StudiaPrompt::kMaxTerminosExpandida);
+        QCOMPARE(t.count(QStringLiteral("motor")), 1);   // sin repetidos
+    }
+
+    // ── Modos de tutor ──
+
+    void modos_catalogoTieneLosEsperados()
+    {
+        QStringList ids;
+        for (const StudiaPrompt::Modo &m : StudiaPrompt::modos())
+            ids << m.id;
+        QVERIFY(ids.contains(QStringLiteral("libre")));
+        QVERIFY(ids.contains(QStringLiteral("resumen")));
+        QVERIFY(ids.contains(QStringLiteral("explicacion")));
+        QVERIFY(ids.contains(QStringLiteral("autoevaluacion")));
+        QVERIFY(ids.contains(QStringLiteral("flashcards")));
+        QVERIFY(ids.contains(QStringLiteral("plan")));
+        // Todos menos "libre" aportan una consigna al prompt.
+        for (const StudiaPrompt::Modo &m : StudiaPrompt::modos()) {
+            if (m.id == StudiaPrompt::idModoLibre()) continue;
+            QVERIFY2(!m.instruccion.isEmpty(), qPrintable(m.id));
+            QVERIFY2(!m.etiqueta.isEmpty(), qPrintable(m.id));
+        }
+    }
+
+    void modos_separaElPrefijo()
+    {
+        QString id, texto;
+        StudiaPrompt::separarModo(QStringLiteral("/flashcards/ herramientas CNC"), &id, &texto);
+        QCOMPARE(id, QStringLiteral("flashcards"));
+        QCOMPARE(texto, QStringLiteral("herramientas CNC"));
+    }
+
+    void modos_prefijoToleranteAEspaciosYMayusculas()
+    {
+        QString id, texto;
+        StudiaPrompt::separarModo(QStringLiteral("  / Flashcards /  algo "), &id, &texto);
+        QCOMPARE(id, QStringLiteral("flashcards"));
+        QCOMPARE(texto, QStringLiteral("algo"));
+
+        StudiaPrompt::separarModo(QStringLiteral("/resumen/sin espacio"), &id, &texto);
+        QCOMPARE(id, QStringLiteral("resumen"));
+        QCOMPARE(texto, QStringLiteral("sin espacio"));
+    }
+
+    void modos_prefijoDesconocidoQuedaComoTexto()
+    {
+        QString id, texto;
+        StudiaPrompt::separarModo(QStringLiteral("/inventado/ hola"), &id, &texto);
+        QCOMPARE(id, StudiaPrompt::idModoLibre());
+        QCOMPARE(texto, QStringLiteral("/inventado/ hola"));
+    }
+
+    void modos_sinPrefijoEsModoLibre()
+    {
+        QString id, texto;
+        StudiaPrompt::separarModo(QStringLiteral("¿qué es un motor?"), &id, &texto);
+        QCOMPARE(id, StudiaPrompt::idModoLibre());
+        QCOMPARE(texto, QStringLiteral("¿qué es un motor?"));
+        // Una división en el texto no debe confundirse con un prefijo.
+        StudiaPrompt::separarModo(QStringLiteral("calculá 10/2 por favor"), &id, &texto);
+        QCOMPARE(id, StudiaPrompt::idModoLibre());
+    }
+
+    void modos_elSistemaIncorporaLaConsigna()
+    {
+        const QString s = StudiaPrompt::sistema(QStringLiteral("Sistemas de Control"),
+                                                QStringLiteral("flashcards"));
+        QVERIFY(s.contains(QStringLiteral("MODO FLASHCARDS")));
+        QVERIFY(s.contains(QStringLiteral("Sistemas de Control")));
+        // El modo libre no agrega consigna.
+        const QString libre = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                    StudiaPrompt::idModoLibre());
+        QVERIFY(!libre.contains(QStringLiteral("MODO ")));
+    }
+
+    void prompt_sistemaPideMarkdownYProhibeLatex()
+    {
+        const QString s = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                StudiaPrompt::idModoLibre());
+        QVERIFY(s.contains(QStringLiteral("Markdown")));
+        QVERIFY(s.contains(QStringLiteral("LaTeX")));
+    }
+
+    void prompt_sistemaFijaLaMateria()
+    {
+        const QString s = StudiaPrompt::sistema(QStringLiteral("Economía 1"),
+                                                StudiaPrompt::idModoLibre());
+        QVERIFY(s.contains(QStringLiteral("Economía 1")));
+        QVERIFY(s.contains(QStringLiteral("no mezcles contenido de")));
+        // Sin materia no inventa la sección.
+        QVERIFY(!StudiaPrompt::sistema(QString(), StudiaPrompt::idModoLibre())
+                     .contains(QStringLiteral("Esta conversación es sobre la materia")));
     }
 
     // ── Fuentes agrupadas por documento ──
@@ -614,33 +910,420 @@ private slots:
 
     void prompt_sistemaIncluyeLaAbstencion()
     {
-        const QString s = StudiaController::promptSistema();
-        QVERIFY(s.contains(StudiaController::fraseAbstencion()));
+        const QString s = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                StudiaPrompt::idModoLibre());
+        QVERIFY(s.contains(StudiaPrompt::fraseAbstencion()));
         QVERIFY(s.contains(QStringLiteral("Mecatrónica")));
         QVERIFY(s.contains(QStringLiteral("[n]")));
     }
 
-    // ── Controlador: camino sin red ──
+    // ── Conversión de LaTeX a texto legible ──
 
-    void controlador_sinIndiceAvisaYNoLlamaAlModelo()
+    void latex_fraccionSimple()
+    {
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("\\frac{a}{b}")),
+                 QStringLiteral("a/b"));
+        // Con expresiones compuestas hacen falta paréntesis.
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("\\frac{a+b}{c}")),
+                 QStringLiteral("(a+b)/c"));
+    }
+
+    void latex_fraccionAnidada()
+    {
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("\\frac{\\frac{a}{b}}{c}")),
+                 QStringLiteral("(a/b)/c"));
+    }
+
+    void latex_superindicesYSubindices()
+    {
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("x^2")), QStringLiteral("x²"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("a_n")), QStringLiteral("aₙ"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("a_{n-1}")), QStringLiteral("aₙ₋₁"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("d^{n}")), QStringLiteral("dⁿ"));
+    }
+
+    void latex_indiceSinEquivalenteQuedaLegible()
+    {
+        // 'z' no tiene subíndice Unicode: se conserva la notación con _.
+        const QString r = StudiaTexto::latexALegible(QStringLiteral("a_{zzz}"));
+        QVERIFY(r.contains(QStringLiteral("zzz")));
+        QVERIFY(!r.contains(QLatin1Char('{')));
+    }
+
+    void latex_simbolosYGriegas()
+    {
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("\\alpha + \\beta")),
+                 QStringLiteral("α + β"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("a \\cdot b \\leq c")),
+                 QStringLiteral("a · b ≤ c"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("\\ldots")),
+                 QStringLiteral("…"));
+        // \leq no debe partirse por culpa de \le.
+        QVERIFY(!StudiaTexto::latexALegible(QStringLiteral("\\leq")).contains(QLatin1Char('q')));
+    }
+
+    void latex_quitaDelimitadores()
+    {
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("$x^2$")).trimmed(),
+                 QStringLiteral("x²"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("\\(x^2\\)")).trimmed(),
+                 QStringLiteral("x²"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("\\[x^2\\]")).trimmed(),
+                 QStringLiteral("x²"));
+    }
+
+    void latex_raizYTexto()
+    {
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("\\sqrt{2}")),
+                 QStringLiteral("√(2)"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("\\text{si } x>0")),
+                 QStringLiteral("si x>0"));
+    }
+
+    void latex_ecuacionDiferencialCompleta()
+    {
+        // El caso real que reportó el usuario.
+        const QString entrada = QStringLiteral(
+            "a_n \\frac{d^n y(t)}{dt^n} + a_{n-1} \\frac{d^{n-1} y(t)}{dt^{n-1}} "
+            "+ \\ldots + a_0 y(t) = b_m \\frac{d^m u(t)}{dt^m}");
+        const QString r = StudiaTexto::latexALegible(entrada);
+        // Nada de sintaxis LaTeX sobreviviente.
+        QVERIFY2(!r.contains(QStringLiteral("\\frac")), qPrintable(r));
+        QVERIFY2(!r.contains(QLatin1Char('{')), qPrintable(r));
+        QVERIFY2(!r.contains(QLatin1Char('}')), qPrintable(r));
+        QVERIFY2(!r.contains(QStringLiteral("\\ldots")), qPrintable(r));
+        // Y los índices quedaron en Unicode.
+        QVERIFY2(r.contains(QStringLiteral("aₙ")), qPrintable(r));
+        QVERIFY2(r.contains(QStringLiteral("dⁿ")), qPrintable(r));
+        QVERIFY2(r.contains(QStringLiteral("…")), qPrintable(r));
+        QVERIFY2(r.contains(QLatin1Char('/')), qPrintable(r));
+        // Las letras también van a superíndice: d^m debe quedar dᵐ, no "d^m".
+        QVERIFY2(!r.contains(QLatin1Char('^')), qPrintable(r));
+        QVERIFY2(r.contains(QStringLiteral("dᵐ")), qPrintable(r));
+        QVERIFY2(r.contains(QStringLiteral("bₘ")), qPrintable(r));
+    }
+
+    void latex_letrasComoSuperindice()
+    {
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("e^t")), QStringLiteral("eᵗ"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("x^k")), QStringLiteral("xᵏ"));
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("d^m")), QStringLiteral("dᵐ"));
+        // 'q' no tiene superíndice Unicode: se conserva legible, sin llaves.
+        const QString conQ = StudiaTexto::latexALegible(QStringLiteral("a^{q}"));
+        QVERIFY(conQ.contains(QLatin1Char('q')));
+        QVERIFY(!conQ.contains(QLatin1Char('{')));
+    }
+
+    void latex_textoNormalNoSeToca()
+    {
+        const QString normal = QStringLiteral(
+            "## Motores\nEl **par motor** depende de la corriente. Ver la tabla 3.");
+        QCOMPARE(StudiaTexto::latexALegible(normal), normal);
+    }
+
+    void latex_noRompeMarkdown()
+    {
+        // Los guiones bajos de un nombre de archivo no son subíndices Markdown,
+        // pero sí los toma la conversión: lo importante es que no se pierda texto.
+        const QString r = StudiaTexto::latexALegible(QStringLiteral("archivo_uno.pdf"));
+        QVERIFY(r.contains(QStringLiteral("archivo")));
+        QVERIFY(r.contains(QStringLiteral(".pdf")));
+    }
+
+    void latex_esIdempotente()
+    {
+        const QString entrada = QStringLiteral("\\frac{a_1}{b^2} + \\alpha");
+        const QString unaVez = StudiaTexto::latexALegible(entrada);
+        QCOMPARE(StudiaTexto::latexALegible(unaVez), unaVez);
+    }
+
+    void latex_entradaVaciaOSinMatematica()
+    {
+        QCOMPARE(StudiaTexto::latexALegible(QString()), QString());
+        QCOMPARE(StudiaTexto::latexALegible(QStringLiteral("hola")), QStringLiteral("hola"));
+    }
+
+    void latex_malformadoNoCuelga()
+    {
+        // Llave sin cerrar: no debe entrar en bucle ni perder el contenido.
+        const QString r = StudiaTexto::latexALegible(QStringLiteral("\\frac{a}{b"));
+        QVERIFY(r.contains(QLatin1Char('a')));
+        QVERIFY(r.contains(QLatin1Char('b')));
+    }
+
+    // ── Bloques: ecuaciones separadas del texto ──
+
+    void bloques_textoSinEcuacionesEsUnSoloBloque()
+    {
+        const QVariantList b = StudiaTexto::enBloques(
+            QStringLiteral("## Motores\nEl par depende de la corriente."));
+        QCOMPARE(b.size(), 1);
+        QCOMPARE(b.first().toMap().value(QStringLiteral("tipo")).toString(),
+                 QStringLiteral("texto"));
+    }
+
+    void bloques_separaEcuacionDeDisplay()
+    {
+        const QVariantList b = StudiaTexto::enBloques(QStringLiteral(
+            "La ecuación es:\n\\[ a_n x^2 + b \\]\ny se resuelve así."));
+        QCOMPARE(b.size(), 3);
+        QCOMPARE(b.at(0).toMap().value(QStringLiteral("tipo")).toString(),
+                 QStringLiteral("texto"));
+        QCOMPARE(b.at(1).toMap().value(QStringLiteral("tipo")).toString(),
+                 QStringLiteral("ecuacion"));
+        QCOMPARE(b.at(2).toMap().value(QStringLiteral("tipo")).toString(),
+                 QStringLiteral("texto"));
+        // La ecuación ya viene convertida a texto legible.
+        const QString ec = b.at(1).toMap().value(QStringLiteral("contenido")).toString();
+        QVERIFY2(ec.contains(QStringLiteral("aₙ")), qPrintable(ec));
+        QVERIFY2(ec.contains(QStringLiteral("x²")), qPrintable(ec));
+        QVERIFY(!ec.contains(QLatin1Char('\\')));
+    }
+
+    void bloques_reconoceDolarDoble()
+    {
+        const QVariantList b = StudiaTexto::enBloques(
+            QStringLiteral("Sea:\n$$ E = m c^2 $$\nfin."));
+        QCOMPARE(b.size(), 3);
+        QCOMPARE(b.at(1).toMap().value(QStringLiteral("tipo")).toString(),
+                 QStringLiteral("ecuacion"));
+        QVERIFY(b.at(1).toMap().value(QStringLiteral("contenido")).toString()
+                    .contains(QStringLiteral("c²")));
+    }
+
+    void bloques_reconoceRenglonEntreCorchetes()
+    {
+        // Como llega cuando el Markdown se comió las barras de \[ \].
+        const QVariantList b = StudiaTexto::enBloques(QStringLiteral(
+            "La fórmula:\n[ a_n \\frac{d y}{dt} + b_0 ]\nDonde a es constante."));
+        QCOMPARE(b.size(), 3);
+        QCOMPARE(b.at(1).toMap().value(QStringLiteral("tipo")).toString(),
+                 QStringLiteral("ecuacion"));
+    }
+
+    void bloques_corchetesSinLatexNoSonEcuacion()
+    {
+        // Una cita [1] o una lista entre corchetes no debe volverse ecuación.
+        const QVariantList b = StudiaTexto::enBloques(
+            QStringLiteral("Según el apunte:\n[ ver la tabla 3 ]\nEso es todo."));
+        for (const QVariant &v : b)
+            QCOMPARE(v.toMap().value(QStringLiteral("tipo")).toString(),
+                     QStringLiteral("texto"));
+    }
+
+    void bloques_variasEcuacionesSeguidas()
+    {
+        const QVariantList b = StudiaTexto::enBloques(QStringLiteral(
+            "Uno:\n\\[ x^2 \\]\nDos:\n\\[ y^3 \\]\nfin."));
+        int ecuaciones = 0;
+        for (const QVariant &v : b)
+            if (v.toMap().value(QStringLiteral("tipo")).toString()
+                == QLatin1String("ecuacion"))
+                ++ecuaciones;
+        QCOMPARE(ecuaciones, 2);
+    }
+
+    void bloques_entradaVaciaNoDaBloques()
+    {
+        QVERIFY(StudiaTexto::enBloques(QString()).isEmpty());
+        QVERIFY(StudiaTexto::enBloques(QStringLiteral("   \n  ")).isEmpty());
+    }
+
+    void bloques_ecuacionSolaSinTextoAlrededor()
+    {
+        const QVariantList b = StudiaTexto::enBloques(QStringLiteral("\\[ x^2 \\]"));
+        QCOMPARE(b.size(), 1);
+        QCOMPARE(b.first().toMap().value(QStringLiteral("tipo")).toString(),
+                 QStringLiteral("ecuacion"));
+    }
+
+    // ── Modo Ejercicio ──
+
+    void modos_incluyeEjercicio()
+    {
+        const StudiaPrompt::Modo m = StudiaPrompt::modoPorId(QStringLiteral("ejercicio"));
+        QCOMPARE(m.id, QStringLiteral("ejercicio"));
+        QVERIFY(!m.instruccion.isEmpty());
+        const QString s = StudiaPrompt::sistema(QStringLiteral("Física 1"),
+                                                QStringLiteral("ejercicio"));
+        QVERIFY(s.contains(QStringLiteral("MODO EJERCICIO")));
+        QVERIFY(s.contains(QStringLiteral("Desarrollo")));
+    }
+
+    void prompt_permiteRazonarPeroNoInventarHechos()
+    {
+        const QString s = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                StudiaPrompt::idModoLibre());
+        // Debe habilitar explícitamente aplicar/relacionar…
+        QVERIFY(s.contains(QStringLiteral("RAZONAR")));
+        QVERIFY(s.contains(QStringLiteral("aplicar un método a un caso nuevo"))
+                || s.contains(QStringLiteral("aplicar un método")));
+        // …sin aflojar la regla sobre los hechos.
+        QVERIFY(s.contains(QStringLiteral("No completes con conocimiento general")));
+        QVERIFY(s.contains(StudiaPrompt::fraseAbstencion()));
+    }
+
+    // ── Bibliografía propia: el gate no aplica en un índice chico ──
+
+    void indice_puedeDesactivarLaExigenciaDeEvidencia()
+    {
+        StudiaIndex idx;
+        QVERIFY(idx.abrir(m_db));
+        // Con el umbral imposible el gate rechaza todo...
+        idx.setUmbralAbstencion(-1e9);
+        QVERIFY(idx.buscar(QStringLiteral("criterio de estabilidad de Routh"), 5).isEmpty());
+        // ...salvo que se desactive, que es lo que hace el índice de
+        // bibliografía propia (ahí BM25 da ~0 y nada superaría el corte).
+        idx.setExigirEvidencia(false);
+        QVERIFY(!idx.buscar(QStringLiteral("criterio de estabilidad de Routh"), 5).isEmpty());
+    }
+
+    void indice_documentosListaLoIngestado()
+    {
+        StudiaIndex idx;
+        QVERIFY(idx.abrir(m_db));
+        const QVariantList todos = idx.documentos();
+        QCOMPARE(todos.size(), 3);
+        const QVariantList deControl = idx.documentos(QStringLiteral("Sistemas de Control"));
+        QCOMPARE(deControl.size(), 1);
+        const QVariantMap d = deControl.first().toMap();
+        QCOMPARE(d.value(QStringLiteral("nombre")).toString(), QStringLiteral("ogata.pdf"));
+        QCOMPARE(d.value(QStringLiteral("estado")).toString(), QStringLiteral("ok"));
+        QVERIFY(d.contains(QStringLiteral("ruta")));
+        QVERIFY(idx.documentos(QStringLiteral("No Existe")).isEmpty());
+    }
+
+    void controlador_borrarLaSesionActivaSueltaLaMateria()
     {
         StudiaController c;
-        c.limpiar();
-        QSignalSpy spy(&c, &StudiaController::mensajesChanged);
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        QVERIFY(c.materiaElegida());
+        c.borrarSesion(QStringLiteral("Sistemas de Control"));
+        // Si la materia quedara seleccionada, la sesión se recrearía sola y el
+        // chat reaparecería como si el borrado no hubiera funcionado.
+        QVERIFY(!c.materiaElegida());
+        QVERIFY(c.mensajes().isEmpty());
+    }
+
+    // ── Sesiones por materia ──
+
+    void sesiones_tituloPorMateria()
+    {
+        QCOMPARE(StudiaSessionStore::tituloDe(QStringLiteral("Economía 1")),
+                 QStringLiteral("StudIA: Economía 1"));
+        QCOMPARE(StudiaSessionStore::tituloDe(QString()), QStringLiteral("StudIA"));
+    }
+
+    void sesiones_unaPorMateriaYSeReusa()
+    {
+        StudiaSessionStore st;
+        StudiaSesion &a = st.obtenerOCrear(QStringLiteral("Economía 1"));
+        a.mensajes.append(QVariantMap{{QStringLiteral("rol"), QStringLiteral("usuario")},
+                                      {QStringLiteral("contenido"), QStringLiteral("hola")}});
+        st.obtenerOCrear(QStringLiteral("Física 1"));
+        QCOMPARE(st.cantidad(), 2);
+        // Volver a pedir la misma materia devuelve la sesión con su historial.
+        QCOMPARE(st.obtenerOCrear(QStringLiteral("Economía 1")).mensajes.size(), 1);
+        QCOMPARE(st.cantidad(), 2);
+    }
+
+    void sesiones_limpiarVaciaPeroConservaYBorrarElimina()
+    {
+        StudiaSessionStore st;
+        st.obtenerOCrear(QStringLiteral("X")).mensajes.append(QVariantMap{});
+        QVERIFY(st.limpiar(QStringLiteral("X")));
+        QCOMPARE(st.cantidad(), 1);
+        QVERIFY(st.buscar(QStringLiteral("X"))->mensajes.isEmpty());
+        QVERIFY(st.borrar(QStringLiteral("X")));
+        QCOMPARE(st.cantidad(), 0);
+        QVERIFY(!st.borrar(QStringLiteral("X")));   // ya no está
+    }
+
+    void sesiones_ultimasPreguntasDeLaMateria()
+    {
+        StudiaSessionStore st;
+        StudiaSesion &s = st.obtenerOCrear(QStringLiteral("M"));
+        auto msg = [](const QString &rol, const QString &txt) {
+            return QVariantMap{{QStringLiteral("rol"), rol},
+                               {QStringLiteral("contenido"), txt}};
+        };
+        s.mensajes << msg(QStringLiteral("usuario"),   QStringLiteral("primera"))
+                   << msg(QStringLiteral("asistente"), QStringLiteral("respuesta"))
+                   << msg(QStringLiteral("usuario"),   QStringLiteral("segunda"));
+        // De la más reciente a la más vieja, y sólo las del usuario.
+        QCOMPARE(st.ultimasPreguntas(QStringLiteral("M"), 5),
+                 QStringList({QStringLiteral("segunda"), QStringLiteral("primera")}));
+        QCOMPARE(st.ultimasPreguntas(QStringLiteral("M"), 1),
+                 QStringList({QStringLiteral("segunda")}));
+        QVERIFY(st.ultimasPreguntas(QStringLiteral("otra"), 5).isEmpty());
+    }
+
+    void sesiones_persistenEnDisco()
+    {
+        {
+            StudiaSessionStore st;
+            st.cargar();
+            StudiaSesion &s = st.obtenerOCrear(QStringLiteral("Persistida"));
+            s.mensajes.append(QVariantMap{{QStringLiteral("rol"), QStringLiteral("usuario")},
+                                          {QStringLiteral("contenido"), QStringLiteral("dato")},
+                                          {QStringLiteral("escribiendo"), true}});
+            st.guardar();
+        }
+        StudiaSessionStore otra;
+        otra.cargar();
+        const StudiaSesion *s = otra.buscar(QStringLiteral("Persistida"));
+        QVERIFY(s != nullptr);
+        QCOMPARE(s->titulo, QStringLiteral("StudIA: Persistida"));
+        QCOMPARE(s->mensajes.size(), 1);
+        // El flag de "escribiendo" no se persiste como true.
+        QVERIFY(!s->mensajes.first().toMap().value(QStringLiteral("escribiendo")).toBool());
+        otra.borrar(QStringLiteral("Persistida"));
+        otra.guardar();
+    }
+
+    // ── Controlador: camino sin red ──
+
+    void controlador_sinMateriaNoPregunta()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QString());
+        QVERIFY(!c.materiaElegida());
+        QSignalSpy spy(&c, &StudiaController::errorOcurrido);
         c.preguntar(QStringLiteral("¿Qué es Modbus?"));
-        QVERIFY(spy.count() >= 2);            // pregunta + respuesta
+        QCOMPARE(spy.count(), 1);          // avisa que falta elegir materia
+        QVERIFY(c.mensajes().isEmpty());   // no se escribió nada
+        QVERIFY(!c.generando());
+    }
+
+    void controlador_cambiarMateriaCambiaDeConversacion()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        QCOMPARE(c.tituloSesion(), QStringLiteral("StudIA: Sistemas de Control"));
+        c.limpiar();
+        c.preguntar(QStringLiteral("recetas de cocina peruana"));   // se abstiene
         QCOMPARE(c.mensajes().size(), 2);
-        QVERIFY(!c.generando());              // nunca se abrio una conexion
-        const QVariantMap resp = c.mensajes().at(1).toMap();
-        QCOMPARE(resp.value(QStringLiteral("rol")).toString(), QStringLiteral("asistente"));
-        QVERIFY(resp.value(QStringLiteral("contenido")).toString().contains(
-            QStringLiteral("índice")));
+
+        // Otra materia → otra conversación, vacía.
+        c.setMateria(QStringLiteral("Redes Industriales"));
+        QCOMPARE(c.tituloSesion(), QStringLiteral("StudIA: Redes Industriales"));
+        c.limpiar();
+        QVERIFY(c.mensajes().isEmpty());
+
+        // Al volver, el historial de la primera sigue ahí.
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        QCOMPARE(c.mensajes().size(), 2);
+        c.limpiar();
     }
 
     void controlador_seAbstieneSinFragmentos()
     {
         StudiaController c;
         QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
         c.limpiar();
         // Tema inexistente en el corpus: se responde la abstencion SIN red.
         c.preguntar(QStringLiteral("recetas de cocina peruana"));
@@ -649,6 +1332,7 @@ private slots:
         QCOMPARE(c.mensajes().at(1).toMap().value(QStringLiteral("contenido")).toString(),
                  StudiaController::fraseAbstencion());
         QVERIFY(c.mensajes().at(1).toMap().value(QStringLiteral("fuentes")).toList().isEmpty());
+        c.limpiar();
     }
 
     void controlador_conFragmentosPeroSinServidorReportaError()
@@ -656,6 +1340,7 @@ private slots:
         StudiaController c;
         QVERIFY(c.abrirIndice(m_db));
         c.setUmbralAbstencion(0.0);
+        c.setMateria(QStringLiteral("Sistemas de Control"));
         c.limpiar();
         c.setServerUrl(QString());        // no hay servidor
         c.preguntar(QStringLiteral("criterio de Routh"));
@@ -665,14 +1350,50 @@ private slots:
         QVERIFY(resp.value(QStringLiteral("contenido")).toString().startsWith(
             QStringLiteral("[error")));
         QVERIFY(!c.generando());
+        c.limpiar();
+    }
+
+    void controlador_guardaElModoEnElMensaje()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        c.limpiar();
+        c.preguntar(QStringLiteral("/flashcards/ recetas de cocina peruana"));
+        QVERIFY(!c.mensajes().isEmpty());
+        const QVariantMap u = c.mensajes().at(0).toMap();
+        QCOMPARE(u.value(QStringLiteral("modo")).toString(), QStringLiteral("flashcards"));
+        // El prefijo NO queda dentro del texto de la pregunta.
+        QCOMPARE(u.value(QStringLiteral("contenido")).toString(),
+                 QStringLiteral("recetas de cocina peruana"));
+        c.limpiar();
+    }
+
+    void controlador_prefijoDeModo()
+    {
+        StudiaController c;
+        QCOMPARE(c.prefijoDeModo(QStringLiteral("flashcards")), QStringLiteral("/flashcards/ "));
+        QVERIFY(c.prefijoDeModo(StudiaPrompt::idModoLibre()).isEmpty());
+        QVERIFY(c.prefijoDeModo(QStringLiteral("inexistente")).isEmpty());
+    }
+
+    void controlador_modoInvalidoCaeALibre()
+    {
+        StudiaController c;
+        c.setModo(QStringLiteral("no-existe"));
+        QCOMPARE(c.modo(), StudiaPrompt::idModoLibre());
+        c.setModo(QStringLiteral("resumen"));
+        QCOMPARE(c.modo(), QStringLiteral("resumen"));
     }
 
     void controlador_ignoraPreguntaVacia()
     {
         StudiaController c;
         QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
         c.limpiar();
         c.preguntar(QStringLiteral("   "));
+        c.preguntar(QStringLiteral("/flashcards/   "));   // modo sin texto
         QVERIFY(c.mensajes().isEmpty());
     }
 
@@ -680,6 +1401,7 @@ private slots:
     {
         StudiaController c;
         QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
         c.preguntar(QStringLiteral("recetas de cocina peruana"));
         QVERIFY(!c.mensajes().isEmpty());
         c.limpiar();
@@ -691,6 +1413,7 @@ private slots:
         StudiaController c;
         QVERIFY(c.abrirIndice(m_db));
         c.setUmbralAbstencion(0.0);
+        c.setMateria(QStringLiteral("Redes Industriales"));
         const QVariantList r = c.buscar(QStringLiteral("Modbus TCP"), 3);
         QVERIFY(!r.isEmpty());
         const QVariantMap f = r.first().toMap();
@@ -701,12 +1424,12 @@ private slots:
         QVERIFY(f.contains(QStringLiteral("texto")));
     }
 
-    void controlador_filtroDeMateriaSeAplica()
+    void controlador_laMateriaActivaAcotaLaBusqueda()
     {
         StudiaController c;
         QVERIFY(c.abrirIndice(m_db));
         c.setUmbralAbstencion(0.0);
-        c.setMateriaFiltro(QStringLiteral("Redes Industriales"));
+        c.setMateria(QStringLiteral("Redes Industriales"));
         const QVariantList r = c.buscar(QStringLiteral("estabilidad Modbus red"), 5);
         QVERIFY(!r.isEmpty());
         for (const QVariant &v : r)

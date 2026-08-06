@@ -19,8 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ingest import (DIRS_IGNORADOS, EXT_SOPORTADAS, MIN_CHARS_FRAGMENTO,
                     abrir_db, extraer_texto_plano, fragmentar, guardar,
-                    listar, normalizar, pagina_en, partes_ruta,
-                    ruta_ignorada, sin_acentos, unir_paginas)
+                    ingestar_archivo, listar, normalizar, pagina_en,
+                    partes_ruta, quitar_archivo, ruta_ignorada, sin_acentos,
+                    unir_paginas)
 
 
 class TestRutas(unittest.TestCase):
@@ -266,6 +267,100 @@ class TestBaseDeDatos(unittest.TestCase):
         con.close()
         con = abrir_db(self.db, limpiar=True)
         self.assertEqual(con.execute('SELECT COUNT(*) FROM documentos').fetchone()[0], 0)
+        con.close()
+
+
+class TestArchivoSuelto(unittest.TestCase):
+    """Bibliografia propia: la app llama a ingestar_archivo() con --archivo."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = os.path.join(self.tmp.name, 'mi_biblioteca.db')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _txt(self, nombre, contenido):
+        p = os.path.join(self.tmp.name, nombre)
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(contenido)
+        return p
+
+    def test_indexa_y_queda_buscable(self):
+        p = self._txt('apunte.txt', 'El par motor de un motor asincrónico. ' * 20)
+        self.assertEqual(ingestar_archivo(self.db, p, 'Máquinas Eléctricas'), 0)
+        con = sqlite3.connect(self.db)
+        fila = con.execute('SELECT materia, estado, nombre FROM documentos').fetchone()
+        self.assertEqual(fila, ('Máquinas Eléctricas', 'ok', 'apunte.txt'))
+        n = con.execute("SELECT COUNT(*) FROM fragmentos_fts "
+                        "WHERE fragmentos_fts MATCH '\"asincronico\"'").fetchone()[0]
+        self.assertEqual(n, 1)
+        con.close()
+
+    def test_la_materia_la_define_el_usuario(self):
+        # El archivo no cuelga del árbol año/cuatri/materia: la materia llega
+        # por parámetro desde la UI.
+        p = self._txt('suelto.txt', 'contenido suficiente para indexar. ' * 20)
+        ingestar_archivo(self.db, p, 'Economía 1')
+        con = sqlite3.connect(self.db)
+        self.assertEqual(con.execute('SELECT materia FROM documentos').fetchone()[0],
+                         'Economía 1')
+        con.close()
+
+    def test_archivo_inexistente(self):
+        self.assertNotEqual(ingestar_archivo(self.db, os.path.join(self.tmp.name, 'no.pdf'),
+                                             'X'), 0)
+
+    def test_formato_no_soportado(self):
+        p = self._txt('programa.py', 'print(1)')
+        self.assertNotEqual(ingestar_archivo(self.db, p, 'X'), 0)
+
+    def test_sin_texto_util_queda_registrado(self):
+        p = self._txt('corto.txt', 'hola')      # menos que MIN_CHARS_UTIL
+        self.assertNotEqual(ingestar_archivo(self.db, p, 'X'), 0)
+        con = sqlite3.connect(self.db)
+        self.assertEqual(con.execute('SELECT estado FROM documentos').fetchone()[0],
+                         'necesita_ocr')
+        con.close()
+
+    def test_quitar_saca_documento_y_fragmentos(self):
+        p = self._txt('sacar.txt', 'contenido del apunte a sacar. ' * 20)
+        ingestar_archivo(self.db, p, 'X')
+        con = sqlite3.connect(self.db)
+        self.assertEqual(con.execute('SELECT COUNT(*) FROM fragmentos').fetchone()[0], 1)
+        con.close()
+
+        self.assertEqual(quitar_archivo(self.db, p), 0)
+        con = sqlite3.connect(self.db)
+        self.assertEqual(con.execute('SELECT COUNT(*) FROM documentos').fetchone()[0], 0)
+        self.assertEqual(con.execute('SELECT COUNT(*) FROM fragmentos').fetchone()[0], 0)
+        # El indice de busqueda tampoco lo debe seguir encontrando.
+        n = con.execute("SELECT COUNT(*) FROM fragmentos_fts "
+                        "WHERE fragmentos_fts MATCH '\"apunte\"'").fetchone()[0]
+        self.assertEqual(n, 0)
+        con.close()
+
+    def test_quitar_lo_que_no_esta(self):
+        abrir_db(self.db).close()
+        self.assertNotEqual(quitar_archivo(self.db, self._txt('otro.txt', 'x')), 0)
+
+    def test_quitar_no_toca_los_demas(self):
+        a = self._txt('a.txt', 'primer apunte con bastante texto. ' * 20)
+        b = self._txt('b.txt', 'segundo apunte con bastante texto. ' * 20)
+        ingestar_archivo(self.db, a, 'X')
+        ingestar_archivo(self.db, b, 'X')
+        quitar_archivo(self.db, a)
+        con = sqlite3.connect(self.db)
+        nombres = [r[0] for r in con.execute('SELECT nombre FROM documentos')]
+        self.assertEqual(nombres, ['b.txt'])
+        con.close()
+
+    def test_readjuntar_el_mismo_no_duplica(self):
+        p = self._txt('a.txt', 'texto largo para el indice. ' * 20)
+        ingestar_archivo(self.db, p, 'X')
+        ingestar_archivo(self.db, p, 'X')
+        con = sqlite3.connect(self.db)
+        self.assertEqual(con.execute('SELECT COUNT(*) FROM documentos').fetchone()[0], 1)
         con.close()
 
 

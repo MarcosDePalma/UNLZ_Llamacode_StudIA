@@ -1,0 +1,78 @@
+StudIA: tutor por materia, modos de estudio y bibliografía propia
+
+Evoluciona el prototipo de StudIA a un asistente de estudio usable, con el
+módulo reorganizado para que pueda seguir creciendo sin desordenarse.
+
+Arquitectura
+- Separa StudiaController, que estaba concentrando todo, en cuatro clases con
+  una responsabilidad cada una, siguiendo el patrón de src/core/tasks/:
+  StudiaIndex (recuperación), StudiaPrompt (prompts y modos), StudiaTexto
+  (limpieza de LaTeX), StudiaSessionStore (conversaciones) y StudiaController
+  como fachada hacia QML. Lo puro y testeable queda fuera del QObject.
+
+Conversación
+- La materia pasa a ser obligatoria y cada una tiene su propia conversación
+  ("StudIA: Economía 1"), persistida en AppLocalData/LlamaCode/studia/. Cambiar
+  de materia conmuta de chat, así no se mezclan conceptos ni contexto.
+- Arregla las repreguntas: "¿y cómo funciona?" no dejaba términos buscables y el
+  sistema se abstenía aunque tuviera el material. Ahora la consulta hereda el
+  tema de las preguntas anteriores y el prompt incluye los últimos turnos,
+  etiquetados como contexto y no como documentación.
+
+Modos de tutor
+- Suma Resumen, Explicación, Autoevaluación, Flashcards, Ejercicio y Plan de
+  estudio. Cambian la consigna del prompt, no la recuperación: se buscan los
+  mismos fragmentos y sobre ellos se pide resumir, explicar o tomar examen. Se
+  eligen del menú o tipeando /modo/ delante de la pregunta.
+- Precisa la regla de grounding: los hechos (fórmulas, datos, definiciones)
+  deben estar en los fragmentos, pero razonar sobre ellos —aplicar un método a
+  un caso nuevo, relacionar dos conceptos, hacer las cuentas— está permitido y
+  debe marcarse como deducción.
+
+Presentación
+- Renderiza Markdown, sube el cuerpo a 15 px con interlineado 1.45 y muestra las
+  ecuaciones de display centradas y en cuerpo mayor, separadas del texto.
+- Convierte el LaTeX que el modelo emite pese a tenerlo prohibido:
+  \frac{d^n y}{dt^n} → (dⁿ y)/(dtⁿ), a_{n-1} → aₙ₋₁, \alpha → α, \ldots → …
+- Reorganiza la pantalla: estado del servidor, modos e índice en la barra
+  superior (los modos colapsan a menú con la ventana angosta), y materia,
+  bibliografía e historial de chats en el panel izquierdo.
+- Agrupa las citas por documento: "apunte.pdf · pág. 11, 14, 16" en vez de
+  repetir el nombre del archivo por cada página.
+- Muestra los contadores de la materia elegida, no los del corpus entero, y
+  ordena las materias por cuatrimestre de cursada.
+
+Bibliografía propia
+- Permite adjuntar documentos del estudiante, de a varios por vez, listarlos y
+  quitarlos. Van a un índice SEPARADO (mi_biblioteca.db): el de la carpeta DATA
+  nunca se modifica y en las citas se distingue el origen.
+- La extracción y el borrado los hace el mismo tools/studia/ingest.py mediante
+  --archivo y --quitar, para no tener dos implementaciones del troceado.
+- Corrige que la bibliografía adjuntada nunca aportara: BM25 pondera cada
+  término por su rareza en el corpus, y en un índice de pocos fragmentos el
+  score queda en -0.00, con lo cual el umbral calibrado para 139.000 fragmentos
+  lo descartaba siempre. El índice propio corre sin ese filtro; la garantía
+  anti-alucinación la sigue aportando el de cátedra.
+
+Recuperación
+- Recalibra la regla de abstención con 30 preguntas escritas en lenguaje
+  natural: normaliza el score por los términos discriminantes en vez de por el
+  total, amplía las palabras vacías con muletillas de pregunta y exige al menos
+  un término específico. Antes rechazaba preguntas legítimas como "explicame de
+  qué se trata un motor a inducción"; ahora responde las 16 cubiertas y se
+  abstiene en las 14 ajenas.
+
+Herramientas
+- tools/studia/estado.py informa el estado del índice y prueba búsquedas.
+- tools/studia/listar_excluidos.py audita qué queda afuera del índice y por qué,
+  importando las reglas de ingest.py para que no se desincronicen.
+- El ingestor reintenta los documentos que fallaron al re-ejecutarse, filtra los
+  archivos de bloqueo de Office y descarta los surrogates que rompían SQLite.
+
+Tests
+- 113 casos en tests/test_studia.cpp y 42 en tools/studia/test_ingest.py, este
+  último registrado en CMake como test_studia_ingest. Suite completa en verde.
+
+Varios
+- Saca del control de versiones el bytecode de Python (__pycache__) y lo agrega
+  al .gitignore.
