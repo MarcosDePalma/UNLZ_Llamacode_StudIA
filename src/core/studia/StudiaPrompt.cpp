@@ -37,31 +37,30 @@ QString reglasDeImagenes()
         "«esquematizá», tu respuesta DEBE incluir el bloque correspondiente. NO "
         "expliques cómo graficarlo ni le digas que use otra herramienta: emitilo "
         "y listo. Fuera de esos pedidos, usalas sólo cuando ayuden de verdad.\n\n"
+        "Los formatos de abajo son PLANTILLAS con marcadores entre < >. Nunca "
+        "las copies tal cual: completalas con lo que pidió el estudiante. Si no "
+        "te pidió una figura, no emitas ninguna.\n\n"
         "1) GRÁFICO DE FUNCIONES — para ver una curva, comparar dos o mostrar el "
-        "área de una integral. Formato exacto:\n"
+        "área de una integral:\n"
         "```grafico\n"
-        "funcion: x**2 - 3*x + 2\n"
-        "rango: -2, 5\n"
-        "area: 1, 2\n"
-        "titulo: Área bajo la parábola entre 1 y 2\n"
+        "funcion: <expresión en función de x>\n"
+        "rango: <x mínimo>, <x máximo>\n"
+        "area: <desde>, <hasta>\n"
+        "titulo: <título>\n"
         "```\n"
-        "Reglas: la expresión es Python/numpy en función de `x` (`**` para "
-        "potencia, `sqrt`, `sin`, `cos`, `exp`, `log`, `pi`). `rango` es "
-        "obligatorio. `area` es opcional y sombrea bajo la primera curva. Podés "
-        "repetir `funcion:` para superponer curvas. Nada de otro código.\n"
-        "Ejemplo de uso. Pedido: «graficame x²−3x+2 entre −2 y 5 y sombreá el área "
-        "entre 1 y 2». Respuesta correcta: una línea de contexto y ACTO SEGUIDO el "
-        "bloque de arriba, tal cual. Respuesta incorrecta: explicarle cómo "
-        "graficarlo en Python o mandarlo a otro programa.\n\n"
+        "La expresión es Python/numpy sobre `x` (`**` para potencia, `sqrt`, "
+        "`sin`, `cos`, `exp`, `log`, `pi`). `rango` es obligatorio; `area` es "
+        "opcional y sombrea bajo la primera curva. Podés repetir `funcion:` para "
+        "superponer curvas. Nada de otro código.\n\n"
         "2) DIAGRAMA — para procesos, clasificaciones o relaciones entre "
-        "conceptos. Formato Mermaid:\n"
+        "conceptos:\n"
         "```mermaid\n"
         "flowchart TD\n"
-        "  A[Entrada] --> B{¿Estable?}\n"
-        "  B -- sí --> C[Salida]\n"
-        "  B -- no --> D[Ajustar ganancia]\n"
+        "  <id1>[<etiqueta>] --> <id2>{<pregunta>}\n"
+        "  <id2> -- sí --> <id3>[<etiqueta>]\n"
+        "  <id2> -- no --> <id4>[<etiqueta>]\n"
         "```\n"
-        "Usá etiquetas cortas y sin caracteres raros.");
+        "Etiquetas cortas y sin caracteres raros.");
 }
 
 }  // namespace
@@ -283,6 +282,22 @@ QString sistema(const QString &materia, const QString &idModo)
     }
     if (!m.instruccion.isEmpty())
         s += QStringLiteral("\n\n") + m.instruccion;
+
+    // Cláusula de cierre. Va DESPUÉS de la consigna del modo a propósito: las
+    // plantillas ("1. Alcance, 2. Sesiones…") son instrucciones de formato muy
+    // concretas y, si quedan al final, el modelo las completa aunque no tenga
+    // material. Se vio con "/plan/ ¿cómo hago milanesas?": decía la frase de
+    // abstención y a continuación armaba el plan igual.
+    s += QStringLiteral(
+        "\n\n--- REGLA QUE MANDA SOBRE TODO LO ANTERIOR ---\n"
+        "Si no tenés material suficiente para responder, tu respuesta es "
+        "ÚNICAMENTE esta frase, sola, sin nada antes ni después:\n"
+        "\"%1\"\n"
+        "En ese caso NO completes el formato del modo, NO armes secciones "
+        "vacías, NO propongas temas alternativos y NO muestres ejemplos. Un "
+        "formato lleno de \"no hay información\" es peor que una sola frase "
+        "honesta. Abstenerse es una respuesta válida y completa.")
+        .arg(fraseAbstencion());
     return s;
 }
 
@@ -348,12 +363,25 @@ QString usuarioSoloConversacion(const QString &pregunta, const QVector<Turno> &h
     return out;
 }
 
+Encuadre encuadrar(int propios, int existentes, int discriminantes)
+{
+    if (discriminantes >= kMinDiscriminantesAutonomos)
+        return Encuadre::Autonoma;
+    // Trae términos con contenido pero NINGUNO existe en el corpus: es un tema
+    // nuevo que el material no cubre. Heredar el tema anterior sería contestar
+    // otra pregunta.
+    if (propios > 0 && existentes == 0)
+        return Encuadre::Ajena;
+    return Encuadre::Dependiente;
+}
+
 QString consultaConContexto(const QString &pregunta, const QStringList &anteriores,
-                            int discriminantes)
+                            Encuadre encuadre)
 {
     const QStringList propios = StudiaIndex::terminosConsulta(pregunta);
-    // Pregunta autosuficiente: tiene terminos propios que ubican el tema.
-    if (discriminantes >= kMinDiscriminantesAutonomos)
+    // Se busca tal cual: o se sostiene sola, o no tiene sentido arrastrarle un
+    // tema que no le corresponde.
+    if (encuadre != Encuadre::Dependiente)
         return pregunta;
 
     QStringList terminos = propios;

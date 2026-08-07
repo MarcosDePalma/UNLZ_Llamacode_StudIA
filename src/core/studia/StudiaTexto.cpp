@@ -413,6 +413,18 @@ static void separarCercados(const QString &crudo, QVariantList *bloques,
     procesarTexto(crudo.mid(desde));
 }
 
+QString recortarTrasAbstencion(const QString &respuesta, const QString &frase)
+{
+    if (frase.isEmpty())
+        return respuesta;
+    const int i = respuesta.indexOf(frase);
+    if (i < 0 || i > kMargenAbstencion)
+        return respuesta;
+    // Se conserva lo que haya antes (a veces abre con un "Lamentablemente…")
+    // más la frase, y se descarta el resto.
+    return respuesta.left(i + frase.size()).trimmed();
+}
+
 QVariantList flashcards(const QString &respuesta)
 {
     QVariantList tarjetas;

@@ -72,20 +72,35 @@ bool puedeResponderDesdeConversacion(const QVector<Turno> &historial);
 
 // ── Consulta de recuperacion ─────────────────────────────────────────────────
 
-// Arma la consulta con la que se busca en el indice. Una repregunta
-// ("¿y como funciona?", "¿que pasa si aumento la frecuencia?") no aporta
-// terminos propios que sirvan para buscar: se completa con los de las preguntas
-// anteriores para no perder el tema.
-//   `pregunta`       texto actual del usuario
-//   `anteriores`     preguntas previas del usuario, de la mas reciente a la mas vieja
-//   `discriminantes` cuantos terminos de la pregunta son especificos del corpus
-//                    (lo calcula el llamador con el indice). La decision se toma
-//                    sobre ESTO y no sobre la cantidad bruta de terminos:
-//                    "¿que pasa si aumento la frecuencia?" tiene tres palabras
-//                    pero ninguna que ubique el tema.
+// ── Encuadre de la pregunta ──────────────────────────────────────────────────
+//
+// Antes de buscar hay que decidir si la pregunta se sostiene sola o si continúa
+// la anterior. Las tres situaciones se ven parecidas si uno sólo cuenta
+// palabras, pero pedirle al índice cuáles de esos términos EXISTEN las separa:
+//
+//   Autonoma    "¿qué es el criterio de Routh?"      → tiene términos propios
+//               que ubican el tema. Se busca tal cual.
+//   Dependiente "¿y cómo funciona?"                  → no aporta ningún término
+//               con contenido. Continúa lo anterior: se le suma ese tema.
+//   Ajena       "¿cómo hago milanesas?"              → aporta términos, pero
+//               NINGUNO existe en el corpus. Es un cambio de tema hacia algo
+//               que el material no cubre: NO se le suma el tema anterior.
+//
+// Distinguir Ajena de Dependiente es lo que evita que una pregunta fuera de
+// tema herede el tema previo y termine respondiéndose con material que no le
+// corresponde.
+enum class Encuadre { Autonoma, Dependiente, Ajena };
+
+// `propios`        términos útiles de la pregunta (sin palabras vacías)
+// `existentes`     cuántos de ellos aparecen en el corpus (frecuencia > 0)
+// `discriminantes` cuántos, además, son específicos (ver StudiaIndex)
+Encuadre encuadrar(int propios, int existentes, int discriminantes);
+
+// Arma la consulta con la que se busca en el indice, según el encuadre.
+//   `anteriores` preguntas previas del usuario, de la mas reciente a la mas vieja
 QString consultaConContexto(const QString &pregunta, const QStringList &anteriores,
-                            int discriminantes);
-// Con menos de esto la pregunta no se sostiene sola y se le suma el contexto.
+                            Encuadre encuadre);
+// Con al menos esta cantidad de terminos especificos, la pregunta se sostiene sola.
 constexpr int kMinDiscriminantesAutonomos = 2;
 // Tope de terminos de la consulta expandida.
 constexpr int kMaxTerminosExpandida = 8;

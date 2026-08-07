@@ -695,13 +695,57 @@ private slots:
 
     // ── Contexto conversacional (repreguntas) ──
 
+    // ── Encuadre: sostenerse sola / continuar / cambiar de tema ──
+
+    void encuadre_conTerminosEspecificosEsAutonoma()
+    {
+        // "criterio de Routh Hurwitz": varios términos propios del corpus.
+        QCOMPARE(StudiaPrompt::encuadrar(4, 4, 3), StudiaPrompt::Encuadre::Autonoma);
+        QCOMPARE(StudiaPrompt::encuadrar(2, 2, 2), StudiaPrompt::Encuadre::Autonoma);
+    }
+
+    void encuadre_sinTerminosPropiosEsDependiente()
+    {
+        // "¿y cómo funciona?" no deja nada buscable: continúa lo anterior.
+        QCOMPARE(StudiaPrompt::encuadrar(0, 0, 0), StudiaPrompt::Encuadre::Dependiente);
+    }
+
+    void encuadre_terminosGenericosQueSiExistenEsDependiente()
+    {
+        // "¿qué pasa si aumento la frecuencia?": los términos existen en el
+        // corpus pero no ubican el tema. Se completa con lo anterior.
+        QCOMPARE(StudiaPrompt::encuadrar(2, 2, 1), StudiaPrompt::Encuadre::Dependiente);
+    }
+
+    void encuadre_terminosQueNoExistenEnElCorpusEsAjena()
+    {
+        // "¿cómo hago milanesas?": aporta términos y NINGUNO está en el corpus.
+        // Es un cambio de tema, no una repregunta: no debe heredar nada.
+        QCOMPARE(StudiaPrompt::encuadrar(1, 0, 0), StudiaPrompt::Encuadre::Ajena);
+        QCOMPARE(StudiaPrompt::encuadrar(3, 0, 0), StudiaPrompt::Encuadre::Ajena);
+    }
+
     void contexto_preguntaAutonomaNoSeExpande()
     {
-        // 2+ términos discriminantes: la pregunta ubica el tema sola.
         const QString original = QStringLiteral("qué es el criterio de Routh Hurwitz");
         QCOMPARE(StudiaPrompt::consultaConContexto(
-                     original, {QStringLiteral("hablame de termodinámica")}, 3),
+                     original, {QStringLiteral("hablame de termodinámica")},
+                     StudiaPrompt::Encuadre::Autonoma),
                  original);
+    }
+
+    void contexto_preguntaAjenaNoHeredaElTemaAnterior()
+    {
+        // El bug reportado: "/plan/ ¿cómo hago milanesas?" heredaba la charla
+        // previa sobre Redes y terminaba armando un plan de estudio de Bluetooth.
+        const QString q = StudiaPrompt::consultaConContexto(
+            QStringLiteral("¿cómo hago milanesas?"),
+            {QStringLiteral("explicame el protocolo Modbus"),
+             QStringLiteral("qué es una VLAN")},
+            StudiaPrompt::Encuadre::Ajena);
+        QVERIFY2(!q.contains(QStringLiteral("Modbus"), Qt::CaseInsensitive), qPrintable(q));
+        QVERIFY2(!q.contains(QStringLiteral("VLAN"), Qt::CaseInsensitive), qPrintable(q));
+        QVERIFY(q.contains(QStringLiteral("milanesas")));
     }
 
     void contexto_repreguntaCortaHeredaElTema()
@@ -710,7 +754,8 @@ private slots:
         // abstenía aunque el material estuviera. Ahora hereda el tema anterior.
         const QString q = StudiaPrompt::consultaConContexto(
             QStringLiteral("¿y cómo funciona?"),
-            {QStringLiteral("qué es un motor a inducción")}, 0);
+            {QStringLiteral("qué es un motor a inducción")},
+            StudiaPrompt::Encuadre::Dependiente);
         QVERIFY(q.contains(QStringLiteral("motor")));
         QVERIFY(q.contains(QStringLiteral("induccion"))
                 || q.contains(QStringLiteral("inducción")));
@@ -718,11 +763,10 @@ private slots:
 
     void contexto_preguntaVagaConPalabrasGenericasSeExpande()
     {
-        // El caso que fallaba: tres palabras, ninguna que ubique el tema.
-        // Con la regla vieja (contar términos) NO se expandía y se abstenía.
         const QString q = StudiaPrompt::consultaConContexto(
             QStringLiteral("¿qué pasa si aumento la frecuencia?"),
-            {QStringLiteral("explicame el motor de inducción")}, 1);
+            {QStringLiteral("explicame el motor de inducción")},
+            StudiaPrompt::Encuadre::Dependiente);
         QVERIFY2(q.contains(QStringLiteral("motor")), qPrintable(q));
         QVERIFY2(q.contains(QStringLiteral("frecuencia")), qPrintable(q));
     }
@@ -731,7 +775,8 @@ private slots:
     {
         const QString q = StudiaPrompt::consultaConContexto(
             QStringLiteral("¿y el rotor?"),
-            {QStringLiteral("qué es un motor a inducción")}, 1);
+            {QStringLiteral("qué es un motor a inducción")},
+            StudiaPrompt::Encuadre::Dependiente);
         QVERIFY(q.contains(QStringLiteral("rotor")));   // lo propio va primero
         QVERIFY(q.startsWith(QStringLiteral("rotor")));
         QVERIFY(q.contains(QStringLiteral("motor")));
@@ -740,7 +785,8 @@ private slots:
     void contexto_sinAnterioresDevuelveLoQueHay()
     {
         // Primera pregunta de la sesión, corta y sin historial.
-        const QString q = StudiaPrompt::consultaConContexto(QStringLiteral("¿y eso?"), {}, 0);
+        const QString q = StudiaPrompt::consultaConContexto(
+            QStringLiteral("¿y eso?"), {}, StudiaPrompt::Encuadre::Dependiente);
         QVERIFY(q.trimmed().isEmpty());   // no hay términos: el gate se abstiene
     }
 
@@ -750,7 +796,7 @@ private slots:
         for (int i = 0; i < 10; ++i)
             previas << QStringLiteral("termino%1 motor motor motor").arg(i);
         const QString q = StudiaPrompt::consultaConContexto(
-            QStringLiteral("¿y eso?"), previas, 0);
+            QStringLiteral("¿y eso?"), previas, StudiaPrompt::Encuadre::Dependiente);
         const QStringList t = q.split(QLatin1Char(' '), Qt::SkipEmptyParts);
         QVERIFY(t.size() <= StudiaPrompt::kMaxTerminosExpandida);
         QCOMPARE(t.count(QStringLiteral("motor")), 1);   // sin repetidos
@@ -1066,6 +1112,68 @@ private slots:
         const QString r = StudiaTexto::latexALegible(QStringLiteral("\\frac{a}{b"));
         QVERIFY(r.contains(QLatin1Char('a')));
         QVERIFY(r.contains(QLatin1Char('b')));
+    }
+
+    // ── La abstención la hace cumplir el sistema, no el modelo ──
+
+    void abstencion_cortaElFormatoQueVieneDespues()
+    {
+        // El caso reportado: dice la frase y a continuación arma el plan igual.
+        const QString frase = StudiaPrompt::fraseAbstencion();
+        const QString respuesta = frase + QStringLiteral(
+            "\n\n## Alcance\nLa documentación no aborda las milanesas.\n"
+            "## Sesiones\n| 1 | Bluetooth | [1] |\n");
+        QCOMPARE(StudiaTexto::recortarTrasAbstencion(respuesta, frase), frase);
+    }
+
+    void abstencion_toleraUnaAperturaBreve()
+    {
+        const QString frase = StudiaPrompt::fraseAbstencion();
+        const QString respuesta = QStringLiteral("Lamentablemente, ") + frase
+                                  + QStringLiteral("\n\n## Alcance\nblah");
+        const QString r = StudiaTexto::recortarTrasAbstencion(respuesta, frase);
+        QVERIFY(r.endsWith(frase));
+        QVERIFY(!r.contains(QStringLiteral("Alcance")));
+    }
+
+    void abstencion_noTocaUnaRespuestaLegitima()
+    {
+        // Responder y ACLARAR al final que otra parte no está es correcto.
+        const QString frase = StudiaPrompt::fraseAbstencion();
+        const QString respuesta = QString(400, QLatin1Char('x'))
+                                  + QStringLiteral("\nSobre el segundo punto: ") + frase;
+        QCOMPARE(StudiaTexto::recortarTrasAbstencion(respuesta, frase), respuesta);
+    }
+
+    void abstencion_sinLaFraseDejaTodoIgual()
+    {
+        const QString r = QStringLiteral("## Resumen\nTodo bien.");
+        QCOMPARE(StudiaTexto::recortarTrasAbstencion(r, StudiaPrompt::fraseAbstencion()), r);
+        QCOMPARE(StudiaTexto::recortarTrasAbstencion(r, QString()), r);
+    }
+
+    void prompt_laReglaDeAbstencionVaDespuesDelModo()
+    {
+        // Es lo que evita que la plantilla del modo le gane a la abstención:
+        // en un prompt, la instrucción más cercana al final pesa más.
+        const QString s = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                QStringLiteral("plan"));
+        const int modo  = s.indexOf(QStringLiteral("MODO PLAN"));
+        const int regla = s.indexOf(QStringLiteral("REGLA QUE MANDA"));
+        QVERIFY(modo > 0);
+        QVERIFY2(regla > modo, "la regla de abstención debe cerrar el prompt");
+        QVERIFY(s.contains(QStringLiteral("NO completes el formato del modo")));
+    }
+
+    void prompt_losEjemplosDeFiguraSonPlantillas()
+    {
+        // El modelo copiaba los ejemplos tal cual porque parecían contenido.
+        const QString s = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                StudiaPrompt::idModoLibre());
+        QVERIFY(s.contains(QStringLiteral("PLANTILLAS")));
+        QVERIFY(s.contains(QStringLiteral("<expresión en función de x>")));
+        // Y ya no lleva una función concreta que se pueda copiar sin pensar.
+        QVERIFY2(!s.contains(QStringLiteral("x**2 - 3*x + 2")), "quedó un ejemplo copiable");
     }
 
     // ── Bloques: ecuaciones separadas del texto ──

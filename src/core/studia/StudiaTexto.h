@@ -36,6 +36,21 @@ QVariantList enBloquesTexto(const QString &textoCrudo);
 // tiene algún signo matemático y casi nada de prosa. Expuesta para testearla.
 bool esLineaEcuacion(const QString &linea);
 
+// Si la respuesta ARRANCA declarando que no hay información suficiente, corta
+// todo lo que venga después y devuelve sólo esa frase.
+//
+// El modelo a veces se contradice: dice "no encontré información" y a
+// continuación completa igual el formato del modo con secciones vacías o temas
+// que no vienen al caso. Abstenerse es una decisión del sistema, no una
+// sugerencia: si el modelo la declara, se cumple.
+//
+// Sólo actúa cuando la frase aparece al PRINCIPIO. Una respuesta que primero
+// explica y después aclara "esto otro no está en el material" es legítima y no
+// se toca.
+QString recortarTrasAbstencion(const QString &respuesta, const QString &frase);
+// Hasta qué posición se considera que la frase está "al principio".
+constexpr int kMargenAbstencion = 220;
+
 // ── Flashcards ───────────────────────────────────────────────────────────────
 
 // Extrae las tarjetas de una respuesta del modo Flashcards. Tolerante al

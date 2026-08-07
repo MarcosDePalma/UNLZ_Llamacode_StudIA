@@ -50,6 +50,7 @@ Si no hay Python en el sistema, CMake omite ese test y el resto sigue corriendo.
 | RawChatBackend (sesiones/persistencia) | `tests/test_backends_net.cpp` |
 | StudiaIndex, StudiaPrompt, StudiaSessionStore, StudiaController | `tests/test_studia.cpp` |
 | Ingestor de StudIA (Python) | `tools/studia/test_ingest.py` |
+| Vectorizador de StudIA (Python) | `tools/studia/test_vectorizar.py` |
 
 ### Pendiente de cobertura
 Los backends de red con stream SSE real (RawChatBackend/LlamaAgentBackend/

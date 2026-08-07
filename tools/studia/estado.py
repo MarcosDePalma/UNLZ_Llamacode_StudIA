@@ -48,6 +48,7 @@ def por_materia(cur):
         SELECT d.anio, d.materia,
                SUM(CASE WHEN d.estado='ok' THEN 1 ELSE 0 END)           AS ok,
                SUM(CASE WHEN d.estado='necesita_ocr' THEN 1 ELSE 0 END) AS ocr,
+               SUM(CASE WHEN d.estado='descartado' THEN 1 ELSE 0 END)   AS desc,
                (SELECT COUNT(*) FROM fragmentos f
                 JOIN documentos d2 ON d2.id=f.doc_id
                 WHERE d2.materia=d.materia)                            AS frags
@@ -55,9 +56,11 @@ def por_materia(cur):
         GROUP BY d.anio, d.materia
         ORDER BY d.anio, d.materia
     """).fetchall()
-    linea('  %-4s %-52s %5s %5s %8s' % ('Ano', 'Materia', 'OK', 'OCR', 'Frag'))
-    for anio, materia, ok, ocr, frags in filas:
-        linea('  %-4s %-52s %5d %5d %8d' % (anio, (materia or '')[:52], ok, ocr, frags))
+    linea('  %-4s %-48s %5s %5s %5s %8s'
+          % ('Ano', 'Materia', 'OK', 'OCR', 'Desc', 'Frag'))
+    for anio, materia, ok, ocr, desc, frags in filas:
+        linea('  %-4s %-48s %5d %5d %5d %8d'
+              % (anio, (materia or '')[:48], ok, ocr, desc, frags))
 
 
 def problemas(cur, n=10):

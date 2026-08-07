@@ -396,6 +396,9 @@ if (BUILD_TESTS)
         add_test(NAME test_studia_ingest
                  COMMAND ${Python3_EXECUTABLE}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tools/studia/test_ingest.py)
+        add_test(NAME test_studia_vectorizar
+                 COMMAND ${Python3_EXECUTABLE}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tools/studia/test_vectorizar.py)
     else()
         message(STATUS "Python3 no encontrado: se omite test_studia_ingest")
     endif()

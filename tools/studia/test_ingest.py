@@ -9,7 +9,9 @@ Tambien corre como parte de la suite del proyecto (`tests.bat`), registrado en
 CMakeLists.txt como test_studia_ingest.
 """
 
+import io
 import os
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -18,10 +20,12 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ingest import (DIRS_IGNORADOS, EXT_SOPORTADAS, MIN_CHARS_FRAGMENTO,
-                    abrir_db, extraer_ipynb, extraer_texto_plano, fragmentar,
-                    guardar, ingestar_archivo, listar, normalizar, pagina_en,
-                    partes_ruta, quitar_archivo, ruta_ignorada, sin_acentos,
+                    abrir_db, cargar_descartados, extraer_ipynb,
+                    extraer_texto_plano, fragmentar, guardar, ingestar_archivo,
+                    listar, normalizar, normalizar_rel, pagina_en, partes_ruta,
+                    procesar, quitar_archivo, ruta_ignorada, sin_acentos,
                     unir_paginas)
+from ocr import original_ya_procesado
 
 
 class TestRutas(unittest.TestCase):
@@ -270,6 +274,96 @@ class TestBaseDeDatos(unittest.TestCase):
         con.close()
 
 
+class TestDescartados(unittest.TestCase):
+    """Documentos que el estudiante saco del indice a proposito.
+
+    Se distingue de 'necesita_ocr': ese estado significa "todavia no se pudo
+    leer" y el OCR lo vuelve a tomar. 'descartado' significa "no va", y ninguna
+    herramienta lo reintenta."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.db = os.path.join(self.dir, 'i.db')
+        self.corpus = os.path.join(self.dir, 'corpus')
+        os.makedirs(self.corpus)
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _lista(self, contenido):
+        ruta = os.path.join(self.dir, 'descartados.txt')
+        with io.open(ruta, 'w', encoding='utf-8') as fh:
+            fh.write(contenido)
+        return ruta
+
+    def _archivo(self, nombre, texto):
+        full = os.path.join(self.corpus, nombre)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with io.open(full, 'w', encoding='utf-8') as fh:
+            fh.write(texto)
+        return full
+
+    # -- lectura de la lista --------------------------------------------------
+
+    def test_ignora_comentarios_y_vacias(self):
+        r = self._lista('# un comentario\n\nmateria/a.pdf\n\n#otro\nb.pdf\n')
+        self.assertEqual(cargar_descartados(r), {'materia/a.pdf', 'b.pdf'})
+
+    def test_lista_inexistente_no_es_error(self):
+        self.assertEqual(cargar_descartados(os.path.join(self.dir, 'no.txt')),
+                         set())
+        self.assertEqual(cargar_descartados(''), set())
+
+    def test_separadores_y_mayusculas_no_importan(self):
+        # La lista se escribe con / pero Windows entrega \ al recorrer.
+        r = self._lista('Materia/Sub/Doc.PDF\n')
+        self.assertIn(normalizar_rel('materia\\sub\\doc.pdf'),
+                      cargar_descartados(r))
+
+    # -- efecto en la ingesta -------------------------------------------------
+
+    def test_el_descartado_no_deja_fragmentos(self):
+        texto = 'contenido suficientemente largo. ' * 40
+        self._archivo('mat/si.txt', texto)
+        self._archivo('mat/no.txt', texto)
+        con = abrir_db(self.db)
+        stats, frags, _, _ = procesar(
+            con, self.corpus, listar(self.corpus),
+            descartados={'mat/no.txt'})
+        self.assertEqual(stats['descartado'], 1)
+        self.assertEqual(stats['ok'], 1)
+        filas = dict(con.execute('SELECT nombre, estado FROM documentos'))
+        self.assertEqual(filas['no.txt'], 'descartado')
+        self.assertEqual(filas['si.txt'], 'ok')
+        n = con.execute(
+            'SELECT COUNT(*) FROM fragmentos f JOIN documentos d ON d.id=f.doc_id '
+            "WHERE d.nombre='no.txt'").fetchone()[0]
+        self.assertEqual(n, 0)
+        con.close()
+
+    def test_el_descarte_gana_sobre_duplicado(self):
+        # Dos copias identicas, una descartada: la que queda se ingesta sola,
+        # no se marca como copia de un documento que ya no esta en el indice.
+        texto = 'contenido suficientemente largo. ' * 40
+        self._archivo('mat/a.txt', texto)
+        self._archivo('mat/b.txt', texto)
+        con = abrir_db(self.db)
+        stats, _, _, _ = procesar(con, self.corpus, listar(self.corpus),
+                                  descartados={'mat/a.txt'})
+        self.assertEqual(stats['descartado'], 1)
+        self.assertEqual(stats['ok'], 1)
+        self.assertEqual(stats['duplicado'], 0)
+        con.close()
+
+    def test_sin_lista_se_ingesta_todo(self):
+        self._archivo('mat/a.txt', 'contenido suficientemente largo. ' * 40)
+        con = abrir_db(self.db)
+        stats, _, _, _ = procesar(con, self.corpus, listar(self.corpus))
+        self.assertEqual(stats['descartado'], 0)
+        self.assertEqual(stats['ok'], 1)
+        con.close()
+
+
 class TestArchivoSuelto(unittest.TestCase):
     """Bibliografia propia: la app llama a ingestar_archivo() con --archivo."""
 
@@ -425,6 +519,52 @@ class TestNotebooks(unittest.TestCase):
                         "WHERE fragmentos_fts MATCH '\"integral\"'").fetchone()[0]
         self.assertEqual(n, 1)
         con.close()
+
+
+class TestOcrDeduplicacion(unittest.TestCase):
+    """El OCR es caro: no hay que gastarlo dos veces en el mismo libro guardado
+    en dos carpetas distintas."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = os.path.join(self.tmp.name, 'idx.db')
+        self.con = abrir_db(self.db)
+        self.con.execute(
+            "INSERT INTO documentos (id,ruta,nombre,huella,estado,ext) "
+            "VALUES (1,'C:/a/libro.pdf','libro.pdf','HUELLA1','ok','.pdf')")
+        self.con.execute(
+            "INSERT INTO documentos (id,ruta,nombre,huella,estado,ext) "
+            "VALUES (2,'C:/b/libro.pdf','libro.pdf','HUELLA1','necesita_ocr','.pdf')")
+        self.con.execute(
+            "INSERT INTO documentos (id,ruta,nombre,huella,estado,ext) "
+            "VALUES (3,'C:/c/otro.pdf','otro.pdf','HUELLA2','necesita_ocr','.pdf')")
+        self.con.commit()
+
+    def tearDown(self):
+        self.con.close()
+        self.tmp.cleanup()
+
+    def test_detecta_el_gemelo_ya_reconocido(self):
+        r = original_ya_procesado(self.con, 'HUELLA1', 2)
+        self.assertIsNotNone(r)
+        self.assertEqual(r[1], 'libro.pdf')
+
+    def test_no_se_detecta_a_si_mismo(self):
+        self.assertIsNone(original_ya_procesado(self.con, 'HUELLA1', 1))
+
+    def test_sin_gemelo_no_saltea(self):
+        self.assertIsNone(original_ya_procesado(self.con, 'HUELLA2', 3))
+
+    def test_huella_vacia_no_saltea(self):
+        # Sin huella no se puede afirmar que sean el mismo archivo.
+        self.assertIsNone(original_ya_procesado(self.con, '', 3))
+        self.assertIsNone(original_ya_procesado(self.con, None, 3))
+
+    def test_gemelo_que_todavia_no_se_reconocio_no_cuenta(self):
+        # Dos copias pendientes: la primera hay que procesarla igual.
+        self.con.execute("UPDATE documentos SET estado='necesita_ocr' WHERE id=1")
+        self.con.commit()
+        self.assertIsNone(original_ya_procesado(self.con, 'HUELLA1', 2))
 
 
 class TestExtraccion(unittest.TestCase):

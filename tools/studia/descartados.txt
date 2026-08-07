@@ -1,0 +1,220 @@
+# Documentos descartados del indice de StudIA.
+#
+# Son archivos de los que no se pudo extraer texto: PDFs escaneados que el OCR
+# no pudo leer, y .docx/.pptx armados enteramente con imagenes. Los .txt son
+# archivos de pocas decenas de bytes (links de descarga, coordenadas sueltas).
+#
+# Se descartan por decision del estudiante: el material importante ya esta
+# indexado, y sumar documentos sin contenido util solo agrega ruido a las
+# busquedas. Ver la nota en ingest.py sobre el estado 'descartado'.
+#
+# Una ruta por linea, RELATIVA a la raiz del corpus (--corpus), con / como
+# separador. Las lineas vacias y las que empiezan con # se ignoran.
+#
+# Generado el 2026-08-06 a partir de los 154 documentos en estado necesita_ocr.
+# Por extension: .txt 73, .docx 34, .pdf 31, .pptx 13, .xlsx 2, .ipynb 1
+
+
+# --- Automatización Industrial ---
+5A/9C/(0_042)Automatización_Industrial/Cursada/Clases/1 Octubre - Neumática/Cascada neumatica pura/ELEMENTOS NEUMATICOS PUROS.pdf
+5A/9C/(0_042)Automatización_Industrial/Cursada/Parcial Aut Ind/7.Práctica Parcial/- Ref/1.Automación Eléctrica.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/0. Automatización Industrial TP Final/Envios/5.Envío de mensaje a carpeta compartida (19-02-25)/Enlace a Carpeta Compartida.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 4 - Hidráulica Industrial/Explicación Válvula de Contrabalance.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 4 - Hidráulica Industrial/Link descarga Soft Fluidsim Neumática e Hidráulica 4.2.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 4 - Hidráulica Industrial/Manual de Gidraulica de Vickers.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 5 y 6 - Electrohidráulica/Uso Válvula Direccional Proporcional en Festo Fluidsim.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 7 - Neumatica y Cascada Neumatica/2.Cascada Neumatica/Fotos Elementos Neumaticos Puros.docx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 7 - Neumatica y Cascada Neumatica/3.Electroneumatica Biestable - Cascada Neumatica Pura/Video - Diagrama de estado en FluidSim.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 8 y 9 - PLCs/1.Zelio/Descargar Zelio/1.Link de descarga Zelio Soft 2 Ver 5.2.0.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 8 y 9 - PLCs/1.Zelio/Descargar Zelio/2.Instalación ZELIO.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 8 y 9 - PLCs/1.Zelio/Descargar Zelio/3.Instrucciones Básicas Zelio.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/1.Temas/Clase 8 y 9 - PLCs/1.Zelio/Videos de la Catedra.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/4.Trabajos Prácticos/TP1 - Automatización Eléctrica/Imagenes/Nombre de componentes.pptx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/4.Trabajos Prácticos/TP3 - Hidráulica Pura/Valvulas explicación.pptx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/4.Trabajos Prácticos/TP6 - Cascada Neumática Pura Biestable/Referencias Pistones TP6.pptx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/5.Videos Youtube/3.MÉTODO CASCADA ELECTRONEUMÁTICA BIESTABLE - Diseño de Circuitos Neumaticos/Video - MÉTODO CASCADA ELECTRONEUMÁTICA BIESTABLE.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/2.Automatización Industrial (lean)/5.Videos Youtube/5.MÉTODO PASO A PASO ELECTRONEUMÁTICA MONOESTABLE - Diseño de Circuitos Neumaticos/Video - MÉTODO PASO A PASO ELECTRONEUMÁTICA MONOESTABLE.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/FINAL/Catálogos/Catálogos/Catalogo Silenciador PSL03.pdf
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/Grafcet/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/Shows/POS.TXT
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/digital/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/tp501/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/tp502/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/tp511/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/tp601/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/tp602/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/tp701/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/ct/tp702/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/misc/DXFASCII.TXT
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/misc/DXFCOLOR.TXT
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/Pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/dde/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/actuator/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/control/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/ladder/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/relay/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/sensor/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/supply/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/switch/General/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/switch/Manually/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/switch/Proximit/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/switch/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/grafcet/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/hyd/actuator/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/hyd/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/hyd/sensor/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/hyd/valve/cvalve/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/hyd/valve/fuvalve/evalve/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/hyd/valve/fuvalve/mvalve/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/hyd/valve/fuvalve/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/hyd/valve/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/hyd/valve/provalve/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/misc/Pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/TP10.docx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/Automatización industrial Nahir/Automatización industrial Nahir/TP10_TEMP.docx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/FABRI/TPS 2C 2024 EQ4/TP01/ReferenciasTP1p1.pdf
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/FABRI/TPS 2C 2024 EQ4/TP03/SIMBOLOS HIDRAULICOS.pdf
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/FABRI/TPS 2C 2024 EQ4/TP04/TP04_DIAGRAMA_DE_FASE.pdf
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Automatización Electrica/Inversion giro motor.docx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Electrohidráulica/Circuito Electrohidraulico.docx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Electrohidráulica/ELectrohidraulica con final de carrera.docx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Enclavamiento con luz.docx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/Pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/actuator/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/ladder/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/relay/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/sensor/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/supply/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/switch/Manually/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Fluid4.2 NeuHid FIUNLZ/Fluid4.2 NeuHid FIUNLZ/fl_sim_h4.es/sym/electr/switch/pos.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Sensores/COnexion sensor.docx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/Sensores/Sensor2.docx
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/TP Final/Hidraulica pura/Esquema HP.pdf
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/TP Final/Mails profes.txt
+5A/9C/(0_042)Automatización_Industrial/Mercado Negro/MAYRA/TP Final/Materiales que voy usando.docx
+5A/9C/(0_042)Automatización_Industrial/TP FINAL - LATAS/Idea inicial/Croquis Idea Final (sin operario).pdf
+5A/9C/(0_042)Automatización_Industrial/TP FINAL - LATAS/Imágenes/esquema plc lata chica.pdf
+5A/9C/(0_042)Automatización_Industrial/TP FINAL - LATAS/Imágenes/esquema plc lata grande.pdf
+5A/9C/(0_042)Automatización_Industrial/tps/TP5 - Cascada Neumática/TP5 - Grupo 2 - Corrección V4/Devolución.txt
+5A/9C/(0_042)Automatización_Industrial/tps/TP7 - Zelio/V1/esquema de conexion plc.pdf
+5A/9C/(0_042)Automatización_Industrial/tps/TP7 - Zelio/V1/esquemas.pdf
+
+# --- Cálculo 2 ---
+3A/6C/(0_026)Cálculo_2/TP2 MATLAB/link clase profe.txt
+
+# --- Diseño de Componentes de Máquinas ---
+5A/9C/(0_038)Diseño_de_Componentes_de_Máquinas/TPs (PIA)/mails profes.txt
+5A/9C/(0_038)Diseño_de_Componentes_de_Máquinas/TPs experimentales/tp experimental teorias de falla imagen nuestro caso.docx
+
+# --- Diseño de Sistemas Mecatrónicos ---
+5A/9C/(3_003)Diseño_de_Sistemas_Mecatrónicos/TP4 - MQTT (grupal)/Prompt gpt y apuntes.docx
+
+# --- Economía 2 ---
+2A/3C/(0_015)Economía_2/1er examen.txt
+
+# --- Electrotecnia ---
+4A/7C/(0_030)Electrotecnia/Clases sincrónicas de teoría/Clase 1.pptx
+4A/7C/(0_030)Electrotecnia/Clases sincrónicas de teoría/Clase 3.pptx
+4A/7C/(0_030)Electrotecnia/Clases sincrónicas de teoría/Condiciones de Paralelo de Transf..pptx
+4A/7C/(0_030)Electrotecnia/ELECTROTECNIA caratula.docx
+
+# --- Electrónica General y de Potencia ---
+3A/6C/(3_002)Electrónica_General_y_de_Potencia/TP_PCB_v3.pdf
+
+# --- Estática ---
+3A/6C/(0_024)Estática/EJERCICIOS/Ejercicio Una Chapa.pdf
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2020/08_10_2020/Ejercicio N°1.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2020/08_10_2020/Ejercicio N°2.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2020/08_10_2020/Ejercicio N°3(Mal).docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2020/08_10_2020/Ejercicio N°4.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2020/08_10_2020/Ejercicio N°5.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2020/08_10_2020/los 5 ptos.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2021/09_07_2021/Eje1.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2021/09_07_2021/Eje2.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2021/09_07_2021/Eje3.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2021/09_07_2021/Eje4.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2021/09_07_2021/Eje5.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2021/09_07_2021/los 5 ejes.docx
+3A/6C/(0_024)Estática/Finales Estatica Ordenados/2021/20_05_2021/20_05_2021-F1.pdf
+3A/6C/(0_024)Estática/Finales/Esfuerzos característicos M-N-Q 2 chapas Mudo.pptx
+3A/6C/(0_024)Estática/Finales/Esfuerzos característicos M-N-Q Mudos.pptx
+3A/6C/(0_024)Estática/Finales/Esfuerzos característicos M-N-Q Numerico 1 chapa.pptx
+3A/6C/(0_024)Estática/Hojas rotuladas catedra/ESTATICA-Estabilidad_I_Rotulo_2021.docx
+3A/6C/(0_024)Estática/TPs/TP ESPECIALIDAD MECATRONICOS/ESTATICA - Seccion Brazo Articulado A4.pdf
+3A/6C/(0_024)Estática/TPs/TP1 G10/ESTATICA-Estabilidad_I_Rotulo_2021.docx
+3A/6C/(0_024)Estática/U12 - SOLICITACIÓN AXIL SIMPLE-PANDEO/Documentos teóricos/Dimensionamiento IPN - 2IPN.pptx
+3A/6C/(0_024)Estática/U2 - SISTEMAS DE FUERZAS/Ejercicio Fuerzas jueves 2508.pdf
+3A/6C/(0_024)Estática/U4-5-6-7 CARGAS,Cinem. de CUERPOS RIGIDOS. VIGAS y PORTICOS Alma llena Abiertos y Cerrados/Documentos teóricos/Esfuerzos característicos M-N-Q Mudos.pptx
+3A/6C/(0_024)Estática/U4-5-6-7 CARGAS,Cinem. de CUERPOS RIGIDOS. VIGAS y PORTICOS Alma llena Abiertos y Cerrados/Documentos teóricos/Esfuerzos característicos M-N-Q Numerico 1 chapa.pptx
+
+# --- Fundamentos de Química ---
+2A/4C/(0_018)Fundamentos_de_Química/Informe/carátula.docx
+
+# --- Fundamentos de Robótica ---
+5A/10C/(3_006)Fundamentos_de_Robótica/TP Integrador (KUKO)/Codigo/Explicación de Código.pdf
+5A/10C/(3_006)Fundamentos_de_Robótica/Tps/TPs PY/aclaracion instalacion libreria.txt
+
+# --- Fundamentos de los Computadores Digitales ---
+1A/2C/(3_009)Fundamentos_de_los_Computadores_Digitales/6-Archivos/Archivo.txt
+1A/2C/(3_009)Fundamentos_de_los_Computadores_Digitales/Revalida 2022/FallasDiarias.txt
+1A/2C/(3_009)Fundamentos_de_los_Computadores_Digitales/Revalida 2022/Modelo con mas Fallas.txt
+
+# --- Higiene y Seguridad en el Trabajo 1 ---
+1A/2C/(0_007)Higiene_y_Seguridad_en_el_Trabajo_1/Caratulas.docx
+
+# --- Informática y Programación Industrial ---
+2A/3C/(3_001)Informática_y_Programación_Industrial/EXAMEN 1/Lista Nombres -Componentes Proteus.pdf
+
+# --- Instrumentación Industrial Mediciones Mecánicas Eléctricas y Electrónicas ---
+5A/10C/(3_005)Instrumentación_Industrial_Mediciones_Mecánicas_Eléctricas_y_Electrónicas/Actividades/pesos y densidades actividad 3.xlsx
+
+# --- Introducción a la Ingeniería ---
+1A/1C/(0_002)Introducción_a_la_Ingeniería/CLASES 1 A 4/graficos3.docx
+
+# --- Matemática 1 ---
+2A/3C/(0_011)Matemática_1/Material de Trabajo/Derivadas Clase 13 Derivación Logarítmica.txt
+2A/3C/(0_011)Matemática_1/Trabajo Práctico Virtuales/Trabajo práctico 3 - Dominio y funciones polinomicas/Video.txt
+2A/3C/(0_011)Matemática_1/Trabajo Práctico Virtuales/Trabajo práctico 7 - Composición de funciones y función inversa/Videos.txt
+
+# --- Mecanismos ---
+4A/7C/(0_032)Mecanismos/carpeta-mecanismos.pdf
+
+# --- Mecánica Teórica ---
+3A/6C/(0_027)Mecánica_Teórica/Otros TPS y Parciales/Cursada 1/TP N°4A/TP4A-MECANICA-TEORICA.pdf
+3A/6C/(0_027)Mecánica_Teórica/Otros TPS y Parciales/Cursada 1/TP N°4B/tp4bejes.pdf
+3A/6C/(0_027)Mecánica_Teórica/grafico de transmisibilidad.docx
+
+# --- Mecánica de los Materiales ---
+4A/7C/(0_028)Mecánica_de_los_Materiales/Parciales viejos/Modelo Primer Parcial/Modelo traccion/Ej de traccion hoja 1 (1).pdf
+4A/7C/(0_028)Mecánica_de_los_Materiales/Parciales viejos/Modelo Primer Parcial/Modelo traccion/Ej de traccion hoja 2.pdf
+4A/7C/(0_028)Mecánica_de_los_Materiales/Parciales viejos/Primer Parcial/Primer Parcial - Rivas Tomas - Resolucion.pdf
+4A/7C/(0_028)Mecánica_de_los_Materiales/Parciales viejos/Segundo Parcial/Segundo Parcial - Rivas Tomas - Resolucion.pdf
+4A/7C/(0_028)Mecánica_de_los_Materiales/TP N°5 - flecha/mi tipeo.docx
+
+# --- Medios de Representación Gráfica 2 ---
+1A/2C/(0_005)Medios_de_Representación_Gráfica_2/APUNTES.txt
+1A/2C/(0_005)Medios_de_Representación_Gráfica_2/Hojas en blanco/01-Hoja con recuadro A3.pdf
+1A/2C/(0_005)Medios_de_Representación_Gráfica_2/Hojas en blanco/01-Hoja con recuadro A4.pdf
+1A/2C/(0_005)Medios_de_Representación_Gráfica_2/Hojas en blanco/02-Hoja con recuadro y grilla ortogonal.pdf
+1A/2C/(0_005)Medios_de_Representación_Gráfica_2/RECUPERATORIO/2ºP-Dibujo-Tema 4-3D.pdf
+1A/2C/(0_005)Medios_de_Representación_Gráfica_2/TP INTEGRADOR/Grupo 10/Buje-Model.pdf
+
+# --- Modelado y Dinámica de Sistemas Mecánicos ---
+4A/8C/(0_037)Modelado_y_Dinámica_de_Sistemas_Mecánicos/Archivos Python/Ejercicios/prueba.ipynb
+4A/8C/(0_037)Modelado_y_Dinámica_de_Sistemas_Mecánicos/TPs/TP4 - Simu estática lineal - Tapa de bomba FEA (clase 9)/excel bomba.xlsx
+
+# --- Máquinas e Instalaciones Eléctricas ---
+4A/8C/(0_036)Máquinas_e_Instalaciones_Eléctricas/UNIDAD 1 - Introducción a las máquinas de corriente continua/Caracteristica de motores de continua.pptx
+4A/8C/(0_036)Máquinas_e_Instalaciones_Eléctricas/UNIDAD 5 - INSTALACIONES ELECTRICAS/Datos/Plano.docx
+
+# --- Probabilidad y Estadística ---
+3A/5C/(0_023)Probabilidad_y_Estadística/TP2/megastat P4.docx
+
+# --- Proyecto en Ingeniería Mecatrónica ---
+5A/10C/(3_008)Proyecto_en_Ingeniería_Mecatrónica/3 ESP 32/MQTT.txt
+
+# --- Sistemas de Control ---
+5A/10C/(0_043)Sistemas_de_Control/Bibliografía/Resumen modelización - Análisis temporal.pdf

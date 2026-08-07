@@ -20,6 +20,7 @@ que se puede cortar y retomar sin perder trabajo.
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
@@ -51,6 +52,14 @@ NOMBRES_IGNORADOS = {
     'metadata.txt', 'pkg-info.txt', 'dependency_links.txt', 'namespace_packages.txt',
 }
 
+# Documentos que el estudiante decidio sacar del indice. No es un filtro
+# tecnico como DIRS_IGNORADOS: son archivos que SI se podrian procesar pero que
+# no aportan (documentos sin texto legible, .txt de dos renglones). Vive en un
+# archivo aparte y no en el codigo porque es una decision de curaduria del
+# corpus, que cambia con el material y no con el programa.
+DESCARTADOS_DEFAULT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'descartados.txt')
+
 # Un documento con menos de esto (tras extraer) se considera sin texto util.
 MIN_CHARS_UTIL = 200
 # Tamano objetivo de cada fragmento y cuanto se solapa con el siguiente.
@@ -78,7 +87,14 @@ CREATE TABLE IF NOT EXISTS documentos (
     paginas      INTEGER DEFAULT 0,
     chars        INTEGER DEFAULT 0,
     fragmentos   INTEGER DEFAULT 0,
-    estado       TEXT NOT NULL,          -- ok | necesita_ocr | formato_viejo | duplicado | error
+    -- ok | necesita_ocr | formato_viejo | duplicado | descartado | error
+    --
+    -- 'descartado' es una decision, no un fallo: son documentos que el
+    -- estudiante saco del indice a proposito (ver descartados.txt). Se
+    -- distingue de 'necesita_ocr' porque ese estado significa "todavia no se
+    -- pudo leer" y el OCR lo vuelve a tomar; 'descartado' significa "no va", y
+    -- ninguna herramienta lo reintenta.
+    estado       TEXT NOT NULL,
     detalle      TEXT,
     ingestado_en TEXT
 );
@@ -371,6 +387,27 @@ def guardar(con, meta, frags):
 
 # ── Recorrido y proceso ───────────────────────────────────────────────────────
 
+def normalizar_rel(rel):
+    """Forma canonica para comparar rutas relativas entre sistemas."""
+    return rel.replace('\\', '/').strip().lower()
+
+
+def cargar_descartados(ruta):
+    """Lee el archivo de descartados. Devuelve un set de rutas normalizadas.
+
+    Si el archivo no existe devuelve un set vacio: la lista es opcional y su
+    ausencia no es un error."""
+    if not ruta or not os.path.exists(ruta):
+        return set()
+    salida = set()
+    with io.open(ruta, encoding='utf-8') as fh:
+        for linea in fh:
+            linea = linea.strip()
+            if linea and not linea.startswith('#'):
+                salida.add(normalizar_rel(linea))
+    return salida
+
+
 def listar(corpus, filtro_materia=None):
     """Devuelve la lista de archivos candidatos (ya filtrada)."""
     salida = []
@@ -400,7 +437,7 @@ def listar(corpus, filtro_materia=None):
     return salida
 
 
-def procesar(con, corpus, archivos, verbose_cada=25):
+def procesar(con, corpus, archivos, verbose_cada=25, descartados=None):
     vistas = {}
     cur = con.cursor()
     for h, r in cur.execute('SELECT huella, ruta FROM documentos WHERE estado!="error"'):
@@ -410,8 +447,9 @@ def procesar(con, corpus, archivos, verbose_cada=25):
     ya = {r for (r,) in cur.execute(
         'SELECT ruta FROM documentos WHERE estado != "error"')}
 
-    stats = {'ok': 0, 'necesita_ocr': 0, 'duplicado': 0,
-             'formato_viejo': 0, 'error': 0, 'saltado': 0}
+    descartados = descartados or set()
+    stats = {'ok': 0, 'necesita_ocr': 0, 'duplicado': 0, 'formato_viejo': 0,
+             'descartado': 0, 'error': 0, 'saltado': 0}
     total_frags, total_chars = 0, 0
     t0 = time.time()
 
@@ -439,6 +477,17 @@ def procesar(con, corpus, archivos, verbose_cada=25):
                 'cuatri': cuatri, 'materia_cod': cod, 'materia': materia,
                 'subruta': sub, 'ext': ext, 'bytes': size, 'huella': hue,
                 'paginas': 0, 'chars': 0, 'estado': 'error', 'detalle': ''}
+
+        # El descarte va ANTES que todo lo demas: si el estudiante lo saco del
+        # indice, no interesa si ademas es duplicado o de formato viejo. No se
+        # registra su huella en `vistas` a proposito: si existe otra copia que
+        # NO esta descartada, esa copia se evalua por su cuenta.
+        if normalizar_rel(rel) in descartados:
+            meta['estado'] = 'descartado'
+            meta['detalle'] = 'en la lista de descartados'
+            guardar(con, meta, [])
+            stats['descartado'] += 1
+            continue
 
         if hue and hue in vistas:
             meta['estado'] = 'duplicado'
@@ -590,6 +639,11 @@ def main():
                          '(bibliografia propia; requiere --materia)')
     ap.add_argument('--quitar', default=None,
                     help='sacar del indice el documento de esa ruta')
+    ap.add_argument('--descartados', default=DESCARTADOS_DEFAULT,
+                    help='lista de documentos a excluir del indice, uno por '
+                         'linea, con la ruta relativa al corpus. Por defecto '
+                         'descartados.txt junto a este script; pasar "" para '
+                         'no excluir nada')
     args = ap.parse_args()
 
     if args.quitar:
@@ -613,6 +667,9 @@ def main():
     print('Indice : %s' % args.db)
     if args.materia:
         print('Filtro : materia contiene "%s"' % args.materia)
+    descartados = cargar_descartados(args.descartados)
+    if descartados:
+        print('Descartados: %d (%s)' % (len(descartados), args.descartados))
     print('\nBuscando documentos...', flush=True)
     archivos = listar(args.corpus, args.materia)
     print('Documentos a procesar: %d\n' % len(archivos), flush=True)
@@ -621,10 +678,12 @@ def main():
         return 0
 
     con = abrir_db(args.db, args.limpiar)
-    stats, frags, chars, seg = procesar(con, args.corpus, archivos)
+    stats, frags, chars, seg = procesar(con, args.corpus, archivos,
+                                        descartados=descartados)
 
     print('\n=== RESULTADO ===')
-    for k in ('ok', 'necesita_ocr', 'formato_viejo', 'duplicado', 'error', 'saltado'):
+    for k in ('ok', 'necesita_ocr', 'formato_viejo', 'duplicado', 'descartado',
+              'error', 'saltado'):
         if stats[k]:
             print('  %-15s %5d' % (k, stats[k]))
     print('  %-15s %5d' % ('fragmentos', frags))

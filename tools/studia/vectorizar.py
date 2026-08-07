@@ -4,6 +4,7 @@
 Calcula los embeddings de los fragmentos del índice de StudIA y los guarda
 dentro de la misma base.
 
+    tools\\studia\\servidor_embeddings.bat gpu        (en otra consola)
     python vectorizar.py --db "D:\\FACULTAD\\PPS\\StudIA\\studia.db" \
                          --url http://127.0.0.1:8081
 
@@ -12,10 +13,15 @@ formas de preguntar lo mismo ("¿qué pasa si…?" / "¿qué sucede si…?") se 
 distinto sólo porque una palabra es más frecuente que la otra. Los embeddings
 comparan por SENTIDO y resuelven esa clase de problema de raíz.
 
-Necesita un servidor OpenAI-compatible que exponga /v1/embeddings. Lo natural es
-un segundo `llama-server` con un modelo de embeddings chico:
+Necesita un servidor OpenAI-compatible que exponga /v1/embeddings: un segundo
+`llama-server` con un modelo de embeddings chico, que levanta
+`servidor_embeddings.bat`. Se usa bge-m3 (568M) y no el modelo de chat porque el
+de chat es de otra clase y le lleva ~15 s por fragmento contra ~0,1 s: el corpus
+entero pasa de unas tres semanas a unas cuatro horas.
 
-    llama-server -m nomic-embed-text-v1.5.Q8_0.gguf --embeddings --port 8081
+bge-m3 ademas codifica igual la pregunta y el documento, y es multilingue, que
+es lo que permite preguntar en castellano y encontrar el parrafo en un libro en
+ingles -- dos tercios de la bibliografia de varias materias.
 
 Es incremental y re-ejecutable: sólo procesa los fragmentos que todavía no
 tienen vector, así que se puede cortar y retomar.
@@ -32,9 +38,36 @@ import time
 import urllib.error
 import urllib.request
 
-LOTE = 32            # fragmentos por request
-TIMEOUT = 180        # s por request; un lote grande en CPU puede tardar
-REINTENTOS = 3
+# El servidor procesa cada request en una sola pasada, así que la suma de TOKENS
+# del lote tiene que entrar en su --ubatch-size. Por eso los lotes se arman por
+# presupuesto de tokens y no sólo por cantidad: cinco fragmentos cortos entran
+# donde no entran dos largos.
+#
+# El presupuesto tiene que dar holgura para TOPE_FRAGMENTOS fragmentos
+# (8 x ~342 = ~2700 tokens); si no, se vuelve el límite real y el tope calibrado
+# no se usa nunca. Queda debajo del --ubatch-size del servidor en modo GPU
+# (8192), que es el techo de verdad.
+PRESUPUESTO_DEFAULT = 4096
+CHARS_POR_TOKEN = 3.5          # estimación conservadora para castellano/inglés
+
+# Tope de fragmentos por request. Medido con bge-m3 en GPU sobre fragmentos
+# reales del índice, cada texto usado UNA sola vez: 4 da ~6,5 frag/s, 8 da ~11,
+# y de 12 en adelante el servidor corta la conexión sin dejar nada en el log.
+#
+# La advertencia importa: medir con textos repetidos da números hasta cinco
+# veces mayores, porque llama.cpp reutiliza el cálculo cuando el texto coincide.
+# Cualquier medición futura de esto tiene que usar textos distintos.
+#
+# Mandar varios requests en paralelo NO acelera: medido alternando y repitiendo,
+# 1 en paralelo da mediana 9,2 frag/s y 4 en paralelo 10,0, con más requests
+# rechazados. La diferencia queda dentro del ruido, así que el script es
+# deliberadamente secuencial.
+#
+# El valor no es sagrado: si el servidor rechaza un lote, el script baja el tope
+# solo y sigue. Por eso alcanza con que sea razonable, no exacto.
+TOPE_FRAGMENTOS = 8
+TIMEOUT = 180                  # s por request
+REINTENTOS = 1                 # sólo para cortes transitorios de red
 
 
 ESQUEMA = """
@@ -84,6 +117,49 @@ def normalizar(v):
     return [x / n for x in v] if n > 0 else v
 
 
+def tokens_estimados(texto):
+    return max(1, int(len(texto) / CHARS_POR_TOKEN) + 8)
+
+
+def siguiente_lote(pendientes, desde, presupuesto, tope):
+    """Arma el lote que empieza en `pendientes[desde]`.
+
+    Se agrupa por tokens y no sólo por cantidad porque el límite del servidor es
+    de tokens: cinco fragmentos cortos entran en un request y dos largos no. Un
+    fragmento que solo ya excede el presupuesto igual se manda solo — no hay
+    forma de partirlo sin romper el fragmento.
+
+    Los lotes se arman de a uno, sobre la marcha, en vez de precalcularlos todos:
+    el tamaño puede cambiar en medio de la corrida cuando el servidor rechaza un
+    lote, y así el siguiente ya sale con el valor corregido.
+
+    Se recorre por índice y no con `pendientes[desde:]`: esa forma copia toda la
+    lista restante en cada lote y el costo total pasa a ser cuadrático. Con una
+    materia (3.000 fragmentos) no se nota; con el corpus entero (150.000) el
+    armado de lotes tarda más que los embeddings — medido, 3 frag/s contra 52."""
+    lote, suma = [], 0
+    for k in range(desde, len(pendientes)):
+        item = pendientes[k]
+        t = tokens_estimados(item[1])
+        if lote and (suma + t > presupuesto or len(lote) >= tope):
+            break
+        lote.append(item)
+        suma += t
+    return lote
+
+
+def embeber_lote(url, textos):
+    """Un request, con un reintento por corte transitorio. Devuelve los vectores
+    o None si no se pudo."""
+    for intento in range(REINTENTOS + 1):
+        try:
+            return embeber(url, textos)
+        except Exception:
+            if intento < REINTENTOS:
+                time.sleep(0.4)
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description="Vectoriza el índice de StudIA")
     ap.add_argument("--db", required=True)
@@ -96,6 +172,13 @@ def main():
     ap.add_argument("--materia", default=None,
                     help="vectorizar SOLO esa materia (subcadena). Sirve para "
                          "probar el circuito completo sin esperar el corpus entero")
+    ap.add_argument("--presupuesto", type=int, default=PRESUPUESTO_DEFAULT,
+                    help="tokens por request. Subilo si el servidor corre con un "
+                         "--ubatch-size grande: entran más fragmentos por request "
+                         "y va proporcionalmente más rápido")
+    ap.add_argument("--max-fragmentos", type=int, default=TOPE_FRAGMENTOS,
+                    help="tope de fragmentos por request. 1 = el modo seguro, "
+                         "compatible con cualquier servidor")
     args = ap.parse_args()
 
     if not os.path.exists(args.db):
@@ -165,35 +248,47 @@ def main():
     t0 = time.time()
     hechos_ahora = 0
     fallidos = 0
-    for i in range(0, len(pendientes), LOTE):
-        lote = pendientes[i:i + LOTE]
-        textos = [t for _id, t in lote]
-        vectores = None
-        for intento in range(REINTENTOS):
-            try:
-                vectores = embeber(args.url, textos)
-                break
-            except Exception as e:
-                if intento == REINTENTOS - 1:
-                    print("  ! lote %d falló definitivamente: %s" % (i // LOTE, e))
-                    fallidos += len(lote)
-                else:
-                    time.sleep(1.5 * (intento + 1))
+    presupuesto = args.presupuesto
+    tope = max(1, args.max_fragmentos)
+    print("Hasta %d fragmentos por request (presupuesto %d tokens)\n"
+          % (tope, presupuesto), flush=True)
+
+    i = 0
+    avisado = 0
+    while i < len(pendientes):
+        lote = siguiente_lote(pendientes, i, presupuesto, tope)
+        vectores = embeber_lote(args.url, [t for _id, t in lote])
+
+        if vectores is None and len(lote) > 1:
+            # El servidor no pudo con un lote de este tamaño. Se baja el tope y
+            # se rearma DESDE EL MISMO PUNTO: no se saltea ningún fragmento y el
+            # resto de la corrida hereda el tamaño que sí funciona.
+            tope = max(1, len(lote) // 2)
+            print("  ! rechazó un lote de %d; bajo a %d fragmentos por request"
+                  % (len(lote), tope), flush=True)
+            continue
+
         if vectores is None:
+            # Falló un fragmento solo: se anota y se sigue. Volver a correr el
+            # script lo reintenta, porque los pendientes se recalculan.
+            fallidos += 1
+            i += 1
             continue
 
         con.executemany(
             "INSERT OR REPLACE INTO vectores(frag_id, dim, vec) VALUES (?,?,?)",
             [(lote[j][0], len(vectores[j]), vec_a_blob(normalizar(vectores[j])))
-             for j in range(len(lote))])
+             for j in range(len(lote)) if vectores[j]])
         con.commit()
         hechos_ahora += len(lote)
+        i += len(lote)
 
-        if (i // LOTE) % 10 == 0 or i + LOTE >= len(pendientes):
+        if hechos_ahora - avisado >= 400 or i >= len(pendientes):
+            avisado = hechos_ahora
             transcurrido = time.time() - t0
             ritmo = hechos_ahora / transcurrido if transcurrido > 0 else 0
             falta = (len(pendientes) - hechos_ahora) / ritmo if ritmo > 0 else 0
-            print("  [%d/%d] %.0f frag/s · faltan ~%d min"
+            print("  [%d/%d] %.1f frag/s · faltan ~%d min"
                   % (hechos_ahora, len(pendientes), ritmo, falta / 60), flush=True)
 
     con.execute("INSERT OR REPLACE INTO vectores_info(clave,valor) VALUES (?,?)",

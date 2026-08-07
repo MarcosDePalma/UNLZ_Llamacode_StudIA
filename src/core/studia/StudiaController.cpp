@@ -593,17 +593,24 @@ void StudiaController::preguntar(const QString &texto)
 
     agregarMensaje(QStringLiteral("usuario"), pregunta, {}, false, idModo);
 
-    // ¿La pregunta ubica el tema por si sola? Se mide por terminos
-    // DISCRIMINANTES, no por cantidad: "¿que pasa si aumento la frecuencia?"
-    // tiene tres palabras y ninguna dice de que se esta hablando.
+    // Encuadre: ¿se sostiene sola, continúa la anterior, o cambia a un tema que
+    // el corpus no cubre? Se decide preguntándole al índice cuáles de sus
+    // términos existen, no contando palabras.
     const int total = m_index.totalFragmentos();
-    int discriminantes = 0;
-    for (const QString &t : StudiaIndex::terminosConsulta(pregunta))
-        if (StudiaIndex::esDiscriminante(m_index.frecuenciaDocumental(t), total))
+    const QStringList propios = StudiaIndex::terminosConsulta(pregunta);
+    int existentes = 0, discriminantes = 0;
+    for (const QString &t : propios) {
+        const int df = m_index.frecuenciaDocumental(t);
+        if (df > 0)
+            ++existentes;
+        if (StudiaIndex::esDiscriminante(df, total))
             ++discriminantes;
+    }
+    const StudiaPrompt::Encuadre encuadre =
+        StudiaPrompt::encuadrar(int(propios.size()), existentes, discriminantes);
 
     const QString consulta =
-        StudiaPrompt::consultaConContexto(pregunta, previas, discriminantes);
+        StudiaPrompt::consultaConContexto(pregunta, previas, encuadre);
 
     // Si hay búsqueda semántica, primero hay que vectorizar la pregunta. Es una
     // request HTTP: se hace async y la segunda mitad sigue en continuarPregunta.
@@ -725,8 +732,12 @@ void StudiaController::generar(const QString &promptSistema, const QString &prom
             if (s && m_idxRespuesta >= 0 && m_idxRespuesta < s->mensajes.size()) {
                 // El modelo emite LaTeX aunque el prompt se lo prohiba; se
                 // convierte a texto legible antes de mostrarlo y de guardarlo.
-                const QString visible = StudiaTexto::latexALegible(m_acumulado);
-                const QVariantList bloques = StudiaTexto::enBloques(m_acumulado);
+                // Si el modelo declaró abstención al empezar, se corta ahí: no
+                // se muestra el formato que a veces completa igual después.
+                const QString crudo = StudiaTexto::recortarTrasAbstencion(
+                    m_acumulado, StudiaPrompt::fraseAbstencion());
+                const QString visible = StudiaTexto::latexALegible(crudo);
+                const QVariantList bloques = StudiaTexto::enBloques(crudo);
                 QVariantMap msg = s->mensajes[m_idxRespuesta].toMap();
                 msg[QStringLiteral("contenido")] = visible;
                 msg[QStringLiteral("bloques")] = bloques;
@@ -765,8 +776,12 @@ void StudiaController::cerrarStream(bool ok, const QString &err)
         } else if (!m_acumulado.isEmpty()) {
             // Conversión final sobre el texto completo: durante el streaming
             // una fórmula puede quedar a medio escribir.
-            msg[QStringLiteral("contenido")] = StudiaTexto::latexALegible(m_acumulado);
-            msg[QStringLiteral("bloques")] = StudiaTexto::enBloques(m_acumulado);
+            const QString crudo = StudiaTexto::recortarTrasAbstencion(
+                m_acumulado, StudiaPrompt::fraseAbstencion());
+            msg[QStringLiteral("contenido")] = StudiaTexto::latexALegible(crudo);
+            msg[QStringLiteral("bloques")] = StudiaTexto::enBloques(crudo);
+            if (crudo.size() < m_acumulado.size())
+                msg[QStringLiteral("fuentes")] = QVariantList{};   // se abstuvo
         }
         s->mensajes[m_idxRespuesta] = msg;
     }
