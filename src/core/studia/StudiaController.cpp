@@ -1,4 +1,4 @@
-#include "StudiaController.h"
+﻿#include "StudiaController.h"
 #include "StudiaTexto.h"
 
 #include <QApplication>
@@ -233,6 +233,41 @@ bool StudiaController::renombrarTema(const QString &id, const QString &titulo)
     m_sesiones.guardar();
     emit sesionesChanged();
     return true;
+}
+
+void StudiaController::revelarRespuestas(int indice)
+{
+    // Es un cambio de VISTA, no una consulta nueva: las respuestas ya están en
+    // el mensaje desde que se generó. Por eso no puede fallar ni tardar.
+    StudiaSesion *s = sesionActual();
+    if (!s || indice < 0 || indice >= s->mensajes.size())
+        return;
+    QVariantMap msg = s->mensajes[indice].toMap();
+    if (msg.value(QStringLiteral("respuestas")).toString().isEmpty())
+        return;                       // no hay segunda parte que desplegar
+    msg[QStringLiteral("respuestasVisibles")] = true;
+    s->mensajes[indice] = msg;
+    m_sesiones.guardar();
+    emit mensajesChanged();
+}
+
+bool StudiaController::planYaPidioLosDatos() const
+{
+    const StudiaSesion *s = m_sesiones.porId(m_temaId);
+    if (!s)
+        return false;
+    for (const QVariant &v : s->mensajes) {
+        const QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("rol")).toString() != QLatin1String("asistente"))
+            continue;
+        if (m.value(QStringLiteral("modo")).toString() != QLatin1String("plan"))
+            continue;
+        // Una respuesta vacía es una generación que falló: no cuenta como
+        // haberle pedido nada.
+        if (!m.value(QStringLiteral("contenido")).toString().trimmed().isEmpty())
+            return true;
+    }
+    return false;
 }
 
 void StudiaController::titularConRespuesta(const QString &respuesta)
@@ -472,8 +507,15 @@ void StudiaController::procesarSiguienteAdjunto()
                    QStringLiteral("agregar «%1»").arg(m_ultimoAdjunto));
 }
 
-int StudiaController::contarFlashcards(const QString &respuesta) const
+int StudiaController::contarFlashcards(const QString &respuesta,
+                                       const QString &idModo) const
 {
+    // Una autoevaluación tiene la misma forma que una tanda de flashcards
+    // —preguntas numeradas, la línea, respuestas numeradas—, pero no son
+    // tarjetas de repaso: ofrecer exportarlas a Anki sería un error.
+    if (!idModo.isEmpty()
+        && StudiaPrompt::modoPorId(idModo).id != QLatin1String("flashcards"))
+        return 0;
     return int(StudiaTexto::flashcards(respuesta).size());
 }
 
@@ -700,6 +742,9 @@ void StudiaController::preguntar(const QString &texto)
     const QVector<StudiaPrompt::Turno> historial = historialReciente();
     const QStringList previas =
         m_sesiones.ultimasPreguntas(m_temaId, kPreguntasParaExpandir);
+    // Y el turno del plan también: si StudIA ya pidió los datos en este tema,
+    // esta pregunta es la respuesta del estudiante y toca armarlo.
+    const bool planConDatos = planYaPidioLosDatos();
 
     agregarMensaje(QStringLiteral("usuario"), pregunta, {}, false, idModo);
 
@@ -724,7 +769,8 @@ void StudiaController::preguntar(const QString &texto)
 
     // Si hay búsqueda semántica, primero hay que vectorizar la pregunta. Es una
     // request HTTP: se hace async y la segunda mitad sigue en continuarPregunta.
-    m_pendiente = {true, pregunta, idModo, consulta, historial};
+    m_pendiente = {true, pregunta, idModo, consulta, historial, encuadre,
+                   planConDatos};
     if (semanticaActiva()) {
         // Si no hay servidor de embeddings propio, se usa el del chat.
         m_embed.setUrl(urlEmbeddingsEfectiva());
@@ -757,15 +803,26 @@ void StudiaController::continuarPregunta(const QVector<float> &vector)
 
     if (frags.isEmpty()) {
         // Sin material nuevo, pero puede que el pedido se refiera a algo que ya
-        // esta en la conversacion ("repetí la ecuación anterior"). En los modos
-        // flexibles se intenta responder con eso antes de abstenerse.
-        if (!modoActual.exigente
-            && StudiaPrompt::puedeResponderDesdeConversacion(historial)) {
+        // esta en la conversacion ("repetí la ecuación anterior", "dame las
+        // respuestas"). Se responde con eso antes de abstenerse cuando:
+        //
+        //  - el modo es flexible (conversar es su razon de ser), o
+        //  - es una CONTINUACION: StudIA escribio esas preguntas, no puede
+        //    contestar que no sabe nada de ellas, o
+        //  - la pregunta es DEPENDIENTE: no aporta terminos propios, o sea que
+        //    se apoya en lo anterior. Buscar en el indice algo que no nombra y
+        //    abstenerse porque no aparece seria absurdo.
+        //
+        // La garantia de no inventar sigue en pie: la conversacion previa salio
+        // de fragmentos reales, y el prompt de esta rama lo deja explicito.
+        if (StudiaPrompt::respondeDesdeLaConversacion(
+                modoActual.exigente, p.encuadre, historial)) {
             agregarMensaje(QStringLiteral("asistente"), QString(), {}, true, idModo);
             StudiaSesion *s = sesionActual();
             m_idxRespuesta = s ? int(s->mensajes.size()) - 1 : -1;
-            generar(StudiaPrompt::sistema(m_materia, idModo),
-                    StudiaPrompt::usuarioSoloConversacion(pregunta, historial));
+            generar(StudiaPrompt::sistema(m_materia, idModo, p.planConDatos),
+                    StudiaPrompt::usuarioSoloConversacion(pregunta, historial,
+                                                          idModo, p.planConDatos));
             return;
         }
         // Sin evidencia ni contexto no se consulta al modelo: se responde la
@@ -780,8 +837,9 @@ void StudiaController::continuarPregunta(const QVector<float> &vector)
     StudiaSesion *s = sesionActual();
     m_idxRespuesta = s ? int(s->mensajes.size()) - 1 : -1;
 
-    generar(StudiaPrompt::sistema(m_materia, idModo),
-            StudiaPrompt::usuario(pregunta, frags, historial));
+    generar(StudiaPrompt::sistema(m_materia, idModo, p.planConDatos),
+            StudiaPrompt::usuario(pregunta, frags, historial, idModo,
+                                  p.planConDatos));
 }
 
 void StudiaController::generar(const QString &promptSistema, const QString &promptUsuario)
@@ -889,7 +947,24 @@ void StudiaController::cerrarStream(bool ok, const QString &err)
             const QString crudo = StudiaTexto::recortarTrasAbstencion(
                 m_acumulado, StudiaPrompt::fraseAbstencion());
             msg[QStringLiteral("contenido")] = StudiaTexto::latexALegible(crudo);
-            msg[QStringLiteral("bloques")] = StudiaTexto::enBloques(crudo);
+
+            // Autoevaluación y Flashcards vienen en dos partes separadas por
+            // una línea: arriba la consigna, abajo las respuestas. Se parte acá,
+            // una sola vez, y la UI muestra la primera hasta que el estudiante
+            // despliega la segunda. No hace falta volver a consultar al modelo.
+            const QString idModoMsg = msg.value(QStringLiteral("modo")).toString();
+            if (StudiaPrompt::modoPorId(idModoMsg).ocultaRespuestas) {
+                const StudiaTexto::ConsignaPartida par =
+                    StudiaTexto::partirConsigna(crudo);
+                msg[QStringLiteral("bloques")] = StudiaTexto::enBloques(par.consigna);
+                msg[QStringLiteral("bloquesRespuestas")] =
+                    par.respuestas.isEmpty() ? QVariantList{}
+                                             : StudiaTexto::enBloques(par.respuestas);
+                msg[QStringLiteral("consigna")] = par.consigna;
+                msg[QStringLiteral("respuestas")] = par.respuestas;
+            } else {
+                msg[QStringLiteral("bloques")] = StudiaTexto::enBloques(crudo);
+            }
             if (crudo.size() < m_acumulado.size())
                 msg[QStringLiteral("fuentes")] = QVariantList{};   // se abstuvo
         }

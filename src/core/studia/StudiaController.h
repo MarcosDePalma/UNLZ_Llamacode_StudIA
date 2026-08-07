@@ -161,6 +161,14 @@ public:
     // Texto con el que la UI prellena la barra al elegir un modo del menu.
     Q_INVOKABLE QString prefijoDeModo(const QString &idModo) const;
 
+    // ¿Este modo entrega la consigna con las respuestas plegadas? Decide si la
+    // burbuja se muestra recien al terminar y si ofrece desplegarlas.
+    Q_INVOKABLE bool modoOcultaRespuestas(const QString &idModo) const
+    { return StudiaPrompt::modoPorId(idModo).ocultaRespuestas; }
+    // Despliega la segunda parte de un mensaje. NO consulta al modelo: las
+    // respuestas ya vinieron con la consigna, esto sólo las muestra.
+    Q_INVOKABLE void revelarRespuestas(int indice);
+
     // Bibliografia propia (boton del clip). Va a un indice SEPARADO del de la
     // carpeta DATA: lo que sube el estudiante nunca se mezcla con el material
     // de la catedra, y regenerar uno no pisa al otro.
@@ -180,8 +188,11 @@ public:
     // tabulaciones, que Anki importa de fábrica. Devuelve la ruta escrita o ""
     // si la respuesta no traía tarjetas reconocibles o se canceló el diálogo.
     Q_INVOKABLE QString exportarFlashcards(const QString &respuesta);
-    // ¿Esta respuesta tiene tarjetas exportables? Para mostrar u ocultar el botón.
-    Q_INVOKABLE int contarFlashcards(const QString &respuesta) const;
+    // ¿Esta respuesta tiene tarjetas exportables? Para mostrar u ocultar el
+    // boton. Se pasa el modo porque una autoevaluacion tiene la misma forma
+    // —preguntas y respuestas numeradas— y no son tarjetas de repaso.
+    Q_INVOKABLE int contarFlashcards(const QString &respuesta,
+                                     const QString &idModo = QString()) const;
 
     // Contenido de una burbuja como HTML con interlineado. La UI lo muestra en
     // un TextEdit para poder seleccionar un fragmento con el mouse; el HTML es
@@ -220,6 +231,12 @@ private:
     // haya abstenido: de una abstencion no se aprende de que trata el tema.
     void titularConRespuesta(const QString &respuesta);
     static bool esAbstencion(const QString &respuesta);
+    // ¿En este tema ya se le pidieron al estudiante los datos del plan?
+    //
+    // Si StudIA ya respondio una vez en modo Plan, la proxima es la segunda
+    // vuelta: el estudiante contesto y toca armarlo. Lo decide el sistema, que
+    // tiene el historial, en vez de pedirle al modelo que lo deduzca.
+    bool planYaPidioLosDatos() const;
     void agregarMensaje(const QString &rol, const QString &contenido,
                         const QVariantList &fuentes = {}, bool escribiendo = false,
                         const QString &modo = QString());
@@ -252,6 +269,9 @@ private:
         QString idModo;
         QString consulta;
         QVector<StudiaPrompt::Turno> historial;
+        StudiaPrompt::Encuadre encuadre = StudiaPrompt::Encuadre::Autonoma;
+        // Modo Plan: el estudiante ya paso sus datos, toca armar el plan.
+        bool planConDatos = false;
     };
     Pendiente m_pendiente;
 

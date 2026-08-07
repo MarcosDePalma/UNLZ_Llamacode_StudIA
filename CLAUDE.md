@@ -55,6 +55,22 @@ necesitan numpy/matplotlib se saltean solos con `skipUnless`.
 | Vectorizador de StudIA (Python) | `tools/studia/test_vectorizar.py` |
 | Graficador de StudIA (Python) | `tools/studia/test_graficar.py` |
 
+### Prompts: verificar contra el modelo, no contra el texto
+Los tests de C++ comprueban que la instrucción esté en el prompt; no dicen nada
+sobre si el modelo la cumple. Para eso está `tools/studia/probar_modos.py`, que
+manda los prompts reales al servidor y revisa el formato que vuelve. No se
+engancha a `ctest` porque necesita un llama-server vivo.
+
+    tests.bat Release                 # vuelca los prompts a %TEMP%
+    python tools/studia/probar_modos.py "Redes" "modelo OSI capas" "el modelo OSI"
+
+Al tocar los modos con formato estricto (autoevaluación, flashcards, plan),
+correrlo sobre 3 o 4 materias distintas antes de dar el cambio por bueno. Dos
+cosas se descubrieron así y conviene no volver a intentarlas: el formato puesto
+sólo en el prompt de sistema se ignora —va al final del mensaje de usuario— y
+pedir una estructura global ("primero las 10 preguntas, después las 10
+respuestas") no la sostiene; los pares `P:`/`R:` sí.
+
 ### Pendiente de cobertura
 Los backends de red con stream SSE real (RawChatBackend/LlamaAgentBackend/
 OpencodeBackend/McpClient sendMessage, tool-call extraction) necesitan un stub

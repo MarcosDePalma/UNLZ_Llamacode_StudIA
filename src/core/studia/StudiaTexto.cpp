@@ -512,6 +512,155 @@ QString tituloDeRespuesta(const QString &respuesta)
     return corto.trimmed() + QStringLiteral("…");
 }
 
+QVector<ParQR> paresQR(const QString &respuesta)
+{
+    // "1. P: ..." / "**2.** Pregunta: ..." — el numero abre el par.
+    static const QRegularExpression rxPregunta(
+        QStringLiteral("^[ \\t>]*\\**\\s*(\\d+)\\s*[.)]\\s*\\**\\s*"
+                       "(?:P|Pregunta)\\s*[:.\\-]\\s*\\**\\s*(.*)$"),
+        QRegularExpression::CaseInsensitiveOption);
+    // "R: ..." / "   Respuesta: ..." — puede o no repetir el numero.
+    static const QRegularExpression rxRespuesta(
+        QStringLiteral("^[ \\t>]*\\**\\s*(?:\\d+\\s*[.)]\\s*)?\\**\\s*"
+                       "(?:R|Respuesta)\\s*[:.\\-]\\s*\\**\\s*(.*)$"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    QVector<ParQR> pares;
+    int estado = 0;             // 0 = fuera, 1 = leyendo pregunta, 2 = respuesta
+    auto limpiar = [](QString s) {
+        s.remove(QLatin1Char('*'));
+        return s.trimmed();
+    };
+
+    for (const QString &linea : respuesta.split(QLatin1Char('\n'))) {
+        const QRegularExpressionMatch mp = rxPregunta.match(linea);
+        if (mp.hasMatch()) {
+            pares.append({limpiar(mp.captured(2)), QString()});
+            estado = 1;
+            continue;
+        }
+        if (!pares.isEmpty()) {
+            const QRegularExpressionMatch mr = rxRespuesta.match(linea);
+            if (mr.hasMatch()) {
+                pares.last().respuesta = limpiar(mr.captured(1));
+                estado = 2;
+                continue;
+            }
+        }
+        // Continuacion: se pega a lo ultimo que se estaba leyendo.
+        const QString l = linea.trimmed();
+        if (l.isEmpty() || pares.isEmpty())
+            continue;
+        if (estado == 1)
+            pares.last().pregunta += QLatin1Char(' ') + limpiar(l);
+        else if (estado == 2)
+            pares.last().respuesta += QLatin1Char(' ') + limpiar(l);
+    }
+
+    // Un par sin respuesta no sirve para nada: ni se muestra ni se exporta.
+    for (int i = pares.size() - 1; i >= 0; --i)
+        if (pares[i].pregunta.isEmpty() || pares[i].respuesta.isEmpty())
+            pares.remove(i);
+    return pares;
+}
+
+ConsignaPartida partirConsigna(const QString &respuesta)
+{
+    const QVector<ParQR> pares = paresQR(respuesta);
+    if (!pares.isEmpty()) {
+        QStringList preguntas, soluciones;
+        for (int i = 0; i < pares.size(); ++i) {
+            preguntas  << QStringLiteral("%1. %2").arg(i + 1).arg(pares[i].pregunta);
+            soluciones << QStringLiteral("%1. %2").arg(i + 1).arg(pares[i].respuesta);
+        }
+        return {preguntas.join(QStringLiteral("\n\n")),
+                soluciones.join(QStringLiteral("\n\n"))};
+    }
+
+    // El modelo escribió la línea separadora en vez de los pares: también sirve.
+    static const QRegularExpression marcado(
+        QStringLiteral("^[ \\t]*-{3,}[ \\t]*RESPUESTAS[ \\t]*-{3,}[ \\t]*$"),
+        QRegularExpression::MultilineOption
+            | QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression soloGuiones(
+        QStringLiteral("^[ \\t]*-{5,}[ \\t]*$"),
+        QRegularExpression::MultilineOption);
+
+    QRegularExpressionMatch m = marcado.match(respuesta);
+    if (!m.hasMatch())
+        m = soloGuiones.match(respuesta);
+    if (!m.hasMatch())
+        return {respuesta, QString()};
+
+    ConsignaPartida p;
+    p.consigna   = respuesta.left(m.capturedStart()).trimmed();
+    p.respuestas = respuesta.mid(m.capturedEnd()).trimmed();
+    // Un separador al principio o al final no parte nada útil.
+    if (p.consigna.isEmpty() || p.respuestas.isEmpty())
+        return {respuesta, QString()};
+    return p;
+}
+
+namespace {
+
+// Items de una lista numerada: "1. texto", "2) texto", "**3.** texto".
+// Las lineas sin numero se pegan al item anterior.
+QStringList itemsNumerados(const QString &texto)
+{
+    static const QRegularExpression inicio(
+        QStringLiteral("^[ \\t]*\\**\\s*(\\d+)\\s*[.)]\\s*\\**\\s*(.*)$"));
+    QStringList items;
+    int esperado = 1;
+    for (const QString &linea : texto.split(QLatin1Char('\n'))) {
+        const QRegularExpressionMatch m = inicio.match(linea);
+        // El numero tiene que ser el que sigue: asi un "2020" dentro de una
+        // respuesta no arranca un item nuevo.
+        if (m.hasMatch() && m.captured(1).toInt() == esperado) {
+            items << m.captured(2).trimmed();
+            ++esperado;
+            continue;
+        }
+        const QString l = linea.trimmed();
+        if (!items.isEmpty() && !l.isEmpty())
+            items.last() += QLatin1Char('\n') + l;
+    }
+    for (QString &i : items)
+        i = i.trimmed();
+    items.removeAll(QString());
+    return items;
+}
+
+// Formatos sin rotulos "Frente"/"Dorso": los pares "1. P:/R:" que emite el
+// modelo hoy, o preguntas y respuestas numeradas a los dos lados de la linea
+// separadora.
+QVariantList tarjetasSinRotulos(const QString &respuesta)
+{
+    QVariantList tarjetas;
+    const QVector<ParQR> pares = paresQR(respuesta);
+    if (!pares.isEmpty()) {
+        for (const ParQR &p : pares)
+            tarjetas.append(QVariantMap{{QStringLiteral("frente"), p.pregunta},
+                                        {QStringLiteral("dorso"), p.respuesta}});
+        return tarjetas;
+    }
+
+    const ConsignaPartida p = partirConsigna(respuesta);
+    if (p.respuestas.isEmpty())
+        return {};
+    const QStringList preguntas = itemsNumerados(p.consigna);
+    const QStringList soluciones = itemsNumerados(p.respuestas);
+    // Si no coinciden en cantidad, emparejarlas seria inventar: mejor ninguna
+    // tarjeta que tarjetas con la respuesta de otra pregunta.
+    if (preguntas.isEmpty() || preguntas.size() != soluciones.size())
+        return {};
+    for (int i = 0; i < preguntas.size(); ++i)
+        tarjetas.append(QVariantMap{{QStringLiteral("frente"), preguntas.at(i)},
+                                    {QStringLiteral("dorso"), soluciones.at(i)}});
+    return tarjetas;
+}
+
+}  // namespace
+
 QVariantList flashcards(const QString &respuesta)
 {
     QVariantList tarjetas;
@@ -584,6 +733,11 @@ QVariantList flashcards(const QString &respuesta)
         else if (estado == 2) dorso  += linea + QLatin1Char('\n');
     }
     cerrar();
+    // El formato con rotulos es el de las respuestas viejas, que siguen en los
+    // chats guardados. El nuevo no los usa: preguntas y respuestas numeradas a
+    // los dos lados de la linea separadora.
+    if (tarjetas.isEmpty())
+        return tarjetasSinRotulos(respuesta);
     return tarjetas;
 }
 

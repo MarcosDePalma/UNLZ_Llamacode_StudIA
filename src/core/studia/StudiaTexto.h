@@ -81,6 +81,34 @@ QString aHtmlConInterlineado(const QString &texto, bool markdown,
 QString tituloDeRespuesta(const QString &respuesta);
 constexpr int kLargoTitulo = 48;
 
+// ── Consignas con las respuestas plegadas ────────────────────────────────────
+
+// Un par de una autoevaluación o una tanda de flashcards.
+struct ParQR { QString pregunta; QString respuesta; };
+
+// Lee los pares "1. P: … / R: …" de una respuesta.
+//
+// El formato se eligió midiendo contra el modelo real. Pedirle que escriba
+// PRIMERO las diez preguntas y DESPUÉS las diez respuestas, separadas por una
+// línea, le sale mal: es una estructura global, y un 7B pierde el hilo a mitad
+// de camino —intercalaba las respuestas, o cortaba después de las preguntas—.
+// Escribir cada pregunta con su respuesta al lado es un patrón LOCAL que se
+// repite diez veces, y eso sí lo sostiene.
+//
+// Separar las dos mitades es trabajo del sistema, que puede hacerlo siempre
+// bien, no del modelo. Devuelve vacío si no reconoce ningún par.
+QVector<ParQR> paresQR(const QString &respuesta);
+
+// Parte una respuesta en (consigna, respuestas) para poder mostrar primero la
+// consigna y desplegar el resto con un botón.
+//
+// Arma las dos mitades a partir de los pares. Si no los encuentra, prueba con
+// una línea separadora explícita, por si el modelo la escribió igual. Si no
+// hay ninguna de las dos, `respuestas` queda vacío y todo es consigna: la UI
+// no ofrece desplegar nada, que es lo correcto.
+struct ConsignaPartida { QString consigna; QString respuestas; };
+ConsignaPartida partirConsigna(const QString &respuesta);
+
 // ── Flashcards ───────────────────────────────────────────────────────────────
 
 // Extrae las tarjetas de una respuesta del modo Flashcards. Tolerante al

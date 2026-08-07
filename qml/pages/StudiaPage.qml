@@ -31,6 +31,36 @@ Item {
         return id
     }
 
+    // Color con el que se identifica cada modo. Conversación no tiene uno
+    // propio: es el modo normal y usa el acento de la app.
+    //
+    // Devuelve un color y no el texto que llega de C++: hace falta poder leerle
+    // los componentes r/g/b para el tinte, y sobre una cadena darían undefined.
+    // Qt.darker(x, 1.0) es la forma de convertir sin alterar el color.
+    function colorDeModo(id) {
+        const ms = Studia.modos
+        for (let i = 0; i < ms.length; ++i)
+            if (ms[i].id === id && ms[i].color.length > 0)
+                return Qt.darker(ms[i].color, 1.0)
+        return Qt.darker(Theme.accent, 1.0)
+    }
+
+    // Fondo de la burbuja teñido con el color del modo.
+    //
+    // Muy bajo a propósito: quien identifica el modo es la franja de color del
+    // borde izquierdo, y el fondo sólo la acompaña. Con más tinte el color se
+    // vuelve invasivo y le pelea contraste al texto, que es lo que se viene a
+    // leer.
+    readonly property real fuerzaDelTinte: 0.06
+
+    function tinteDeModo(id) {
+        if (!id || id.length === 0 || id === "libre")
+            return Theme.chatAsstBubble
+        const c = colorDeModo(id)
+        return Qt.tint(Theme.chatAsstBubble,
+                       Qt.rgba(c.r, c.g, c.b, root.fuerzaDelTinte))
+    }
+
     function enviar() {
         const t = entrada.text.trim()
         if (t.length === 0 || Studia.generando) return
@@ -249,19 +279,31 @@ Item {
                     Repeater {
                         model: Studia.modos
                         delegate: Rectangle {
+                            id: chip
                             height: 26
                             width: txtModo.implicitWidth + 20
                             radius: 13
-                            color: Studia.modo === modelData.id ? Theme.accent : "transparent"
-                            border.color: Studia.modo === modelData.id ? Theme.accent
-                                                                       : Theme.borderColor
+
+                            readonly property bool activo: Studia.modo === modelData.id
+                            // Conversación no lleva color propio: es el modo
+                            // normal y usa el acento de la app.
+                            readonly property color colorModo:
+                                modelData.color.length > 0 ? modelData.color : Theme.accent
+
+                            color: activo ? colorModo : "transparent"
+                            // Apagado, el color se insinúa en el borde: se
+                            // reconoce el modo sin llenar la barra de colores.
+                            border.color: activo ? colorModo
+                                                 : (areaModo.containsMouse ? colorModo
+                                                                           : Theme.borderColor)
                             Text {
                                 id: txtModo
                                 anchors.centerIn: parent
                                 text: modelData.etiqueta
-                                font { pixelSize: 11; bold: Studia.modo === modelData.id }
-                                color: Studia.modo === modelData.id ? Theme.btnPrimaryText
-                                                                    : Theme.textSecondary
+                                font { pixelSize: 11; bold: chip.activo }
+                                color: chip.activo ? Theme.btnPrimaryText
+                                                   : (areaModo.containsMouse ? chip.colorModo
+                                                                             : Theme.textSecondary)
                             }
                             ToolTip.visible: areaModo.containsMouse
                             ToolTip.text: modelData.descripcion
@@ -283,8 +325,9 @@ Item {
                     Layout.preferredWidth: txtModoSel.implicitWidth + 34
                     Layout.preferredHeight: 26
                     radius: 13
-                    color: Studia.modo !== "libre" ? Theme.accent : "transparent"
-                    border.color: Studia.modo !== "libre" ? Theme.accent : Theme.borderColor
+                    readonly property color colorModo: root.colorDeModo(Studia.modo)
+                    color: Studia.modo !== "libre" ? colorModo : "transparent"
+                    border.color: Studia.modo !== "libre" ? colorModo : Theme.borderColor
 
                     Row {
                         anchors.centerIn: parent
@@ -779,15 +822,62 @@ Item {
                             spacing: 6
 
                             readonly property bool esUsuario: modelData.rol === "usuario"
+                            // ¿Esta respuesta se está escribiendo ahora mismo?
+                            //
+                            // Mientras llega, el texto se muestra PLANO. Pasarlo
+                            // a HTML cuesta armar un documento entero, y eso se
+                            // repetía con cada pedacito que llegaba: una
+                            // respuesta larga terminaba colgando la ventana (una
+                            // de 7.447 tokens la congeló 97 segundos). El
+                            // formato aparece al terminar, que es cuando se lee.
+                            readonly property bool enVuelo: modelData.escribiendo === true
+
+                            // Autoevaluación y Flashcards llegan en dos partes:
+                            // la consigna y, tras una línea separadora, sus
+                            // respuestas. Mientras se genera NO se muestra nada
+                            // —si no, las respuestas pasarían por pantalla— y al
+                            // terminar se ve sólo la consigna hasta que el
+                            // estudiante despliega el resto.
+                            readonly property bool plegable:
+                                !esUsuario && Studia.modoOcultaRespuestas(
+                                    modelData.modo !== undefined ? modelData.modo : "")
+                            readonly property bool tapado: plegable && enVuelo
+                            readonly property bool desplegado:
+                                modelData.respuestasVisibles === true
+                            readonly property var bloquesRespuestas:
+                                modelData.bloquesRespuestas !== undefined
+                                ? modelData.bloquesRespuestas : []
+                            readonly property bool hayQueDesplegar:
+                                plegable && !enVuelo && !desplegado
+                                && bloquesRespuestas.length > 0
+
                             // Texto plano para copiar; bloques para render.
                             property string textoPlano: modelData.contenido
                             property var bloques: modelData.bloques !== undefined
                                                   ? modelData.bloques : []
+                            // Lo que se dibuja: la consigna sola, o todo.
+                            readonly property var bloquesAlaVista:
+                                desplegado ? bloques.concat(bloquesRespuestas) : bloques
+                            // Copiar da lo que se ve: si las respuestas están
+                            // plegadas, no se las lleva el portapapeles.
+                            readonly property string textoParaCopiar:
+                                (plegable && !desplegado
+                                 && modelData.consigna !== undefined
+                                 && modelData.consigna.length > 0)
+                                ? modelData.consigna : textoPlano
                             // Cuántas flashcards exportables trae la respuesta.
-                            // Se recalcula sólo al cambiar el texto, no en cada
-                            // repintado (es una llamada a C++).
-                            property int tarjetas: esUsuario ? 0
-                                                             : Studia.contarFlashcards(textoPlano)
+                            // Como el HTML, se calcula recién al terminar: es
+                            // una llamada a C++ que recorre todo el texto.
+                            // Sólo hay tarjetas que exportar cuando los dorsos
+                            // están a la vista: exportar a Anki lo que todavía
+                            // está plegado sería dar las respuestas por otra
+                            // puerta.
+                            property int tarjetas:
+                                (esUsuario || enVuelo || (plegable && !desplegado))
+                                ? 0
+                                : Studia.contarFlashcards(
+                                      textoPlano,
+                                      modelData.modo !== undefined ? modelData.modo : "")
                             function actualizarTexto(t, bs) {
                                 textoPlano = t
                                 bloques = bs
@@ -804,8 +894,10 @@ Item {
                                     visible: modelData.modo !== undefined
                                              && modelData.modo.length > 0
                                              && modelData.modo !== "libre"
-                                    text: "· " + modelData.modo
-                                    color: Theme.accent
+                                    // La etiqueta del modo, no su id interno:
+                                    // dice "Ejercitación", no "ejercitacion".
+                                    text: "· " + root.etiquetaModo(modelData.modo)
+                                    color: root.colorDeModo(modelData.modo)
                                     font { pixelSize: 9; bold: true }
                                 }
                             }
@@ -814,7 +906,30 @@ Item {
                                 width: parent.width
                                 height: contenidoCol.implicitHeight + 28
                                 radius: 8
-                                color: burbuja.esUsuario ? Theme.chatUserBubble : Theme.chatAsstBubble
+                                // Las respuestas de un modo especial llevan un
+                                // tinte del color de ese modo: se reconoce de
+                                // qué es cada burbuja al pasar la vista, sin
+                                // tener que leer la etiqueta de arriba.
+                                color: burbuja.esUsuario
+                                       ? Theme.chatUserBubble
+                                       : root.tinteDeModo(modelData.modo)
+
+                                // Franja del color del modo sobre el borde
+                                // izquierdo. Es lo que da la identidad fuerte;
+                                // el tinte del fondo queda de apoyo, tenue, para
+                                // no pelearle contraste al texto.
+                                Rectangle {
+                                    visible: !burbuja.esUsuario
+                                             && modelData.modo !== undefined
+                                             && modelData.modo.length > 0
+                                             && modelData.modo !== "libre"
+                                    width: 3
+                                    height: parent.height - 16
+                                    radius: 2
+                                    anchors { left: parent.left; leftMargin: 4
+                                              verticalCenter: parent.verticalCenter }
+                                    color: root.colorDeModo(modelData.modo)
+                                }
 
                                 Column {
                                     id: contenidoCol
@@ -833,6 +948,7 @@ Item {
                                     TextEdit {
                                         width: parent.width
                                         visible: burbuja.esUsuario
+                                                 || burbuja.tapado
                                                  || burbuja.bloques.length === 0
                                         readOnly: true
                                         selectByMouse: true
@@ -841,10 +957,20 @@ Item {
                                         // antes de poder copiarla.
                                         persistentSelection: true
                                         text: {
-                                            if (burbuja.textoPlano.length > 0)
-                                                return Studia.htmlDe(burbuja.textoPlano, false)
-                                            return modelData.escribiendo
-                                                   ? "⏳ Buscando en la documentación…" : ""
+                                            // Consigna con respuestas plegadas:
+                                            // no se muestra nada hasta terminar,
+                                            // o las soluciones desfilarían por
+                                            // pantalla mientras se escriben.
+                                            if (burbuja.tapado)
+                                                return "⏳ Preparándola… se muestra al terminar."
+                                            if (burbuja.textoPlano.length === 0)
+                                                return modelData.escribiendo
+                                                       ? "⏳ Buscando en la documentación…" : ""
+                                            // Mientras llega, tal cual: sin
+                                            // convertir a HTML en cada pedazo.
+                                            return burbuja.enVuelo
+                                                   ? burbuja.textoPlano
+                                                   : Studia.htmlDe(burbuja.textoPlano, false)
                                         }
                                         color: burbuja.esUsuario ? Theme.chatUserText
                                                                  : Theme.chatAsstText
@@ -852,13 +978,15 @@ Item {
                                         selectedTextColor: Theme.btnPrimaryText
                                         font.pixelSize: 16
                                         wrapMode: TextEdit.Wrap
-                                        textFormat: TextEdit.RichText
+                                        textFormat: burbuja.enVuelo ? TextEdit.PlainText
+                                                                    : TextEdit.RichText
                                     }
 
                                     // Respuesta de StudIA: texto Markdown y ecuaciones
                                     // en su propio renglón, centradas y más grandes.
                                     Repeater {
-                                        model: burbuja.esUsuario ? [] : burbuja.bloques
+                                        model: (burbuja.esUsuario || burbuja.tapado)
+                                               ? [] : burbuja.bloquesAlaVista
                                         delegate: Loader {
                                             width: contenidoCol.width
                                             sourceComponent: {
@@ -943,13 +1071,20 @@ Item {
                                                     readOnly: true
                                                     selectByMouse: true
                                                     persistentSelection: true
-                                                    text: Studia.htmlDe(modelData.contenido, true)
+                                                    // Plano mientras llega; el
+                                                    // Markdown se convierte una
+                                                    // sola vez, al terminar.
+                                                    text: burbuja.enVuelo
+                                                          ? modelData.contenido
+                                                          : Studia.htmlDe(modelData.contenido, true)
                                                     color: Theme.chatAsstText
                                                     selectionColor: Theme.accent
                                                     selectedTextColor: Theme.btnPrimaryText
                                                     font.pixelSize: 16
                                                     wrapMode: TextEdit.Wrap
-                                                    textFormat: TextEdit.RichText
+                                                    textFormat: burbuja.enVuelo
+                                                                ? TextEdit.PlainText
+                                                                : TextEdit.RichText
                                                 }
                                             }
                                             Component {
@@ -989,7 +1124,7 @@ Item {
                             // del área y desaparecían.
                             Row {
                                 spacing: 14
-                                visible: burbuja.textoPlano.length > 0
+                                visible: burbuja.textoPlano.length > 0 && !burbuja.tapado
 
                                 Text {
                                     text: "⧉ Copiar"
@@ -1001,9 +1136,28 @@ Item {
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            App.copyToClipboard(burbuja.textoPlano)
+                                            App.copyToClipboard(burbuja.textoParaCopiar)
                                             aviso.mostrarOk("Copiado al portapapeles.")
                                         }
+                                    }
+                                }
+
+                                // Las respuestas ya vinieron con la consigna:
+                                // este botón sólo las despliega. No vuelve a
+                                // consultar al modelo, así que es instantáneo y
+                                // no puede fallar ni contestar otra cosa.
+                                Text {
+                                    visible: burbuja.hayQueDesplegar
+                                    text: "▾ Mostrar respuestas"
+                                    color: areaResp.containsMouse
+                                           ? root.colorDeModo(modelData.modo) : Theme.textDim
+                                    font.pixelSize: 11
+                                    MouseArea {
+                                        id: areaResp
+                                        anchors { fill: parent; margins: -6 }
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: Studia.revelarRespuestas(index)
                                     }
                                 }
 

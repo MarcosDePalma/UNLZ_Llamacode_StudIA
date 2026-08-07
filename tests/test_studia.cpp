@@ -823,6 +823,7 @@ private slots:
         QVERIFY(ids.contains(QStringLiteral("explicacion")));
         QVERIFY(ids.contains(QStringLiteral("autoevaluacion")));
         QVERIFY(ids.contains(QStringLiteral("flashcards")));
+        QVERIFY(ids.contains(QStringLiteral("ejercitacion")));
         QVERIFY(ids.contains(QStringLiteral("plan")));
         // Todos menos "libre" aportan una consigna al prompt.
         for (const StudiaPrompt::Modo &m : StudiaPrompt::modos()) {
@@ -1639,7 +1640,7 @@ private slots:
     {
         QVERIFY(!StudiaPrompt::modoPorId(QStringLiteral("libre")).exigente);
         QVERIFY(!StudiaPrompt::modoPorId(QStringLiteral("explicacion")).exigente);
-        QVERIFY(!StudiaPrompt::modoPorId(QStringLiteral("ejercicio")).exigente);
+        QVERIFY(!StudiaPrompt::modoPorId(QStringLiteral("ejercitacion")).exigente);
         QVERIFY(StudiaPrompt::modoPorId(QStringLiteral("flashcards")).exigente);
         QVERIFY(StudiaPrompt::modoPorId(QStringLiteral("autoevaluacion")).exigente);
         QVERIFY(StudiaPrompt::modoPorId(QStringLiteral("resumen")).exigente);
@@ -1688,17 +1689,553 @@ private slots:
         QVERIFY(p.contains(QStringLiteral("No cites")));
     }
 
-    // ── Modo Ejercicio ──
+    // ── Modo Ejercitación ──
 
-    void modos_incluyeEjercicio()
+    void modos_incluyeEjercitacion()
     {
-        const StudiaPrompt::Modo m = StudiaPrompt::modoPorId(QStringLiteral("ejercicio"));
-        QCOMPARE(m.id, QStringLiteral("ejercicio"));
+        const StudiaPrompt::Modo m = StudiaPrompt::modoPorId(QStringLiteral("ejercitacion"));
+        QCOMPARE(m.id, QStringLiteral("ejercitacion"));
+        QCOMPARE(m.etiqueta, QStringLiteral("Ejercitación"));
         QVERIFY(!m.instruccion.isEmpty());
         const QString s = StudiaPrompt::sistema(QStringLiteral("Física 1"),
-                                                QStringLiteral("ejercicio"));
-        QVERIFY(s.contains(QStringLiteral("MODO EJERCICIO")));
+                                                QStringLiteral("ejercitacion"));
+        QVERIFY(s.contains(QStringLiteral("MODO EJERCITACIÓN")));
         QVERIFY(s.contains(QStringLiteral("Desarrollo")));
+    }
+
+    void modos_elNombreViejoSigueLlegandoAlMismoModo()
+    {
+        // Hay chats guardados con modo "ejercicio": sin el alias quedarían sin
+        // etiqueta ni color al reabrirlos.
+        QCOMPARE(StudiaPrompt::modoPorId(QStringLiteral("ejercicio")).id,
+                 QStringLiteral("ejercitacion"));
+        QString id, texto;
+        StudiaPrompt::separarModo(QStringLiteral("/ejercicio/ una viga"), &id, &texto);
+        QCOMPARE(id, QStringLiteral("ejercitacion"));
+        QCOMPARE(texto, QStringLiteral("una viga"));
+        // Y el que se escribe con tilde también.
+        StudiaPrompt::separarModo(QStringLiteral("/Ejercitación/ otra"), &id, &texto);
+        QCOMPARE(id, QStringLiteral("ejercitacion"));
+    }
+
+    // ── Personalidad de cada modo ──
+
+    void modos_cadaUnoTieneSuColorMenosConversacion()
+    {
+        const QHash<QString, QString> esperado = {
+            {QStringLiteral("resumen"),        QStringLiteral("#3B82F6")},
+            {QStringLiteral("explicacion"),    QStringLiteral("#EAB308")},
+            {QStringLiteral("autoevaluacion"), QStringLiteral("#8B5CF6")},
+            {QStringLiteral("flashcards"),     QStringLiteral("#F97316")},
+            {QStringLiteral("ejercitacion"),   QStringLiteral("#EF4444")},
+            {QStringLiteral("plan"),           QStringLiteral("#22C55E")},
+        };
+        for (auto it = esperado.cbegin(); it != esperado.cend(); ++it)
+            QCOMPARE(StudiaPrompt::modoPorId(it.key()).color, it.value());
+        // Conversación es el modo normal: usa el color estándar de la app.
+        QVERIFY(StudiaPrompt::modoPorId(StudiaPrompt::idModoLibre()).color.isEmpty());
+    }
+
+    void modos_elColorLlegaAQml()
+    {
+        bool halloResumen = false;
+        for (const QVariant &v : StudiaPrompt::modosParaQml()) {
+            const QVariantMap m = v.toMap();
+            QVERIFY(m.contains(QStringLiteral("color")));
+            QVERIFY(m.contains(QStringLiteral("ocultaRespuestas")));
+            if (m.value(QStringLiteral("id")).toString() == QLatin1String("resumen")) {
+                halloResumen = true;
+                QCOMPARE(m.value(QStringLiteral("color")).toString(),
+                         QStringLiteral("#3B82F6"));
+            }
+        }
+        QVERIFY(halloResumen);
+    }
+
+    void modos_soloAutoevaluacionYFlashcardsOcultanRespuestas()
+    {
+        QVERIFY(StudiaPrompt::modoPorId(QStringLiteral("autoevaluacion")).ocultaRespuestas);
+        QVERIFY(StudiaPrompt::modoPorId(QStringLiteral("flashcards")).ocultaRespuestas);
+        for (const QString &id : {QStringLiteral("libre"), QStringLiteral("resumen"),
+                                  QStringLiteral("explicacion"),
+                                  QStringLiteral("ejercitacion"), QStringLiteral("plan")})
+            QVERIFY2(!StudiaPrompt::modoPorId(id).ocultaRespuestas, qPrintable(id));
+    }
+
+    void modos_losQueOcultanRespuestasPidenParesPreguntaRespuesta()
+    {
+        // Lo que sostiene el plegado: que el modelo escriba cada pregunta con
+        // su respuesta. De ahí el sistema arma las dos mitades.
+        for (const QString &id : {QStringLiteral("autoevaluacion"),
+                                  QStringLiteral("flashcards")}) {
+            const StudiaPrompt::Modo m = StudiaPrompt::modoPorId(id);
+            QVERIFY2(m.ocultaRespuestas, qPrintable(id));
+            const QString f = StudiaPrompt::recordatorioDeFormato(id);
+            QVERIFY2(f.contains(QStringLiteral("P: ")), qPrintable(id));
+            QVERIFY2(f.contains(QStringLiteral("R: ")), qPrintable(id));
+        }
+        // Y los demás modos no llevan recordatorio: no tienen formato estricto.
+        for (const QString &id : {QStringLiteral("libre"), QStringLiteral("resumen"),
+                                  QStringLiteral("explicacion"),
+                                  QStringLiteral("ejercitacion")})
+            QVERIFY2(StudiaPrompt::recordatorioDeFormato(id).isEmpty(), qPrintable(id));
+    }
+
+    void modos_elSeparadorEsInconfundible()
+    {
+        const QString s = StudiaPrompt::separadorRespuestas();
+        QVERIFY(s.contains(QStringLiteral("RESPUESTAS")));
+        // Más largo que el "---" con el que se separan las flashcards.
+        QVERIFY(s.count(QLatin1Char('-')) >= 5);
+    }
+
+    void modos_elResumenNoSeParezcaAUnaConversacion()
+    {
+        // Se veía casi igual a la respuesta del modo Conversación. Lo que lo
+        // distingue es la forma: prosa condensada, no una ficha con títulos.
+        const QString s = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                QStringLiteral("resumen"));
+        QVERIFY(s.contains(QStringLiteral("PROSA CORRIDA")));
+        QVERIFY(s.contains(QStringLiteral("Nada de títulos")));
+        // Y deja claro que no está contestando la pregunta, sino condensando.
+        QVERIFY(s.contains(QStringLiteral("no estás")));
+    }
+
+    void modos_autoevaluacionNoPreguntaLoQueNoSabeResponder()
+    {
+        const QString s = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                QStringLiteral("autoevaluacion"));
+        QVERIFY(s.contains(QStringLiteral("No preguntes nada que no puedas responder")));
+    }
+
+    void modos_flashcardsSonMasCortasQueLaAutoevaluacion()
+    {
+        // Es la diferencia entre repasar y estudiar: flashcards pone un tope
+        // de palabras, autoevaluación pide explicar y justificar.
+        QVERIFY(StudiaPrompt::recordatorioDeFormato(QStringLiteral("flashcards"))
+                    .contains(QStringLiteral("20 palabras")));
+        const QString a = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                QStringLiteral("autoevaluacion"));
+        QVERIFY(a.contains(QStringLiteral("explicar, aplicar o justificar")));
+    }
+
+    void zz_volcarPromptsParaProbarContraElModelo()
+    {
+        // Escribe los prompts de sistema tal como los recibe el modelo, para
+        // poder mandarlos al servidor real y ver qué devuelve de verdad. Los
+        // tests de texto verifican que la instrucción esté; sólo el modelo
+        // dice si la obedece.
+        const QString dir = QDir::tempPath() + QStringLiteral("/studia_prompts");
+        QDir().mkpath(dir);
+        struct Caso { QString archivo; QString modo; bool planConDatos; };
+        const QVector<Caso> casos = {
+            {QStringLiteral("autoevaluacion"), QStringLiteral("autoevaluacion"), false},
+            {QStringLiteral("flashcards"),     QStringLiteral("flashcards"),     false},
+            {QStringLiteral("plan1"),          QStringLiteral("plan"),           false},
+            {QStringLiteral("plan2"),          QStringLiteral("plan"),           true},
+        };
+        for (const Caso &c : casos) {
+            QFile f(dir + QStringLiteral("/") + c.archivo + QStringLiteral(".txt"));
+            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                f.write(StudiaPrompt::sistema(QStringLiteral("Redes de Comunicación "
+                                                             "Industriales"),
+                                              c.modo, c.planConDatos).toUtf8());
+            }
+            // El recordatorio de formato va aparte: lo agrega el mensaje de
+            // usuario, después de los fragmentos.
+            QFile g(dir + QStringLiteral("/") + c.archivo
+                    + QStringLiteral("_formato.txt"));
+            if (g.open(QIODevice::WriteOnly | QIODevice::Truncate))
+                g.write(StudiaPrompt::recordatorioDeFormato(c.modo,
+                                                            c.planConDatos).toUtf8());
+        }
+    }
+
+    void modos_cadaConsignaTieneSuPropiaPersonalidad()
+    {
+        // Dos modos no pueden dar la misma instrucción: si coincidieran, la
+        // diferencia entre ellos sería sólo el nombre del botón.
+        QSet<QString> vistas;
+        for (const StudiaPrompt::Modo &m : StudiaPrompt::modos()) {
+            if (m.id == StudiaPrompt::idModoLibre()) continue;
+            QVERIFY2(!vistas.contains(m.instruccion), qPrintable(m.id));
+            vistas.insert(m.instruccion);
+            // Y cada una se presenta diciendo qué modo es: es la primera línea
+            // que lee el modelo y lo que lo saca de la conversación genérica.
+            QVERIFY2(m.instruccion.startsWith(QStringLiteral("MODO ")),
+                     qPrintable(m.id));
+        }
+    }
+
+    // Conversación con una respuesta previa de contenido suficiente: hace falta
+    // que supere el umbral de puedeResponderDesdeConversacion().
+    static QVector<StudiaPrompt::Turno> historialConRespuesta()
+    {
+        return {
+            {QStringLiteral("usuario"), QStringLiteral("/autoevaluacion/ integrales")},
+            {QStringLiteral("asistente"),
+             QStringLiteral("1. ¿Qué es una integral definida y qué representa "
+                            "geométricamente?\n2. Calculá la integral de x dx "
+                            "entre 0 y 2.")},
+        };
+    }
+
+    // ── Abstenerse o apoyarse en lo ya dicho ──
+    //
+    // El fallo real: generaba 5 preguntas de autoevaluación y al pedirle las
+    // respuestas contestaba que no tenía información sobre el tema. No puede
+    // abstenerse de contestar preguntas que escribió él mismo.
+
+    void conversacion_unaRepreguntaEnModoExigenteSeApoyaEnLoAnterior()
+    {
+        // "¿y por qué?" no aporta términos propios: es dependiente. Buscar en
+        // el índice algo que la pregunta ni nombra, y abstenerse porque no
+        // aparece, sería absurdo.
+        QVERIFY(StudiaPrompt::respondeDesdeLaConversacion(
+                    true, StudiaPrompt::Encuadre::Dependiente,
+                    historialConRespuesta()));
+    }
+
+    void conversacion_unaPreguntaAjenaEnModoExigenteSeAbstiene()
+    {
+        // Acá sí corresponde abstenerse: cambia a un tema que el corpus no
+        // cubre, y contestarlo con lo que se venía hablando sería inventar.
+        QVERIFY(!StudiaPrompt::respondeDesdeLaConversacion(
+                    true, StudiaPrompt::Encuadre::Ajena,
+                    historialConRespuesta()));
+    }
+
+    void conversacion_unaRespuestaPreviaMuyCortaNoAlcanza()
+    {
+        // Una respuesta de dos palabras no es material del que apoyarse: hace
+        // falta que la conversación previa tenga contenido real.
+        const QVector<StudiaPrompt::Turno> h = {
+            {QStringLiteral("usuario"),   QStringLiteral("integrales")},
+            {QStringLiteral("asistente"), QStringLiteral("Sí, claro.")},
+        };
+        QVERIFY(!StudiaPrompt::puedeResponderDesdeConversacion(h));
+        QVERIFY(!StudiaPrompt::respondeDesdeLaConversacion(
+                    false, StudiaPrompt::Encuadre::Dependiente, h));
+    }
+
+    void conversacion_sinRespuestaPreviaNoHayDeDondeSacarNada()
+    {
+        const QVector<StudiaPrompt::Turno> vacio;
+        const QVector<StudiaPrompt::Turno> soloPreguntas = {
+            {QStringLiteral("usuario"), QStringLiteral("integrales")},
+        };
+        QVERIFY(!StudiaPrompt::respondeDesdeLaConversacion(
+                    true, StudiaPrompt::Encuadre::Dependiente, vacio));
+        QVERIFY(!StudiaPrompt::respondeDesdeLaConversacion(
+                    false, StudiaPrompt::Encuadre::Dependiente, soloPreguntas));
+    }
+
+    void conversacion_elModoFlexibleSiempreIntenta()
+    {
+        QVERIFY(StudiaPrompt::respondeDesdeLaConversacion(
+                    false, StudiaPrompt::Encuadre::Ajena,
+                    historialConRespuesta()));
+    }
+
+    // ── La consigna se entrega sin resolver: lo garantiza el sistema ──
+
+    void consigna_partePorLosParesPreguntaRespuesta()
+    {
+        // El formato que el modelo sostiene de verdad: cada pregunta con su
+        // respuesta al lado. Partirlas en dos mitades es trabajo del sistema.
+        const QString r = QStringLiteral(
+            "1. P: ¿Qué establece el criterio de Routh?\n"
+            "   R: Que la primera columna no cambie de signo. [1]\n"
+            "2. P: ¿Cuántos cambios de signo admite un sistema estable?\n"
+            "   R: Ninguno. [2]\n");
+        const StudiaTexto::ConsignaPartida p = StudiaTexto::partirConsigna(r);
+        QVERIFY(p.consigna.contains(QStringLiteral("criterio de Routh")));
+        QVERIFY(!p.consigna.contains(QStringLiteral("primera columna")));
+        QVERIFY(p.respuestas.contains(QStringLiteral("primera columna")));
+        QVERIFY(!p.respuestas.contains(QStringLiteral("¿Qué establece")));
+        // Numeradas de nuevo, para que se lean como una lista limpia.
+        QVERIFY(p.consigna.startsWith(QStringLiteral("1. ")));
+        QVERIFY(p.respuestas.startsWith(QStringLiteral("1. ")));
+    }
+
+    void consigna_toleraLasVariantesDeLosPares()
+    {
+        // Como las escribe el modelo cuando se desvía un poco del ejemplo.
+        const QString r = QStringLiteral(
+            "**1.** Pregunta: ¿Qué es la impedancia?\n"
+            "**Respuesta:** La oposición al paso de corriente.\n"
+            "2) P - ¿En qué se mide?\n"
+            "2) R - En ohmios.\n");
+        const QVector<StudiaTexto::ParQR> pares = StudiaTexto::paresQR(r);
+        QCOMPARE(pares.size(), 2);
+        QCOMPARE(pares.at(0).pregunta, QStringLiteral("¿Qué es la impedancia?"));
+        QCOMPARE(pares.at(1).respuesta, QStringLiteral("En ohmios."));
+    }
+
+    void consigna_unParSinRespuestaSeDescarta()
+    {
+        // Si el modelo cortó a mitad de camino, esa pregunta no se muestra:
+        // desplegar y no encontrar su respuesta es peor que no ofrecerla.
+        const QString r = QStringLiteral(
+            "1. P: Una pregunta\n   R: Su respuesta\n"
+            "2. P: Otra pregunta que quedó sin contestar\n");
+        const QVector<StudiaTexto::ParQR> pares = StudiaTexto::paresQR(r);
+        QCOMPARE(pares.size(), 1);
+    }
+
+    void consigna_laRespuestaLargaSePegaEntera()
+    {
+        const QString r = QStringLiteral(
+            "1. P: ¿Qué es el modelo OSI?\n"
+            "   R: Un modelo de siete capas.\n"
+            "   Cada capa tiene una función propia. [3]\n");
+        const QVector<StudiaTexto::ParQR> pares = StudiaTexto::paresQR(r);
+        QCOMPARE(pares.size(), 1);
+        QVERIFY(pares.first().respuesta.contains(QStringLiteral("siete capas")));
+        QVERIFY(pares.first().respuesta.contains(QStringLiteral("función propia")));
+    }
+
+    void consigna_partePorLaLineaSeparadora()
+    {
+        // Si el modelo escribe la línea en vez de los pares, también sirve.
+        const QString r = QStringLiteral(
+            "1. ¿Qué establece el criterio de Routh?\n"
+            "2. ¿Cuántos cambios de signo admite un sistema estable?\n\n")
+            + StudiaPrompt::separadorRespuestas() + QStringLiteral(
+            "\n\n1. Que la primera columna no cambie de signo.\n2. Ninguno.");
+        const StudiaTexto::ConsignaPartida p = StudiaTexto::partirConsigna(r);
+        QVERIFY(p.consigna.contains(QStringLiteral("criterio de Routh")));
+        QVERIFY(!p.consigna.contains(QStringLiteral("primera columna")));
+        QVERIFY(p.respuestas.contains(QStringLiteral("primera columna")));
+        QVERIFY(!p.respuestas.contains(QStringLiteral("¿Qué establece")));
+    }
+
+    void consigna_toleraVariantesDeLaLinea()
+    {
+        for (const QString &sep : {QStringLiteral("---RESPUESTAS---"),
+                                   QStringLiteral("-------- respuestas --------"),
+                                   QStringLiteral("--------")}) {
+            const QString r = QStringLiteral("1. Una pregunta.\n\n") + sep
+                              + QStringLiteral("\n\n1. Su respuesta.");
+            const StudiaTexto::ConsignaPartida p = StudiaTexto::partirConsigna(r);
+            QVERIFY2(p.respuestas.contains(QStringLiteral("Su respuesta")),
+                     qPrintable(sep));
+            QVERIFY2(!p.consigna.contains(QStringLiteral("Su respuesta")),
+                     qPrintable(sep));
+        }
+    }
+
+    void consigna_elGuionDeLasFlashcardsNoParteNada()
+    {
+        // Las tarjetas se separan entre sí con "---": si eso cortara el
+        // mensaje, la primera tarjeta quedaría sola como consigna.
+        const QString r = QStringLiteral(
+            "**1. Frente**\nPregunta uno.\n\n**Dorso**\nRespuesta uno.\n\n"
+            "---\n\n"
+            "**2. Frente**\nPregunta dos.\n\n**Dorso**\nRespuesta dos.");
+        const StudiaTexto::ConsignaPartida p = StudiaTexto::partirConsigna(r);
+        QVERIFY(p.respuestas.isEmpty());
+        QCOMPARE(p.consigna, r);
+    }
+
+    void consigna_sinSeparadorTodoEsConsigna()
+    {
+        // El modelo se olvidó de la línea: se muestra todo antes que ocultar
+        // media respuesta o inventar dónde cortarla.
+        const QString r = QStringLiteral("1. Una pregunta.\n2. Otra pregunta.");
+        const StudiaTexto::ConsignaPartida p = StudiaTexto::partirConsigna(r);
+        QCOMPARE(p.consigna, r);
+        QVERIFY(p.respuestas.isEmpty());
+    }
+
+    void consigna_unSeparadorSueltoNoParteNada()
+    {
+        // Al principio no deja consigna; al final no deja respuestas. En los
+        // dos casos partir no aporta nada y se devuelve el texto entero.
+        for (const QString &r : {StudiaPrompt::separadorRespuestas()
+                                     + QStringLiteral("\n\n1. Sí.\n2. No."),
+                                 QStringLiteral("1. Una pregunta.\n\n")
+                                     + StudiaPrompt::separadorRespuestas()}) {
+            const StudiaTexto::ConsignaPartida p = StudiaTexto::partirConsigna(r);
+            QVERIFY(p.respuestas.isEmpty());
+            QCOMPARE(p.consigna, r);
+        }
+    }
+
+    // ── Flashcards en el formato nuevo: numeradas, sin Frente/Dorso ──
+
+    void flashcards_emparejaPorNumeroALosDosLadosDeLaLinea()
+    {
+        const QString r = QStringLiteral(
+            "1. ¿Qué es la impedancia?\n"
+            "2. ¿En qué unidad se mide?\n\n")
+            + StudiaPrompt::separadorRespuestas() + QStringLiteral(
+            "\n\n1. La oposición total al paso de corriente alterna.\n"
+            "2. En ohmios (Ω).");
+        const QVariantList t = StudiaTexto::flashcards(r);
+        QCOMPARE(t.size(), 2);
+        QCOMPARE(t.at(0).toMap().value(QStringLiteral("frente")).toString(),
+                 QStringLiteral("¿Qué es la impedancia?"));
+        QCOMPARE(t.at(0).toMap().value(QStringLiteral("dorso")).toString(),
+                 QStringLiteral("La oposición total al paso de corriente alterna."));
+        QCOMPARE(t.at(1).toMap().value(QStringLiteral("dorso")).toString(),
+                 QStringLiteral("En ohmios (Ω)."));
+    }
+
+    void flashcards_siNoCoincidenLasCantidadesNoInventaTarjetas()
+    {
+        // Emparejar 3 preguntas con 2 respuestas dejaría tarjetas con la
+        // respuesta de otra: es peor que no exportar ninguna.
+        const QString r = QStringLiteral("1. Una.\n2. Dos.\n3. Tres.\n\n")
+            + StudiaPrompt::separadorRespuestas()
+            + QStringLiteral("\n\n1. Primera.\n2. Segunda.");
+        QVERIFY(StudiaTexto::flashcards(r).isEmpty());
+    }
+
+    void flashcards_unNumeroDentroDeLaRespuestaNoAbreOtraTarjeta()
+    {
+        const QString r = QStringLiteral("1. ¿Cuándo se publicó?\n\n")
+            + StudiaPrompt::separadorRespuestas()
+            + QStringLiteral("\n\n1. En 1984, y se revisó luego.\n"
+                             "   La versión vigente es de 2020.");
+        const QVariantList t = StudiaTexto::flashcards(r);
+        QCOMPARE(t.size(), 1);
+        QVERIFY(t.first().toMap().value(QStringLiteral("dorso")).toString()
+                    .contains(QStringLiteral("2020")));
+    }
+
+    void flashcards_elFormatoViejoConRotulosSigueAndando()
+    {
+        // Hay chats guardados con "Frente"/"Dorso": no pueden dejar de
+        // exportarse porque cambió el formato nuevo.
+        const QString r = QStringLiteral(
+            "**1. Frente**\n¿Qué es la impedancia?\n\n"
+            "**Dorso**\nLa oposición al paso de corriente. `[1]`\n");
+        const QVariantList t = StudiaTexto::flashcards(r);
+        QCOMPARE(t.size(), 1);
+        QCOMPARE(t.first().toMap().value(QStringLiteral("frente")).toString(),
+                 QStringLiteral("¿Qué es la impedancia?"));
+    }
+
+    void flashcards_seExportanConTabulacion()
+    {
+        const QString r = QStringLiteral("1. Pregunta.\n\n")
+            + StudiaPrompt::separadorRespuestas()
+            + QStringLiteral("\n\n1. Respuesta.");
+        const QString tsv = StudiaTexto::flashcardsATsv(StudiaTexto::flashcards(r));
+        QCOMPARE(tsv, QStringLiteral("Pregunta.\tRespuesta."));
+    }
+
+    void consigna_elFormatoLlegaAlFinalDelMensajeDeUsuario()
+    {
+        // Medido contra el modelo real: en el prompt de sistema lo ignoraba
+        // —queda sepultado entre las reglas generales— y como última línea
+        // antes de generar lo cumple.
+        StudiaFragmento f;
+        f.materia = QStringLiteral("Redes");
+        f.documento = QStringLiteral("apunte.pdf");
+        f.texto = QStringLiteral("El modelo OSI define siete capas.");
+        const QString u = StudiaPrompt::usuario(QStringLiteral("el modelo OSI"),
+                                                {f}, {},
+                                                QStringLiteral("flashcards"));
+        QVERIFY(u.contains(QStringLiteral("Cómo tiene que salir tu respuesta")));
+        // Después de la pregunta, no antes.
+        QVERIFY(u.indexOf(QStringLiteral("Cómo tiene que salir"))
+                > u.indexOf(QStringLiteral("Pregunta del estudiante")));
+        // Y en un modo sin formato estricto no se agrega nada.
+        QVERIFY(!StudiaPrompt::usuario(QStringLiteral("x"), {f}, {},
+                                       QStringLiteral("resumen"))
+                     .contains(QStringLiteral("Cómo tiene que salir")));
+    }
+
+    void modos_elPlanLlevaUnaSolaConsignaPorTurno()
+    {
+        // La causa del desastre anterior: el prompt traía las dos consignas y
+        // le pedía al modelo que dedujera en cuál estaba. Ahora lo decide el
+        // sistema y va una sola.
+        const QString primero = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                      QStringLiteral("plan"), false);
+        QVERIFY(primero.contains(QStringLiteral("Temas que abarca")));
+        QVERIFY(primero.contains(QStringLiteral("Para armártelo necesito saber")));
+        // En el primer turno no aparece nada del plan.
+        QVERIFY(!primero.contains(QStringLiteral("## Sesiones")));
+
+        const QString segundo = StudiaPrompt::sistema(QStringLiteral("X"),
+                                                      QStringLiteral("plan"), true);
+        QVERIFY(segundo.contains(QStringLiteral("ya te pasó")));
+        // Y en el segundo no queda rastro de volver a preguntar.
+        QVERIFY(!segundo.contains(QStringLiteral("Para armártelo necesito saber")));
+        // La estructura del plan va en el recordatorio de formato, que es el
+        // que el modelo cumple.
+        const QString f = StudiaPrompt::recordatorioDeFormato(
+            QStringLiteral("plan"), true);
+        QVERIFY(f.contains(QStringLiteral("## Sesiones")));
+        QVERIFY(!StudiaPrompt::recordatorioDeFormato(QStringLiteral("plan"), false)
+                     .contains(QStringLiteral("## Sesiones")));
+    }
+
+    void modos_elPlanHaceLasCuentasAntesDeLaTabla()
+    {
+        // Sin esto escribía la tabla de memoria: mismas horas para todos los
+        // temas y días que el estudiante no tenía. Obligarlo a poner el total
+        // y el reparto ANTES lo ata a los datos que le dieron.
+        const QString f = StudiaPrompt::recordatorioDeFormato(
+            QStringLiteral("plan"), true);
+        QVERIFY(f.contains(QStringLiteral("Horas totales")));
+        QVERIFY(f.contains(QStringLiteral("## Reparto")));
+        QVERIFY(f.contains(QStringLiteral("suman exactamente")));
+        // Las tres reglas que fallaban en la práctica: días de más, todos los
+        // temas con las mismas horas, y la tabla ignorando su propio reparto.
+        QVERIFY(f.contains(QStringLiteral("exactamente 3 filas")));
+        QVERIFY(f.contains(QStringLiteral("DOBLE de horas")));
+        QVERIFY(f.contains(QStringLiteral("UNA FILA POR DÍA")));
+        QVERIFY(f.contains(QStringLiteral("EN «QUÉ ESTUDIAR» SE VE EL REPARTO")));
+        // Y el reparto va antes que la tabla, no después.
+        QVERIFY(f.indexOf(QStringLiteral("## Reparto"))
+                < f.indexOf(QStringLiteral("## Sesiones")));
+    }
+
+    void modos_elTurnoDelPlanNoAfectaALosDemas()
+    {
+        // El parámetro es sólo del Plan: ningún otro modo cambia con él.
+        for (const QString &id : {QStringLiteral("libre"), QStringLiteral("resumen"),
+                                  QStringLiteral("flashcards"),
+                                  QStringLiteral("autoevaluacion")}) {
+            QCOMPARE(StudiaPrompt::sistema(QStringLiteral("X"), id, true),
+                     StudiaPrompt::sistema(QStringLiteral("X"), id, false));
+        }
+    }
+
+    void modos_elFormatoSeMuestraConUnEjemplo()
+    {
+        // Lo que un modelo de 7B sí sigue: ver la forma, no leer reglas.
+        const QString a = StudiaPrompt::recordatorioDeFormato(
+            QStringLiteral("autoevaluacion"));
+        QVERIFY(a.contains(QStringLiteral("1. P: ")));
+        QVERIFY(a.contains(QStringLiteral("…así hasta la 10")));
+
+        const QString f = StudiaPrompt::recordatorioDeFormato(
+            QStringLiteral("flashcards"));
+        QVERIFY(f.contains(QStringLiteral("5. P: ")));
+        QVERIFY(f.contains(QStringLiteral("Cinco pares")));
+        QVERIFY(StudiaPrompt::sistema(QStringLiteral("X"),
+                                      QStringLiteral("flashcards"))
+                    .contains(QStringLiteral("No escribas «Frente» ni «Dorso»")));
+    }
+
+    void modos_lasConsignasEstrictasSonCortas()
+    {
+        // Un prompt largo es lo que rompió estos modos: el de sistema ya trae
+        // reglas, formato e imágenes, y encima iba media página por modo. Si
+        // vuelve a crecer, este test avisa antes que el uso real.
+        for (const QString &id : {QStringLiteral("autoevaluacion"),
+                                  QStringLiteral("flashcards"),
+                                  QStringLiteral("plan")}) {
+            const int n = StudiaPrompt::modoPorId(id).instruccion.size();
+            QVERIFY2(n < 1200, qPrintable(QStringLiteral("%1: %2 caracteres")
+                                              .arg(id).arg(n)));
+        }
+        QVERIFY(StudiaPrompt::instruccionPlanConDatos().size() < 1200);
     }
 
     void prompt_permiteRazonarPeroNoInventarHechos()
@@ -2010,6 +2547,42 @@ private slots:
         c.setMateria(QStringLiteral("Sistemas de Control"));
         c.preguntar(QStringLiteral("criterio de estabilidad de Routh"));
         QVERIFY(c.puedeCrearTema());
+    }
+
+    void controlador_ankiSoloEnFlashcardsNoEnAutoevaluacion()
+    {
+        // Las dos tienen la misma forma: preguntas numeradas, la línea, y
+        // respuestas numeradas. Pero una autoevaluación no son tarjetas de
+        // repaso y ofrecer exportarla a Anki sería un error.
+        StudiaController c;
+        const QString r = QStringLiteral("1. Una pregunta.\n2. Otra pregunta.\n\n")
+            + StudiaPrompt::separadorRespuestas()
+            + QStringLiteral("\n\n1. Una respuesta.\n2. Otra respuesta.");
+        QCOMPARE(c.contarFlashcards(r, QStringLiteral("flashcards")), 2);
+        QCOMPARE(c.contarFlashcards(r, QStringLiteral("autoevaluacion")), 0);
+        QCOMPARE(c.contarFlashcards(r, QStringLiteral("resumen")), 0);
+        // Sin modo (mensajes viejos) se cuenta igual: no se pierde nada.
+        QCOMPARE(c.contarFlashcards(r), 2);
+    }
+
+    void controlador_revelarRespuestasNoMandaNadaAlModelo()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        QVERIFY(c.modoOcultaRespuestas(QStringLiteral("autoevaluacion")));
+        QVERIFY(c.modoOcultaRespuestas(QStringLiteral("flashcards")));
+        QVERIFY(!c.modoOcultaRespuestas(QStringLiteral("resumen")));
+
+        c.preguntar(QStringLiteral("/autoevaluacion/ criterio de estabilidad de Routh"));
+        const int antes = c.mensajes().size();
+        // Desplegar es un cambio de vista: no agrega mensajes ni consulta al
+        // modelo. Un índice inválido tampoco puede romper nada.
+        c.revelarRespuestas(antes - 1);
+        c.revelarRespuestas(-1);
+        c.revelarRespuestas(9999);
+        QCOMPARE(c.mensajes().size(), antes);
+        c.detener();
     }
 
     void controlador_siSeAbstieneElTemaSigueSinNombre()

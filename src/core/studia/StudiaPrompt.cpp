@@ -1,5 +1,6 @@
 #include "StudiaPrompt.h"
 
+#include <QHash>
 #include <QRegularExpression>
 #include <QSet>
 #include <QVariantMap>
@@ -81,92 +82,126 @@ QVector<Modo> modos()
     static const QVector<Modo> v = {
         // Flexibles: conversar y entender. Exigentes: producir material de
         // estudio que se va a usar como si fuera fiel al apunte.
+        // El modo libre no lleva color: es la conversación normal y usa el
+        // color estándar de la app. Los colores distinguen a los OTROS.
         {QStringLiteral("libre"), QStringLiteral("Conversación"),
          QStringLiteral("Preguntas y respuestas sobre el material."),
-         QString(), false},
+         QString(), QString(), false, false},
 
         {QStringLiteral("resumen"), QStringLiteral("Resumen"),
          QStringLiteral("Condensa el tema en sus ideas principales."),
          QStringLiteral(
-             "MODO RESUMEN. Entregá un resumen del tema pedido, con esta estructura:\n"
-             "1. Un párrafo de apertura con la idea central en no más de 3 líneas.\n"
-             "2. `## Puntos clave` con 4 a 8 viñetas, cada una autocontenida.\n"
-             "3. `## Definiciones` con los términos técnicos que aparecen y su "
-             "significado en una línea.\n"
-             "4. `## Para tener en cuenta` con lo que suele confundirse o "
-             "preguntarse en un examen, sólo si la documentación lo respalda.\n"
-             "No agregues nada que no esté en los fragmentos."), true},
+             "MODO RESUMEN. El estudiante ya leyó —o va a leer— un material "
+             "largo y quiere quedarse con lo que importa. No le expliques: "
+             "condensá.\n\n"
+             "ESCRIBÍ EN PROSA CORRIDA, en 2 a 4 párrafos densos. Nada de "
+             "títulos, subtítulos ni viñetas: un resumen partido en secciones "
+             "con encabezados es una ficha, no un resumen, y se lee peor. Los "
+             "párrafos se encadenan: cada uno retoma el anterior.\n\n"
+             "La única excepción son las FÓRMULAS, que van en su propio renglón "
+             "con el significado de cada símbolo al lado.\n\n"
+             "Conservá sí o sí: definiciones, fórmulas, clasificaciones "
+             "completas y las relaciones entre conceptos (qué depende de qué, "
+             "qué se opone a qué, qué es un caso particular de qué). Sacá: "
+             "ejemplos, rodeos, repeticiones y todo lo accesorio.\n\n"
+             "Ojo con la diferencia: si te preguntan algo puntual, no estás "
+             "respondiendo esa pregunta — estás condensando TODO el material "
+             "sobre ese tema. Y resumir es elegir, no agregar: no expliques con "
+             "palabras tuyas lo que el material no dice ni saques conclusiones "
+             "propias. Si un tema aparece incompleto, resumí lo que hay y aclaralo "
+             "en una frase al final."),
+         QStringLiteral("#3B82F6"), true, false},
 
         {QStringLiteral("explicacion"), QStringLiteral("Explicación"),
          QStringLiteral("Desarrolla el concepto de menor a mayor dificultad."),
          QStringLiteral(
-             "MODO EXPLICACIÓN. Explicá el tema de forma progresiva:\n"
-             "1. `## La idea en una frase` — la intuición, sin tecnicismos.\n"
-             "2. `## Cómo funciona` — el desarrollo técnico, paso a paso, "
-             "introduciendo cada término la primera vez que aparece.\n"
-             "3. `## Un ejemplo` — un caso concreto tomado de la documentación. "
-             "Si los fragmentos no traen ninguno, decilo en vez de inventarlo.\n"
-             "4. `## Errores frecuentes` — confusiones habituales, sólo si la "
-             "documentación las menciona.\n"
-             "Asumí que el estudiante ve el tema por primera vez."), false},
+             "MODO EXPLICACIÓN. El estudiante no entendió algo y necesita que "
+             "se lo expliquen. Sos paciente y vas de menor a mayor: nunca "
+             "arrancás por lo técnico.\n\n"
+             "1. `## La idea` — la intuición en lenguaje cotidiano, sin una sola "
+             "fórmula ni tecnicismo. Si sirve una analogía, usala y aclarala "
+             "como analogía.\n"
+             "2. `## Cómo funciona` — recién acá el desarrollo técnico, paso a "
+             "paso, introduciendo cada término la primera vez que aparece.\n"
+             "3. `## Un ejemplo` — un caso concreto y numérico si se puede, "
+             "tomado de la documentación. Si los fragmentos no traen ninguno, "
+             "decilo en vez de inventarlo.\n"
+             "4. `## Con qué se conecta` — dónde encaja esto: qué concepto "
+             "anterior hace falta, para qué se usa después, con qué suele "
+             "confundirse.\n\n"
+             "Ajustate a lo que muestra el estudiante: si su pregunta es básica "
+             "empezá de cero; si ya maneja el tema, no le repitas lo obvio. Si "
+             "vuelve a preguntar sobre lo mismo, no repitas la explicación con "
+             "otras palabras: cambiá el enfoque o el ejemplo."),
+         QStringLiteral("#EAB308"), false, false},
 
         {QStringLiteral("autoevaluacion"), QStringLiteral("Autoevaluación"),
-         QStringLiteral("Arma preguntas de examen con su solución."),
+         QStringLiteral("Te toma examen para ver qué sabés de verdad."),
          QStringLiteral(
-             "MODO AUTOEVALUACIÓN. Generá una autoevaluación sobre el tema:\n"
-             "- 5 preguntas, de menor a mayor dificultad, numeradas.\n"
-             "- Mezclá tipos: conceptuales, de aplicación y de cálculo (si la "
-             "documentación trae fórmulas o datos para calcular).\n"
-             "- Después de las 5 preguntas, `## Respuestas`, con la solución de "
-             "cada una y la cita `[n]` del fragmento que la respalda.\n"
-             "Cada pregunta debe poder responderse SÓLO con los fragmentos dados. "
-             "Si no alcanza para 5, hacé menos y aclaralo."), true},
+             "MODO AUTOEVALUACIÓN. Le tomás examen al estudiante para que "
+             "descubra qué no sabe. Diez preguntas con su respuesta, en pares "
+             "«P:» y «R:».\n"
+             "Que pidan explicar, aplicar o justificar; no repetir "
+             "definiciones. De la más fácil a la más difícil.\n"
+             "No preguntes nada que no puedas responder con los fragmentos."),
+         QStringLiteral("#8B5CF6"), true, true},
 
         {QStringLiteral("flashcards"), QStringLiteral("Flashcards"),
-         QStringLiteral("Tarjetas de repaso con frente y dorso."),
+         QStringLiteral("Tarjetas de repaso para memorizar."),
          QStringLiteral(
-             "MODO FLASHCARDS. Generá tarjetas de estudio sobre el tema.\n"
-             "Formato EXACTO, una tarjeta por bloque, sin texto adicional entre "
-             "ellas:\n\n"
-             "**1. Frente**\n"
-             "La pregunta o el término, en una línea.\n\n"
-             "**Dorso**\n"
-             "La respuesta, en 1 a 3 líneas, autocontenida. `[n]`\n\n"
-             "---\n\n"
-             "Reglas: entre 6 y 12 tarjetas; una sola idea por tarjeta; el dorso "
-             "tiene que entenderse sin haber leído las otras. Nada que no esté en "
-             "los fragmentos."), true},
+             "MODO FLASHCARDS. Tarjetas para repasar un tema ya visto: cinco "
+             "pares «P:» y «R:», cortos, que se leen de un vistazo.\n"
+             "Preguntá lo que hay que saberse de memoria: definiciones, "
+             "fórmulas, unidades, clasificaciones. Una idea por tarjeta.\n"
+             "No escribas «Frente» ni «Dorso»."),
+         QStringLiteral("#F97316"), true, true},
 
-        {QStringLiteral("ejercicio"), QStringLiteral("Ejercicio"),
-         QStringLiteral("Resuelve un problema paso a paso con el método del apunte."),
+        {QStringLiteral("ejercitacion"), QStringLiteral("Ejercitación"),
+         QStringLiteral("Ejercicios para practicar, de menor a mayor dificultad."),
          QStringLiteral(
-             "MODO EJERCICIO. El estudiante trae un problema para resolver.\n"
+             "MODO EJERCITACIÓN. El estudiante quiere PRACTICAR y aprender a "
+             "resolver, no que le resuelvan. Enseñás el procedimiento, no "
+             "entregás resultados.\n\n"
+             "Si TRAE UN PROBLEMA suyo, resolvelo mostrando el camino:\n"
              "1. `## Datos` — qué se conoce y qué se pide, con unidades.\n"
              "2. `## Método` — qué procedimiento de la documentación aplica y "
-             "por qué, citando `[n]`. La fórmula tiene que salir de los "
-             "fragmentos: si no está, decilo y no la inventes.\n"
+             "por qué, citando `[n]`. La fórmula sale de los fragmentos: si no "
+             "está, decilo y no la inventes.\n"
              "3. `## Desarrollo` — un paso por renglón, mostrando el reemplazo "
-             "de valores antes de operar. Escribí cada resultado intermedio.\n"
+             "de valores antes de operar y cada resultado intermedio.\n"
              "4. `## Resultado` — el valor final con su unidad.\n"
-             "5. `## Verificación` — un chequeo rápido (orden de magnitud, "
-             "coherencia de unidades, caso límite).\n"
-             "Estás aplicando el método a números nuevos: eso es correcto y es lo "
-             "que se te pide. Lo que no podés es inventar la fórmula ni los datos. "
-             "Si hacés una cuenta de la que no estás seguro, marcala como "
-             "'verificar a mano'."), false},
+             "5. `## Verificación` — un chequeo rápido: orden de magnitud, "
+             "coherencia de unidades o caso límite.\n\n"
+             "Si PIDE EJERCICIOS para practicar, armá una serie progresiva:\n"
+             "- `### Básico` — aplicación directa de una fórmula o definición.\n"
+             "- `### Intermedio` — combina dos ideas o exige despejar.\n"
+             "- `### Avanzado` — problema con contexto, donde primero hay que "
+             "decidir qué método usar.\n"
+             "Cada ejercicio con sus datos completos y, debajo, una `Pista:` de "
+             "un renglón que oriente sin resolver. Las soluciones NO van salvo "
+             "que las pida: primero que lo intente.\n\n"
+             "Estás aplicando métodos del apunte a números nuevos: eso es "
+             "correcto y es lo que se te pide. Lo que no podés es inventar la "
+             "fórmula ni los datos. Si hacés una cuenta de la que no estás "
+             "seguro, marcala como 'verificar a mano'."),
+         QStringLiteral("#EF4444"), false, false},
 
         {QStringLiteral("plan"), QStringLiteral("Plan de estudio"),
-         QStringLiteral("Organiza el tema en sesiones de estudio."),
+         QStringLiteral("Organiza qué estudiar, cuándo y en qué orden."),
          QStringLiteral(
-             "MODO PLAN DE ESTUDIO. Armá un plan para preparar el tema:\n"
-             "1. `## Alcance` — qué entra, según lo que hay en la documentación.\n"
-             "2. `## Orden sugerido` — los subtemas en el orden en que conviene "
-             "estudiarlos, justificando por qué uno depende del anterior.\n"
-             "3. `## Sesiones` — una tabla con columnas Sesión | Qué estudiar | "
-             "Material `[n]` | Cómo verificar que lo entendiste.\n"
-             "4. `## Antes del examen` — el repaso final, en 3 o 4 viñetas.\n"
-             "Dimensioná el plan según cuánto material hay; no inventes bibliografía "
-             "que no aparezca en los fragmentos."), true},
+             "MODO PLAN DE ESTUDIO. Todavía no sabés de cuánto tiempo dispone "
+             "el estudiante, así que NO armes ningún plan: sin esos datos "
+             "sería inventado. Copiá esta forma exacta:\n\n"
+             "## Temas que abarca\n"
+             "- (subtema): (qué entra, una línea)\n"
+             "- (subtema): (qué entra, una línea)\n"
+             "…los que salgan del material\n\n"
+             "## Para armártelo necesito saber\n"
+             "- Cuánto te cuesta cada tema de arriba (fácil / normal / difícil)\n"
+             "- Cuántas horas por semana podés dedicarle\n"
+             "- Para qué fecha lo necesitás\n\n"
+             "Nada de sesiones, tablas ni cronogramas todavía."),
+         QStringLiteral("#22C55E"), true, false},
     };
     return v;
 }
@@ -179,15 +214,46 @@ QVariantList modosParaQml()
             {QStringLiteral("id"), m.id},
             {QStringLiteral("etiqueta"), m.etiqueta},
             {QStringLiteral("descripcion"), m.descripcion},
+            {QStringLiteral("color"), m.color},
+            {QStringLiteral("ocultaRespuestas"), m.ocultaRespuestas},
         });
     }
     return out;
 }
 
+QString separadorRespuestas()
+{
+    return QStringLiteral("--------RESPUESTAS--------");
+}
+
+namespace {
+
+// Nombres alternativos que llegan al mismo modo.
+//
+// "ejercicio" era el id anterior de Ejercitación: hay chats guardados con ese
+// valor y no se pueden quedar sin etiqueta ni color. Las variantes con tilde
+// son las que el estudiante escribe a mano en el prefijo /.../.
+QString idCanonico(const QString &id)
+{
+    static const QHash<QString, QString> alias = {
+        {QStringLiteral("ejercicio"),     QStringLiteral("ejercitacion")},
+        {QStringLiteral("ejercicios"),    QStringLiteral("ejercitacion")},
+        {QStringLiteral("ejercitación"),  QStringLiteral("ejercitacion")},
+        {QStringLiteral("explicación"),   QStringLiteral("explicacion")},
+        {QStringLiteral("autoevaluación"),QStringLiteral("autoevaluacion")},
+        {QStringLiteral("resúmen"),       QStringLiteral("resumen")},
+    };
+    const QString k = id.trimmed().toLower();
+    return alias.value(k, k);
+}
+
+}  // namespace
+
 Modo modoPorId(const QString &id)
 {
+    const QString buscado = idCanonico(id);
     for (const Modo &m : modos())
-        if (m.id == id)
+        if (m.id == buscado)
             return m;
     return {};
 }
@@ -205,14 +271,111 @@ void separarModo(const QString &entrada, QString *idModo, QString *texto)
     const QRegularExpressionMatch m = rx.match(entrada);
     if (!m.hasMatch())
         return;
-    const QString id = m.captured(1).toLower();
-    if (modoPorId(id).id.isEmpty())
+    const Modo modo = modoPorId(m.captured(1));
+    if (modo.id.isEmpty())
         return;                       // prefijo desconocido: se trata como texto
-    if (idModo) *idModo = id;
+    // Se devuelve el id canónico: /ejercicio/ y /ejercitación/ entran al mismo.
+    if (idModo) *idModo = modo.id;
     if (texto)  *texto  = m.captured(2).trimmed();
 }
 
-QString sistema(const QString &materia, const QString &idModo)
+QString instruccionPlanConDatos()
+{
+    return QStringLiteral(
+        "MODO PLAN DE ESTUDIO. El estudiante ya te pasó cuánto tiempo tiene, "
+        "para cuándo y qué le cuesta: está en la conversación de arriba. Armá "
+        "el plan con ESOS datos, no con un cronograma genérico.\n\n"
+        "Dos cosas mandan sobre todo lo demás:\n"
+        "- El plan dura lo que él te dijo que tiene. Ni un día más.\n"
+        "- Los temas que le cuestan, y los que ocupan más páginas del "
+        "material, se llevan más horas que el resto.\n\n"
+        "Si te pide un plan de otro tema y no tenés sus datos para ese, "
+        "pedíselos igual que la primera vez.");
+}
+
+QString recordatorioDeFormato(const QString &idModo, bool planConDatos)
+{
+    const QString id = modoPorId(idModo).id;
+    if (id == QLatin1String("autoevaluacion")) {
+        return QStringLiteral(
+            "### Cómo tiene que salir tu respuesta\n\n"
+            "1. P: (la pregunta)\n"
+            "   R: (la respuesta, con la cita [n])\n"
+            "2. P: (la pregunta)\n"
+            "   R: (la respuesta, con la cita [n])\n"
+            "…así hasta la 10\n\n"
+            "Diez pares, siempre. Cada uno con su P: y su R:, sin saltearte "
+            "ninguna. Nada antes del 1 ni después del 10: ni títulos, ni "
+            "resúmenes del tema, ni comentarios.");
+    }
+    if (id == QLatin1String("flashcards")) {
+        return QStringLiteral(
+            "### Cómo tiene que salir tu respuesta\n\n"
+            "1. P: (pregunta corta)\n"
+            "   R: (respuesta, una frase)\n"
+            "2. P: (pregunta corta)\n"
+            "   R: (respuesta, una frase)\n"
+            "3. P: (pregunta corta)\n"
+            "   R: (respuesta, una frase)\n"
+            "4. P: (pregunta corta)\n"
+            "   R: (respuesta, una frase)\n"
+            "5. P: (pregunta corta)\n"
+            "   R: (respuesta, una frase)\n\n"
+            "Cinco pares, ni más ni menos. Cada respuesta, una frase de hasta "
+            "20 palabras. Nada antes del 1 ni después del 5: ni títulos, ni "
+            "explicación del tema.");
+    }
+    if (id == QLatin1String("plan")) {
+        if (planConDatos) {
+            // Las dos primeras secciones son las que hacen que el plan salga
+            // bien. Sin ellas el modelo escribe la tabla de memoria: le da las
+            // mismas horas a todos los temas e inventa días que el estudiante
+            // no tiene. Obligarlo a escribir las cuentas ANTES lo ata a los
+            // datos que le dieron.
+            return QStringLiteral(
+                "### Cómo tiene que salir tu respuesta\n\n"
+                "## Lo que me dijiste\n"
+                "- Tiempo: (los días y las horas que te dijo, tal cual)\n"
+                "- Fecha: (la que te dijo)\n"
+                "- Dificultad: (tema por tema, como te la dio)\n"
+                "- Horas totales: (días × horas por día = N horas)\n\n"
+                "## Reparto\n"
+                "(una línea por tema: «tema — dificultad — X h»)\n"
+                "Las X suman exactamente N. Un tema difícil se lleva el DOBLE "
+                "de horas que uno fácil.\n\n"
+                "## Sesiones\n"
+                "| Día | Duración | Qué estudiar | Material | Cómo verificar |\n\n"
+                "## Antes del examen\n(3 o 4 viñetas)\n\n"
+                "UNA FILA POR DÍA, ni una más. Si te dijo que tiene 3 días, la "
+                "tabla tiene exactamente 3 filas: Día 1, Día 2 y Día 3. No "
+                "existe el día 4, ni para repasar. Dos filas para el mismo día "
+                "tampoco: el día ya tiene sus horas y no le caben más.\n\n"
+                "La duración de cada fila son las horas que tiene por día, "
+                "siempre la misma.\n\n"
+                "EN «QUÉ ESTUDIAR» SE VE EL REPARTO. Un tema al que le diste 4 h "
+                "con 2 h por día ocupa DOS días enteros; dos temas de 1 h "
+                "comparten un día. Si a cada día le ponés un tema distinto sin "
+                "mirar el reparto, el plan no sirve: era justo lo que el "
+                "estudiante pidió que tuvieras en cuenta.\n\n"
+                "El repaso entra dentro de esos días, no después. Si el tema no "
+                "entra en el tiempo que tiene, decí qué dejás afuera.");
+        }
+        return QStringLiteral(
+            "### Cómo tiene que salir tu respuesta\n\n"
+            "## Temas que abarca\n"
+            "- (tema): (qué entra)\n"
+            "…los que salgan del material\n\n"
+            "## Para armártelo necesito saber\n"
+            "- Cuánto te cuesta cada tema de arriba\n"
+            "- Cuántas horas por semana podés dedicarle\n"
+            "- Para qué fecha lo necesitás\n\n"
+            "Sólo esas dos secciones. NO armes el plan todavía: sin esos datos "
+            "sería inventado. Nada de sesiones, tablas ni cronogramas.");
+    }
+    return QString();
+}
+
+QString sistema(const QString &materia, const QString &idModo, bool planConDatos)
 {
     QString s = QStringLiteral(
         "Sos StudIA, un asistente de estudio para estudiantes de Ingeniería "
@@ -280,8 +443,13 @@ QString sistema(const QString &materia, const QString &idModo)
             "Reservá la frase de abstención para cuando el tema esté realmente "
             "fuera del material y tampoco haya nada en la conversación.");
     }
-    if (!m.instruccion.isEmpty())
-        s += QStringLiteral("\n\n") + m.instruccion;
+    // El modo Plan tiene dos consignas y sólo va UNA: la que corresponde al
+    // turno en que está la conversación, que decide el llamador.
+    const QString consigna =
+        (planConDatos && m.id == QLatin1String("plan")) ? instruccionPlanConDatos()
+                                                        : m.instruccion;
+    if (!consigna.isEmpty())
+        s += QStringLiteral("\n\n") + consigna;
 
     // Cláusula de cierre. Va DESPUÉS de la consigna del modo a propósito: las
     // plantillas ("1. Alcance, 2. Sesiones…") son instrucciones de formato muy
@@ -302,7 +470,8 @@ QString sistema(const QString &materia, const QString &idModo)
 }
 
 QString usuario(const QString &pregunta, const QVector<StudiaFragmento> &frags,
-                const QVector<Turno> &historial)
+                const QVector<Turno> &historial, const QString &idModo,
+                bool planConDatos)
 {
     QString out;
 
@@ -326,6 +495,11 @@ QString usuario(const QString &pregunta, const QVector<StudiaFragmento> &frags,
         out += QStringLiteral("\n\n");
     }
     out += QStringLiteral("### Pregunta del estudiante\n%1\n").arg(pregunta.trimmed());
+    // El formato va ÚLTIMO, después de la pregunta. Es lo que el modelo tiene
+    // más fresco al empezar a generar, y sin esto lo ignoraba.
+    const QString formato = recordatorioDeFormato(idModo, planConDatos);
+    if (!formato.isEmpty())
+        out += QStringLiteral("\n") + formato + QLatin1Char('\n');
     return out;
 }
 
@@ -339,7 +513,9 @@ bool puedeResponderDesdeConversacion(const QVector<Turno> &historial)
     return false;
 }
 
-QString usuarioSoloConversacion(const QString &pregunta, const QVector<Turno> &historial)
+QString usuarioSoloConversacion(const QString &pregunta,
+                                const QVector<Turno> &historial,
+                                const QString &idModo, bool planConDatos)
 {
     QString out = QStringLiteral(
         "### Conversación hasta ahora\n\n");
@@ -360,6 +536,10 @@ QString usuarioSoloConversacion(const QString &pregunta, const QVector<Turno> &h
         "reformular la pregunta.\n"
         "No cites `[n]`: en este turno no hay fragmentos numerados.\n\n"
         "### Pedido del estudiante\n%1\n").arg(pregunta.trimmed());
+    // Si el modo tiene formato estricto, sigue valiendo por esta rama.
+    const QString formato = recordatorioDeFormato(idModo, planConDatos);
+    if (!formato.isEmpty())
+        out += QStringLiteral("\n") + formato + QLatin1Char('\n');
     return out;
 }
 
@@ -373,6 +553,20 @@ Encuadre encuadrar(int propios, int existentes, int discriminantes)
     if (propios > 0 && existentes == 0)
         return Encuadre::Ajena;
     return Encuadre::Dependiente;
+}
+
+bool respondeDesdeLaConversacion(bool modoExigente, Encuadre encuadre,
+                                 const QVector<Turno> &historial)
+{
+    // Sin una respuesta previa con contenido no hay de dónde sacar nada, por
+    // más que la pregunta se apoye en lo anterior.
+    if (!puedeResponderDesdeConversacion(historial))
+        return false;
+    if (!modoExigente)
+        return true;
+    // Una pregunta AJENA cambia a un tema que el corpus no cubre: ahí sí
+    // corresponde abstenerse, no responderla con lo que se venía hablando.
+    return encuadre == Encuadre::Dependiente;
 }
 
 QString consultaConContexto(const QString &pregunta, const QStringList &anteriores,
