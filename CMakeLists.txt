@@ -252,6 +252,7 @@ qt_add_qml_module(LlamaCode
         qml/components/LcScrollBar.qml
         qml/components/OpencodeConfigDialog.qml
         qml/components/MermaidPreviewDialog.qml
+        qml/components/StudiaTemas.qml
         qml/pages/AgentPage.qml
         qml/pages/TasksPage.qml
         qml/pages/BenchmarkPage.qml
@@ -399,6 +400,9 @@ if (BUILD_TESTS)
         add_test(NAME test_studia_vectorizar
                  COMMAND ${Python3_EXECUTABLE}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tools/studia/test_vectorizar.py)
+        add_test(NAME test_studia_graficar
+                 COMMAND ${Python3_EXECUTABLE}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tools/studia/test_graficar.py)
     else()
         message(STATUS "Python3 no encontrado: se omite test_studia_ingest")
     endif()

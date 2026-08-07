@@ -77,12 +77,34 @@ Item {
 
     Connections {
         target: Studia
-        function onMensajesChanged() { listaMsgs.positionViewAtEnd() }
+        function onMensajesChanged() {
+            // Un mensaje nuevo siempre se muestra: si el estudiante se había
+            // ido a leer más arriba, su propia pregunta lo trae de vuelta.
+            listaMsgs.seguirAlFinal = true
+            listaMsgs.positionViewAtEnd()
+        }
         function onTextoParcial(indice, contenido, bloques) {
             const it = listaMsgs.itemAtIndex(indice)
             if (it && it.actualizarTexto) it.actualizarTexto(contenido, bloques)
+            listaMsgs.acompanarElFinal()
+        }
+        function onGenerandoChanged() {
+            if (Studia.generando) {
+                listaMsgs.seguirAlFinal = true
+            } else {
+                // Terminó de escribir: se vuelve al comienzo de la respuesta,
+                // que es por donde se empieza a leer. Con un respiro, porque la
+                // altura de la burbuja todavía se está acomodando.
+                volverAlComienzo.restart()
+            }
         }
         function onErrorOcurrido(msg) { aviso.mostrar(msg) }
+    }
+
+    Timer {
+        id: volverAlComienzo
+        interval: 80
+        onTriggered: listaMsgs.irAlComienzoDeLaRespuesta()
     }
 
     // Config del servidor de embeddings (búsqueda semántica).
@@ -167,7 +189,9 @@ Item {
                     spacing: 2
                     Text {
                         width: parent.width
-                        text: Studia.materiaElegida ? Studia.tituloSesion : "StudIA"
+                        // El título es el del TEMA abierto; la materia se ve
+                        // en el renglón de abajo y en el selector.
+                        text: Studia.materiaElegida ? Studia.tituloTema : "StudIA"
                         font { pixelSize: 16; bold: true }
                         color: Theme.textPrimary
                         elide: Text.ElideRight
@@ -298,6 +322,45 @@ Item {
                 }
 
                 Item { Layout.fillWidth: true; visible: root.barraAngosta || !Studia.materiaElegida }
+
+                // Temas: la lista de conversaciones de esta materia.
+                LcButton {
+                    id: btnTemas
+                    visible: Studia.materiaElegida
+                    // Se bloquea sólo cuando no hay nada que ver ni que crear:
+                    // un único chat todavía vacío. Con otros temas en la
+                    // materia sigue habilitado, porque si no se pierde el
+                    // acceso a ellos hasta preguntar algo en el nuevo.
+                    enabled: Studia.puedeCrearTema || Studia.temas.length > 1
+                    text: "☰ Temas (" + Studia.temas.length + ")"
+                    secondary: true
+                    ToolTip.visible: hovered && !enabled
+                    ToolTip.text: "Preguntá algo primero: este chat todavía está vacío"
+                    onClicked: popupTemas.visible ? popupTemas.close() : popupTemas.open()
+
+                    Popup {
+                        id: popupTemas
+                        y: btnTemas.height + 6
+                        x: -width + btnTemas.width
+                        width: 320
+                        height: 420
+                        padding: 12
+                        modal: false
+                        focus: true
+                        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+
+                        background: Rectangle {
+                            color: Theme.surfaceBg
+                            border.color: Theme.borderColor
+                            radius: 8
+                        }
+
+                        StudiaTemas {
+                            anchors.fill: parent
+                            onTemaElegido: popupTemas.close()
+                        }
+                    }
+                }
 
                 // [2] Base documental + limpiar
                 LcButton {
@@ -505,7 +568,9 @@ Item {
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.divider }
 
-                    // [5] Historial de chats
+                    // [5] Historial: navega entre MATERIAS ya consultadas.
+                    // Entre los temas de una materia se navega con el botón
+                    // "Temas" de arriba; son dos niveles distintos.
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
@@ -515,7 +580,7 @@ Item {
                             font { pixelSize: 10; bold: true }
                         }
                         Text {
-                            text: Studia.sesiones.length
+                            text: Studia.materiasConChats.length
                             color: Theme.textDim
                             font.pixelSize: 10
                         }
@@ -523,7 +588,7 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        visible: Studia.sesiones.length === 0
+                        visible: Studia.materiasConChats.length === 0
                         text: "Todavía no abriste ningún chat. Elegí una materia "
                             + "arriba para empezar uno."
                         color: Theme.textMuted
@@ -532,25 +597,25 @@ Item {
                     }
 
                     ListView {
-                        id: listaSesiones
+                        id: listaMaterias
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
                         spacing: 3
-                        model: Studia.sesiones
+                        model: Studia.materiasConChats
                         ScrollBar.vertical: LcScrollBar {}
 
                         delegate: Rectangle {
-                            width: listaSesiones.width
+                            width: listaMaterias.width
                             height: 44
                             radius: 6
-                            readonly property bool activo: modelData.materia === Studia.materia
-                            color: activo ? Theme.highlight
-                                          : (areaSesion.containsMouse ? Theme.hoverBg
-                                                                      : "transparent")
+                            readonly property bool activa: modelData.materia === Studia.materia
+                            color: activa ? Theme.highlight
+                                          : (areaMateria.containsMouse ? Theme.hoverBg
+                                                                       : "transparent")
 
                             Rectangle {
-                                visible: parent.activo
+                                visible: parent.activa
                                 width: 3; height: parent.height - 12; radius: 2
                                 anchors { left: parent.left; leftMargin: 2
                                           verticalCenter: parent.verticalCenter }
@@ -558,7 +623,7 @@ Item {
                             }
 
                             Column {
-                                anchors { left: parent.left; right: btnBorrar.left
+                                anchors { left: parent.left; right: btnBorrarMat.left
                                           leftMargin: 10; rightMargin: 4
                                           verticalCenter: parent.verticalCenter }
                                 spacing: 2
@@ -566,14 +631,14 @@ Item {
                                     width: parent.width
                                     text: modelData.materia
                                     color: Theme.textPrimary
-                                    font { pixelSize: 12; bold: parent.parent.activo }
+                                    font { pixelSize: 12; bold: parent.parent.activa }
                                     elide: Text.ElideRight
                                 }
                                 Text {
                                     width: parent.width
-                                    text: modelData.mensajes > 0
-                                          ? modelData.mensajes + " mensajes"
-                                          : "vacío"
+                                    text: modelData.temas + (modelData.temas === 1
+                                                             ? " tema · " : " temas · ")
+                                          + modelData.mensajes + " mensajes"
                                     color: Theme.textDim
                                     font.pixelSize: 10
                                     elide: Text.ElideRight
@@ -581,36 +646,38 @@ Item {
                             }
 
                             MouseArea {
-                                id: areaSesion
+                                id: areaMateria
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                // El click abre esa materia: la sesión es la materia.
                                 onClicked: Studia.materia = modelData.materia
                             }
 
-                            // Va DESPUÉS de areaSesion y con z mayor: si no, el
+                            // Va DESPUÉS de areaMateria y con z mayor: si no, el
                             // MouseArea que cubre toda la fila se come el click.
                             Rectangle {
-                                id: btnBorrar
+                                id: btnBorrarMat
                                 z: 2
                                 width: 22; height: 22; radius: 11
                                 anchors { right: parent.right; rightMargin: 6
                                           verticalCenter: parent.verticalCenter }
-                                visible: areaSesion.containsMouse || areaBorrar.containsMouse
-                                color: areaBorrar.containsMouse ? Theme.errorBg : "transparent"
+                                visible: areaMateria.containsMouse || areaBorrarMat.containsMouse
+                                color: areaBorrarMat.containsMouse ? Theme.errorBg : "transparent"
                                 Text {
                                     anchors.centerIn: parent
                                     text: "✕"
-                                    color: areaBorrar.containsMouse ? Theme.errorText : Theme.textDim
+                                    color: areaBorrarMat.containsMouse ? Theme.errorText
+                                                                       : Theme.textDim
                                     font.pixelSize: 11
                                 }
                                 MouseArea {
-                                    id: areaBorrar
+                                    id: areaBorrarMat
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: Studia.borrarSesion(modelData.materia)
+                                    // Borra la materia entera del historial, con
+                                    // todos sus temas.
+                                    onClicked: Studia.borrarChatsDeMateria(modelData.materia)
                                 }
                             }
                         }
@@ -678,6 +745,34 @@ Item {
                         model: Studia.mensajes
                         ScrollBar.vertical: LcScrollBar {}
 
+                        // ── Seguimiento del texto mientras se genera ──
+                        //
+                        // La respuesta crece de a pedazos y la burbuja se va
+                        // haciendo más alta, así que sin esto el texto nuevo
+                        // queda abajo, fuera de la vista.
+                        property bool seguirAlFinal: true
+
+                        function acompanarElFinal() {
+                            if (seguirAlFinal && Studia.generando)
+                                positionViewAtEnd()
+                        }
+
+                        function irAlComienzoDeLaRespuesta() {
+                            if (count > 0)
+                                positionViewAtIndex(count - 1, ListView.Beginning)
+                        }
+
+                        // El alto cambia DESPUÉS de que llega el texto (la
+                        // burbuja se re-mide), así que este es el momento real
+                        // en que hay que volver a bajar.
+                        onContentHeightChanged: acompanarElFinal()
+
+                        // Si el estudiante se va a releer algo mientras StudIA
+                        // escribe, se deja de seguir: no se lo arrastra de
+                        // vuelta cada vez que llega una palabra. Vuelve a
+                        // seguir solo cuando él baja del todo.
+                        onMovementEnded: seguirAlFinal = atYEnd
+
                         delegate: Column {
                             id: burbuja
                             width: listaMsgs.width
@@ -729,21 +824,35 @@ Item {
                                     spacing: 10
 
                                     // Mensaje del usuario o placeholder: un solo texto.
-                                    Text {
+                                    //
+                                    // Es un TextEdit de sólo lectura y no un Text
+                                    // para poder sombrear con el mouse y copiar
+                                    // una parte. El interlineado viaja dentro del
+                                    // HTML porque TextEdit no tiene lineHeight
+                                    // (ver StudiaTexto::aHtmlConInterlineado).
+                                    TextEdit {
                                         width: parent.width
                                         visible: burbuja.esUsuario
                                                  || burbuja.bloques.length === 0
-                                        text: burbuja.textoPlano.length > 0
-                                              ? burbuja.textoPlano
-                                              : (modelData.escribiendo
-                                                 ? "⏳ Buscando en la documentación…" : "")
+                                        readOnly: true
+                                        selectByMouse: true
+                                        // Sin esto la selección desaparece al
+                                        // hacer click en otra burbuja, justo
+                                        // antes de poder copiarla.
+                                        persistentSelection: true
+                                        text: {
+                                            if (burbuja.textoPlano.length > 0)
+                                                return Studia.htmlDe(burbuja.textoPlano, false)
+                                            return modelData.escribiendo
+                                                   ? "⏳ Buscando en la documentación…" : ""
+                                        }
                                         color: burbuja.esUsuario ? Theme.chatUserText
                                                                  : Theme.chatAsstText
+                                        selectionColor: Theme.accent
+                                        selectedTextColor: Theme.btnPrimaryText
                                         font.pixelSize: 16
-                                        lineHeight: 1.5
-                                        lineHeightMode: Text.ProportionalHeight
-                                        wrapMode: Text.Wrap
-                                        textFormat: Text.PlainText
+                                        wrapMode: TextEdit.Wrap
+                                        textFormat: TextEdit.RichText
                                     }
 
                                     // Respuesta de StudIA: texto Markdown y ecuaciones
@@ -822,17 +931,25 @@ Item {
 
                                             Component {
                                                 id: compTexto
-                                                Text {
+                                                // TextEdit de sólo lectura: deja
+                                                // sombrear con el mouse para
+                                                // copiar una parte. El Markdown
+                                                // llega ya convertido a HTML
+                                                // desde C++, que es como se
+                                                // conserva el interlineado que
+                                                // TextEdit no sabe aplicar.
+                                                TextEdit {
                                                     width: contenidoCol.width
-                                                    text: modelData.contenido
+                                                    readOnly: true
+                                                    selectByMouse: true
+                                                    persistentSelection: true
+                                                    text: Studia.htmlDe(modelData.contenido, true)
                                                     color: Theme.chatAsstText
+                                                    selectionColor: Theme.accent
+                                                    selectedTextColor: Theme.btnPrimaryText
                                                     font.pixelSize: 16
-                                                    lineHeight: 1.5
-                                                    lineHeightMode: Text.ProportionalHeight
-                                                    wrapMode: Text.Wrap
-                                                    // Markdown: títulos, negritas y listas
-                                                    // se ven como tales, no como ** y ##.
-                                                    textFormat: Text.MarkdownText
+                                                    wrapMode: TextEdit.Wrap
+                                                    textFormat: TextEdit.RichText
                                                 }
                                             }
                                             Component {

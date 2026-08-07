@@ -25,6 +25,7 @@ Salidas: 0 si escribió el PNG; !=0 con el motivo por stdout.
 
 import argparse
 import os
+import re
 import sys
 
 # Backend sin ventana: esto corre como sidecar, no hay display.
@@ -45,6 +46,11 @@ MAX_FUNCIONES = 6
 PUNTOS = 800
 
 
+def _log(v, base=None):
+    """log(x) natural, o log(x, base) si el modelo pasa la base."""
+    return np.log(v) if base is None else np.log(v) / np.log(base)
+
+
 def _espacio_seguro():
     """Namespace para evaluar la expresión: sólo matemática, sin builtins.
 
@@ -53,13 +59,74 @@ def _espacio_seguro():
     """
     permitido = [
         "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh",
-        "exp", "log", "log10", "log2", "sqrt", "abs", "sign", "floor", "ceil",
+        "exp", "log10", "log2", "sqrt", "abs", "sign", "floor", "ceil",
         "power", "maximum", "minimum", "where", "pi", "e",
     ]
     ns = {n: getattr(np, n) for n in permitido if hasattr(np, n)}
     ns["ln"] = np.log
+    ns["log"] = _log            # acepta log(x) y log(x, base)
+    ns["max"] = np.maximum      # el modelo escribe max(x, 0), no maximum
+    ns["min"] = np.minimum
     ns["__builtins__"] = {}
     return ns
+
+
+# Traduccion de notacion de cuaderno a notacion de Python.
+#
+# El modelo escribe matematica como se escribe a mano —x^2, 2x, x², √x— y el
+# evaluador espera Python. Sin esta capa, `x^2` no da un error de potencia sino
+# un TypeError raro: en Python `^` es XOR de bits, y aplicado a un array de
+# decimales explota con "ufunc 'bitwise_xor' not supported". Ese era el error
+# que aparecia en el chat, y no habia forma de que el estudiante lo entendiera.
+SIMBOLOS = {
+    "−": "-",   # U+2212, el menos "tipografico"
+    "–": "-", "—": "-",
+    "×": "*", "·": "*", "⋅": "*", "∙": "*",
+    "÷": "/",
+    "√": "sqrt",
+    "π": "pi", "Π": "pi",
+    "∞": "inf",
+    "，": ",", "’": "", "”": "", "“": "",
+}
+SUPERINDICES = {"⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
+                "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+                "⁻": "-", "⁺": "+"}
+
+
+def normalizar_expresion(expr):
+    """Convierte la expresión a algo que Python pueda evaluar.
+
+    Es deliberadamente tolerante: el modelo acierta el concepto y falla la
+    sintaxis, así que conviene traducir en vez de rechazar. Lo que no reconoce
+    lo deja igual, y si igual no evalúa el error se reporta con su motivo."""
+    for viejo, nuevo in SIMBOLOS.items():
+        expr = expr.replace(viejo, nuevo)
+
+    # Superíndices: x² → x**2, x⁻¹ → x**-1.
+    def _sup(m):
+        return "**" + "".join(SUPERINDICES[c] for c in m.group(0))
+    expr = re.sub("[" + "".join(SUPERINDICES) + "]+", _sup, expr)
+
+    # Potencia: en el cuaderno es ^, en Python **.
+    expr = expr.replace("^", "**")
+
+    # |x| → abs(x). Sólo con un número par de barras; si no, se deja como está.
+    if expr.count("|") >= 2 and expr.count("|") % 2 == 0:
+        partes = expr.split("|")
+        expr = ""
+        for i, p in enumerate(partes):
+            expr += p
+            if i < len(partes) - 1:
+                expr += "abs(" if i % 2 == 0 else ")"
+
+    # Multiplicación implícita: 2x → 2*x, 3sin(x) → 3*sin(x), (x+1)(x-2) →
+    # (x+1)*(x-2), sin(x)cos(x) → sin(x)*cos(x).
+    #
+    # La excepción son los números en notación científica: en 3e-5 la `e` no es
+    # una variable y meterle un `*` lo rompería.
+    expr = re.sub(r"(?<=[\d.])(?![eE][-+]?\d)(?=[A-Za-z_(])", "*", expr)
+    expr = re.sub(r"(?<=\))(?=[\w(])", "*", expr)
+    return expr.strip()
 
 
 def parsear(texto):
@@ -79,8 +146,13 @@ def parsear(texto):
             # Acepta "y = x**2" y "f(x) = x**2": se queda con el lado derecho.
             if "=" in valor:
                 valor = valor.split("=", 1)[1].strip()
-            if len(datos["funcion"]) < MAX_FUNCIONES:
-                datos["funcion"].append(valor)
+            # Varias curvas en un renglon: "funcion: 10 - x, 2 + x". Es como el
+            # modelo escribe oferta y demanda. Si no se separan aca, eval()
+            # devuelve una TUPLA de arrays y matplotlib falla con
+            # "x and y must have same first dimension ... (2,800)".
+            for parte in _partir_nivel_cero(valor):
+                if parte and len(datos["funcion"]) < MAX_FUNCIONES:
+                    datos["funcion"].append(parte)
         elif clave in ("rango", "dominio", "x"):
             par = _dos_numeros(valor)
             if par:
@@ -94,6 +166,27 @@ def parsear(texto):
         elif clave == "ylabel":
             datos["ylabel"] = valor
     return datos
+
+
+def _partir_nivel_cero(valor):
+    """Parte por las comas que NO estan dentro de parentesis.
+
+    "10 - x, 2 + x"  -> ["10 - x", "2 + x"]    (dos curvas)
+    "log(x, 10)"     -> ["log(x, 10)"]         (una sola: la coma es del log)
+    """
+    partes, actual, hondo = [], "", 0
+    for ch in valor:
+        if ch in "([{":
+            hondo += 1
+        elif ch in ")]}":
+            hondo = max(0, hondo - 1)
+        if ch == "," and hondo == 0:
+            partes.append(actual.strip())
+            actual = ""
+        else:
+            actual += ch
+    partes.append(actual.strip())
+    return [p for p in partes if p]
 
 
 def _dos_numeros(valor):
@@ -112,11 +205,20 @@ def _dos_numeros(valor):
 def evaluar(expr, x):
     ns = _espacio_seguro()
     ns["x"] = x
+    expr = normalizar_expresion(expr)
     with np.errstate(all="ignore"):          # /0 y log(-1) dan nan, no excepción
         y = eval(expr, ns)                   # noqa: S307 — namespace cerrado
     y = np.asarray(y, dtype=float)
     if y.shape == ():                        # constante: se estira al dominio
         y = np.full_like(x, float(y))
+    if y.ndim > 1:
+        # Red de seguridad: parsear() ya separa las curvas por coma, pero una
+        # expresion podria devolver varias de otra forma. Se avisa con el motivo
+        # en vez de dejar que matplotlib tire un error de dimensiones.
+        raise ValueError("la expresión devuelve %d curvas; poné una por "
+                         "renglón 'funcion:'" % y.shape[0])
+    if y.shape != x.shape:
+        raise ValueError("la expresión no devuelve un valor por cada x")
     # Cortar las asíntotas para que no aplaste la escala.
     finitos = y[np.isfinite(y)]
     if finitos.size:
@@ -142,7 +244,11 @@ def graficar(datos, salida):
         try:
             y = evaluar(expr, x)
         except Exception as e:
-            print("ERROR: no se pudo evaluar «%s» (%s)" % (expr, type(e).__name__))
+            # Se informa QUE no se entendio y COMO quedo despues de traducir.
+            # Antes salia sólo el nombre de la excepción ("TypeError"), que no
+            # le dice nada a quien lee el chat.
+            print("ERROR: no se pudo calcular «%s». Queda como «%s» y falla "
+                  "con: %s" % (expr, normalizar_expresion(expr), e))
             plt.close(fig)
             return 3
         color = COLORES_CURVA[i % len(COLORES_CURVA)]

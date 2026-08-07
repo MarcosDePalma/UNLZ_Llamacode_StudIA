@@ -51,6 +51,36 @@ QString recortarTrasAbstencion(const QString &respuesta, const QString &frase);
 // Hasta qué posición se considera que la frase está "al principio".
 constexpr int kMargenAbstencion = 220;
 
+// ── Texto seleccionable ──────────────────────────────────────────────────────
+
+// Convierte el contenido a HTML con interlineado, para mostrarlo en un TextEdit.
+//
+// El motivo es una limitacion de Qt: `Text` tiene `lineHeight` pero NO deja
+// seleccionar con el mouse; `TextEdit` deja seleccionar pero no tiene
+// `lineHeight`. Como se quieren las dos cosas, el interlineado se aplica en el
+// HTML —donde TextEdit si lo respeta— en vez de en la propiedad del item.
+//
+// `markdown` distingue la respuesta de StudIA (que trae **negritas**, titulos y
+// listas) del mensaje del estudiante, que es texto tal cual: interpretarlo como
+// Markdown le comeria los asteriscos y guiones que haya escrito.
+constexpr int kInterlineado = 150;   // %, equivale al lineHeight 1.5 anterior
+constexpr int kCuerpoPx    = 16;     // el mismo tamano que tenia el Text
+QString aHtmlConInterlineado(const QString &texto, bool markdown,
+                             int porcentaje = kInterlineado,
+                             int pixeles = kCuerpoPx);
+
+// Titulo de un tema a partir del PRIMER TITULO de una respuesta.
+//
+// Se usa la respuesta y no la pregunta porque el modelo encabeza con el
+// concepto ("## Criterio de Routh-Hurwitz") mientras que la pregunta suele ser
+// coloquial y larga ("che, me explicas eso de la estabilidad?"). Si la
+// respuesta no trae ningun titulo, cae a su primera linea con texto.
+//
+// Devuelve "" si no hay de donde sacarlo; el llamador decide que hacer (para
+// una abstencion, dejar el tema sin nombre hasta que haya una respuesta real).
+QString tituloDeRespuesta(const QString &respuesta);
+constexpr int kLargoTitulo = 48;
+
 // ── Flashcards ───────────────────────────────────────────────────────────────
 
 // Extrae las tarjetas de una respuesta del modo Flashcards. Tolerante al

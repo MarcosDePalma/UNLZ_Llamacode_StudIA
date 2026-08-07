@@ -13,9 +13,11 @@ Reglas:
   `build_tests/`, corre `ctest`). Build + 13 tests verdes = gate. No commitear en rojo.
 - Un executable por subsistema (QtTest = 1 `QTEST_MAIN` por binario).
 
-El ingestor de StudIA es Python (usa pypdf / python-docx / python-pptx / openpyxl),
-así que su suite es `unittest` y se engancha a `ctest` como `test_studia_ingest`.
-Si no hay Python en el sistema, CMake omite ese test y el resto sigue corriendo.
+Las herramientas de StudIA son Python (ingestor, vectorizador, graficador), así
+que sus suites son `unittest` y se enganchan a `ctest` como `test_studia_ingest`,
+`test_studia_vectorizar` y `test_studia_graficar`. Si no hay Python en el
+sistema, CMake omite esos tests y el resto sigue corriendo; los que además
+necesitan numpy/matplotlib se saltean solos con `skipUnless`.
 
 ### Convenciones de tests
 - Aislamiento de disco: `QStandardPaths::setTestModeEnabled(true)` redirige
@@ -51,6 +53,7 @@ Si no hay Python en el sistema, CMake omite ese test y el resto sigue corriendo.
 | StudiaIndex, StudiaPrompt, StudiaSessionStore, StudiaController | `tests/test_studia.cpp` |
 | Ingestor de StudIA (Python) | `tools/studia/test_ingest.py` |
 | Vectorizador de StudIA (Python) | `tools/studia/test_vectorizar.py` |
+| Graficador de StudIA (Python) | `tools/studia/test_graficar.py` |
 
 ### Pendiente de cobertura
 Los backends de red con stream SSE real (RawChatBackend/LlamaAgentBackend/

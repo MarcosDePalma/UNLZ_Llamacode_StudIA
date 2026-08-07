@@ -1,5 +1,6 @@
-#include <QtTest>
+﻿#include <QtTest>
 #include <QDir>
+#include <QFile>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -135,6 +136,14 @@ private slots:
         QVERIFY(m_dir.isValid());
         m_db = m_dir.filePath(QStringLiteral("studia_test.db"));
         QVERIFY2(construirIndice(m_db), "no se pudo construir el indice de prueba");
+    }
+
+    // Las sesiones se persisten en UN archivo compartido, asi que sin esto un
+    // test hereda los temas que dejo el anterior y las aserciones dependen del
+    // orden en que corren.
+    void init()
+    {
+        QFile::remove(StudiaSessionStore().rutaArchivo());
     }
 
     // ── consultaFts: pregunta natural → expresion FTS5 ──
@@ -1152,6 +1161,70 @@ private slots:
         QCOMPARE(StudiaTexto::recortarTrasAbstencion(r, QString()), r);
     }
 
+    // ── HTML con interlineado (texto seleccionable) ──
+
+    void html_llevaElInterlineadoQueTextEditNoTiene()
+    {
+        // El punto del ejercicio: `Text` tiene lineHeight pero no deja
+        // seleccionar; `TextEdit` deja seleccionar pero no tiene lineHeight.
+        // Si el interlineado no viaja en el HTML, se pierde el formato que ya
+        // estaba andando, y no hay forma de notarlo desde el código.
+        const QString h = StudiaTexto::aHtmlConInterlineado(
+            QStringLiteral("Un párrafo."), false, 150);
+        QVERIFY2(h.contains(QStringLiteral("line-height")),
+                 qPrintable(QStringLiteral("sin line-height en el HTML: ") + h));
+    }
+
+    void html_conservaElTamanoDelCuerpo()
+    {
+        // Al exportar, Qt escribe el font-size del documento en el <body>, y
+        // ese le gana al font.pixelSize del TextEdit. Sin fijarlo, el texto
+        // salía con el 9pt por defecto de Qt (~12px) y se veía más chico que
+        // cuando era un Text con pixelSize 16.
+        const QString h = StudiaTexto::aHtmlConInterlineado(
+            QStringLiteral("Un párrafo."), false, 150, 16);
+        QVERIFY2(h.contains(QStringLiteral("font-size:12pt")),
+                 qPrintable(QStringLiteral("cuerpo con tamaño equivocado: ") + h));
+    }
+
+    void html_losTitulosEscalanConElCuerpo()
+    {
+        // Qt exporta los encabezados como `x-large`, que es relativo: si el
+        // cuerpo cambia de tamaño, los títulos acompañan solos.
+        const QString h = StudiaTexto::aHtmlConInterlineado(
+            QStringLiteral("## Título\n\ntexto"), true);
+        QVERIFY(h.contains(QStringLiteral("x-large")));
+    }
+
+    void html_elMarkdownSigueSiendoMarkdown()
+    {
+        const QString h = StudiaTexto::aHtmlConInterlineado(
+            QStringLiteral("## Título\n\nTexto con **negrita** y una lista:\n\n- uno\n- dos"),
+            true);
+        QVERIFY(h.contains(QStringLiteral("<h2")) || h.contains(QStringLiteral("<h1")));
+        QVERIFY(h.contains(QStringLiteral("font-weight")));
+        QVERIFY(h.contains(QStringLiteral("<li")));
+        QVERIFY(!h.contains(QStringLiteral("**")));      // se interpretó, no se ve
+    }
+
+    void html_elMensajeDelUsuarioNoSeInterpreta()
+    {
+        // Lo que escribe el estudiante va tal cual: si pregunta por "a * b * c"
+        // no se le puede comer los asteriscos como si fuera énfasis.
+        const QString h = StudiaTexto::aHtmlConInterlineado(
+            QStringLiteral("cuánto vale *a* por **b**"), false);
+        QVERIFY(h.contains(QStringLiteral("*a*")));
+        QVERIFY(h.contains(QStringLiteral("**b**")));
+    }
+
+    void html_escapaLoQueRompeElMarcado()
+    {
+        const QString h = StudiaTexto::aHtmlConInterlineado(
+            QStringLiteral("if (a < b && c > d) <script>"), false);
+        QVERIFY(!h.contains(QStringLiteral("<script>")));
+        QVERIFY(h.contains(QStringLiteral("&lt;")));
+    }
+
     void prompt_laReglaDeAbstencionVaDespuesDelModo()
     {
         // Es lo que evita que la plantilla del modo le gane a la abstención:
@@ -1671,93 +1744,332 @@ private slots:
         QVERIFY(idx.documentos(QStringLiteral("No Existe")).isEmpty());
     }
 
-    void controlador_borrarLaSesionActivaSueltaLaMateria()
+    // ── Temas: varias conversaciones por materia ──
+
+    void titulo_saleDelPrimerTituloDeLaRespuesta()
     {
-        StudiaController c;
-        QVERIFY(c.abrirIndice(m_db));
-        c.setMateria(QStringLiteral("Sistemas de Control"));
-        QVERIFY(c.materiaElegida());
-        c.borrarSesion(QStringLiteral("Sistemas de Control"));
-        // Si la materia quedara seleccionada, la sesión se recrearía sola y el
-        // chat reaparecería como si el borrado no hubiera funcionado.
-        QVERIFY(!c.materiaElegida());
-        QVERIFY(c.mensajes().isEmpty());
+        // El modelo encabeza con el concepto; la pregunta suele ser coloquial.
+        QCOMPARE(StudiaTexto::tituloDeRespuesta(QStringLiteral(
+                     "## Criterio de Routh-Hurwitz\n\nEs un método que…")),
+                 QStringLiteral("Criterio de Routh-Hurwitz"));
+        QCOMPARE(StudiaTexto::tituloDeRespuesta(QStringLiteral(
+                     "# Integrales definidas\ncontenido")),
+                 QStringLiteral("Integrales definidas"));
+        // El primero manda, aunque haya otros más abajo.
+        QCOMPARE(StudiaTexto::tituloDeRespuesta(QStringLiteral(
+                     "### Modbus TCP\n\ntexto\n\n## Otra cosa\n")),
+                 QStringLiteral("Modbus TCP"));
     }
 
-    // ── Sesiones por materia ──
-
-    void sesiones_tituloPorMateria()
+    void titulo_reconoceUnRenglonEnNegritaComoTitulo()
     {
-        QCOMPARE(StudiaSessionStore::tituloDe(QStringLiteral("Economía 1")),
-                 QStringLiteral("StudIA: Economía 1"));
-        QCOMPARE(StudiaSessionStore::tituloDe(QString()), QStringLiteral("StudIA"));
+        QCOMPARE(StudiaTexto::tituloDeRespuesta(QStringLiteral(
+                     "**Ecuaciones de primer grado:**\n\nUna ecuación…")),
+                 QStringLiteral("Ecuaciones de primer grado"));
+        // Negrita en medio de una frase NO es un título.
+        QCOMPARE(StudiaTexto::tituloDeRespuesta(QStringLiteral(
+                     "Una **integral** es el área bajo la curva.")),
+                 QStringLiteral("Una integral es el área bajo la curva"));
     }
 
-    void sesiones_unaPorMateriaYSeReusa()
+    void titulo_sinTituloCaeALaPrimeraLinea()
+    {
+        QCOMPARE(StudiaTexto::tituloDeRespuesta(QStringLiteral(
+                     "\n\nLa impedancia se mide en ohmios.\nY además…")),
+                 QStringLiteral("La impedancia se mide en ohmios"));
+        QVERIFY(StudiaTexto::tituloDeRespuesta(QStringLiteral("   \n\n")).isEmpty());
+        QVERIFY(StudiaTexto::tituloDeRespuesta(QString()).isEmpty());
+    }
+
+    void titulo_largoSeCortaEnUnaPalabra()
+    {
+        const QString larga = QStringLiteral(
+            "## Criterio de estabilidad de Routh Hurwitz aplicado a sistemas "
+            "de tercer orden");
+        const QString t = StudiaTexto::tituloDeRespuesta(larga);
+        QVERIFY(t.size() <= StudiaTexto::kLargoTitulo + 1);   // +1 por el "…"
+        QVERIFY(t.endsWith(QStringLiteral("…")));
+        // No corta a mitad de palabra.
+        const QString sinPunto = t.chopped(1);
+        QVERIFY(larga.contains(sinPunto));
+        QVERIFY(!sinPunto.endsWith(QLatin1Char(' ')));
+    }
+
+    void temas_variosPorMateriaYNoSeMezclan()
     {
         StudiaSessionStore st;
-        StudiaSesion &a = st.obtenerOCrear(QStringLiteral("Economía 1"));
-        a.mensajes.append(QVariantMap{{QStringLiteral("rol"), QStringLiteral("usuario")},
-                                      {QStringLiteral("contenido"), QStringLiteral("hola")}});
-        st.obtenerOCrear(QStringLiteral("Física 1"));
-        QCOMPARE(st.cantidad(), 2);
-        // Volver a pedir la misma materia devuelve la sesión con su historial.
-        QCOMPARE(st.obtenerOCrear(QStringLiteral("Economía 1")).mensajes.size(), 1);
-        QCOMPARE(st.cantidad(), 2);
+        const QString a = st.crear(QStringLiteral("Matemática 1"));
+        const QString b = st.crear(QStringLiteral("Matemática 1"));
+        const QString c = st.crear(QStringLiteral("Redes"));
+        QVERIFY(!a.isEmpty() && a != b);
+        QCOMPARE(st.cantidadDe(QStringLiteral("Matemática 1")), 2);
+        QCOMPARE(st.cantidadDe(QStringLiteral("Redes")), 1);
+        QCOMPARE(st.deMateria(QStringLiteral("Redes")).size(), 1);
+        QCOMPARE(st.deMateria(QStringLiteral("Redes")).first().id, c);
+        // Sin materia no hay tema posible.
+        QVERIFY(st.crear(QString()).isEmpty());
     }
 
-    void sesiones_limpiarVaciaPeroConservaYBorrarElimina()
+    void temas_elHistorialEsPorTemaNoPorMateria()
     {
         StudiaSessionStore st;
-        st.obtenerOCrear(QStringLiteral("X")).mensajes.append(QVariantMap{});
-        QVERIFY(st.limpiar(QStringLiteral("X")));
-        QCOMPARE(st.cantidad(), 1);
-        QVERIFY(st.buscar(QStringLiteral("X"))->mensajes.isEmpty());
-        QVERIFY(st.borrar(QStringLiteral("X")));
-        QCOMPARE(st.cantidad(), 0);
-        QVERIFY(!st.borrar(QStringLiteral("X")));   // ya no está
-    }
-
-    void sesiones_ultimasPreguntasDeLaMateria()
-    {
-        StudiaSessionStore st;
-        StudiaSesion &s = st.obtenerOCrear(QStringLiteral("M"));
-        auto msg = [](const QString &rol, const QString &txt) {
-            return QVariantMap{{QStringLiteral("rol"), rol},
+        const QString a = st.crear(QStringLiteral("Matemática 1"));
+        const QString b = st.crear(QStringLiteral("Matemática 1"));
+        auto msg = [](const QString &txt) {
+            return QVariantMap{{QStringLiteral("rol"), QStringLiteral("usuario")},
                                {QStringLiteral("contenido"), txt}};
         };
-        s.mensajes << msg(QStringLiteral("usuario"),   QStringLiteral("primera"))
-                   << msg(QStringLiteral("asistente"), QStringLiteral("respuesta"))
-                   << msg(QStringLiteral("usuario"),   QStringLiteral("segunda"));
-        // De la más reciente a la más vieja, y sólo las del usuario.
-        QCOMPARE(st.ultimasPreguntas(QStringLiteral("M"), 5),
-                 QStringList({QStringLiteral("segunda"), QStringLiteral("primera")}));
-        QCOMPARE(st.ultimasPreguntas(QStringLiteral("M"), 1),
-                 QStringList({QStringLiteral("segunda")}));
-        QVERIFY(st.ultimasPreguntas(QStringLiteral("otra"), 5).isEmpty());
+        st.porId(a)->mensajes << msg(QStringLiteral("integrales"));
+        st.porId(b)->mensajes << msg(QStringLiteral("ecuaciones"));
+        // Es lo que evita que una repregunta en un tema arrastre el otro.
+        QCOMPARE(st.ultimasPreguntas(a, 5),
+                 QStringList({QStringLiteral("integrales")}));
+        QCOMPARE(st.ultimasPreguntas(b, 5),
+                 QStringList({QStringLiteral("ecuaciones")}));
     }
 
-    void sesiones_persistenEnDisco()
+    void temas_ordenadosPorUsoReciente()
     {
+        StudiaSessionStore st;
+        const QString viejo = st.crear(QStringLiteral("M"));
+        const QString nuevo = st.crear(QStringLiteral("M"));
+        st.porId(viejo)->usada = 1000;
+        st.porId(nuevo)->usada = 2000;
+        QCOMPARE(st.deMateria(QStringLiteral("M")).first().id, nuevo);
+        QCOMPARE(st.ultimoDe(QStringLiteral("M")), nuevo);
+        QVERIFY(st.ultimoDe(QStringLiteral("sin temas")).isEmpty());
+    }
+
+    void temas_renombreManualGanaSobreElAutomatico()
+    {
+        StudiaSessionStore st;
+        const QString id = st.crear(QStringLiteral("M"));
+        QVERIFY(st.titular(id, QStringLiteral("Título automático")));
+        QCOMPARE(st.porId(id)->titulo, QStringLiteral("Título automático"));
+        QVERIFY(st.renombrar(id, QStringLiteral("Mi nombre")));
+        // Ya tiene nombre propio: una respuesta nueva no lo pisa.
+        QVERIFY(!st.titular(id, QStringLiteral("otra cosa")));
+        QCOMPARE(st.porId(id)->titulo, QStringLiteral("Mi nombre"));
+        // Un nombre vacío dejaría una fila sin texto en la lista.
+        QVERIFY(!st.renombrar(id, QStringLiteral("   ")));
+        QCOMPARE(st.porId(id)->titulo, QStringLiteral("Mi nombre"));
+        QVERIFY(!st.renombrar(QStringLiteral("no-existe"), QStringLiteral("x")));
+    }
+
+    void temas_sinTituloSeQuedaConElNombrePorDefecto()
+    {
+        // Es el caso de la abstención: no se aprendió de qué trata el tema.
+        StudiaSessionStore st;
+        const QString id = st.crear(QStringLiteral("M"));
+        QVERIFY(!st.titular(id, QString()));
+        QVERIFY(!st.titular(id, QStringLiteral("   ")));
+        QCOMPARE(st.porId(id)->titulo, StudiaSessionStore::tituloPorDefecto());
+        QVERIFY(st.porId(id)->tituloAuto);   // sigue esperando un título
+    }
+
+    void temas_resumenPorMateriaAgrupaYOrdena()
+    {
+        StudiaSessionStore st;
+        const QString a = st.crear(QStringLiteral("Matemática 1"));
+        const QString b = st.crear(QStringLiteral("Matemática 1"));
+        const QString c = st.crear(QStringLiteral("Redes"));
+        st.porId(a)->usada = 1000;
+        st.porId(a)->mensajes.append(QVariantMap{});
+        st.porId(b)->usada = 3000;
+        st.porId(b)->mensajes.append(QVariantMap{});
+        st.porId(b)->mensajes.append(QVariantMap{});
+        st.porId(c)->usada = 2000;
+
+        const QVariantList r = st.resumenPorMateria();
+        QCOMPARE(r.size(), 2);                       // una fila por materia
+        const QVariantMap m0 = r.at(0).toMap();
+        QCOMPARE(m0.value(QStringLiteral("materia")).toString(),
+                 QStringLiteral("Matemática 1"));    // la más usada primero
+        QCOMPARE(m0.value(QStringLiteral("temas")).toInt(), 2);
+        QCOMPARE(m0.value(QStringLiteral("mensajes")).toInt(), 3);
+        QCOMPARE(r.at(1).toMap().value(QStringLiteral("materia")).toString(),
+                 QStringLiteral("Redes"));
+    }
+
+    void temas_borrarMateriaSacaTodosSusTemas()
+    {
+        StudiaSessionStore st;
+        st.crear(QStringLiteral("M"));
+        st.crear(QStringLiteral("M"));
+        st.crear(QStringLiteral("Otra"));
+        QCOMPARE(st.borrarMateria(QStringLiteral("M")), 2);
+        QCOMPARE(st.cantidadDe(QStringLiteral("M")), 0);
+        QCOMPARE(st.cantidadDe(QStringLiteral("Otra")), 1);
+        QCOMPARE(st.borrarMateria(QStringLiteral("no existe")), 0);
+    }
+
+    void temas_limpiarVaciaYBorrarElimina()
+    {
+        StudiaSessionStore st;
+        const QString id = st.crear(QStringLiteral("X"));
+        st.porId(id)->mensajes.append(QVariantMap{});
+        st.titular(id, QStringLiteral("algo"));
+        QVERIFY(st.limpiar(id));
+        QCOMPARE(st.cantidad(), 1);
+        QVERIFY(st.porId(id)->mensajes.isEmpty());
+        // Vaciarlo lo deja como recién creado, listo para titularse de nuevo.
+        QCOMPARE(st.porId(id)->titulo, StudiaSessionStore::tituloPorDefecto());
+        QVERIFY(st.borrar(id));
+        QCOMPARE(st.cantidad(), 0);
+        QVERIFY(!st.borrar(id));
+        QVERIFY(st.porId(id) == nullptr);
+    }
+
+    void temas_persistenEnDisco()
+    {
+        QString id;
         {
             StudiaSessionStore st;
             st.cargar();
-            StudiaSesion &s = st.obtenerOCrear(QStringLiteral("Persistida"));
-            s.mensajes.append(QVariantMap{{QStringLiteral("rol"), QStringLiteral("usuario")},
-                                          {QStringLiteral("contenido"), QStringLiteral("dato")},
-                                          {QStringLiteral("escribiendo"), true}});
+            id = st.crear(QStringLiteral("Persistida"));
+            st.renombrar(id, QStringLiteral("Nombre a mano"));
+            st.porId(id)->mensajes.append(
+                QVariantMap{{QStringLiteral("rol"), QStringLiteral("usuario")},
+                            {QStringLiteral("contenido"), QStringLiteral("dato")},
+                            {QStringLiteral("escribiendo"), true}});
             st.guardar();
         }
         StudiaSessionStore otra;
         otra.cargar();
-        const StudiaSesion *s = otra.buscar(QStringLiteral("Persistida"));
+        const StudiaSesion *s = otra.porId(id);
         QVERIFY(s != nullptr);
-        QCOMPARE(s->titulo, QStringLiteral("StudIA: Persistida"));
+        QCOMPARE(s->titulo, QStringLiteral("Nombre a mano"));
+        QVERIFY(!s->tituloAuto);          // el renombre sobrevive al reinicio
         QCOMPARE(s->mensajes.size(), 1);
         // El flag de "escribiendo" no se persiste como true.
         QVERIFY(!s->mensajes.first().toMap().value(QStringLiteral("escribiendo")).toBool());
-        otra.borrar(QStringLiteral("Persistida"));
+        otra.borrar(id);
         otra.guardar();
+    }
+
+    void temas_migranDelFormatoViejo()
+    {
+        // Formato anterior: una sesión por materia, titulada "StudIA: <materia>"
+        // y sin el campo tituloAuto. Ese título no distingue nada cuando hay
+        // varios temas, así que se reemplaza por la primera pregunta.
+        const QString ruta = StudiaSessionStore().rutaArchivo();
+        QFile f(ruta);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(R"([{"id":"viejo-1","materia":"Física 1",
+                     "titulo":"StudIA: Física 1","creada":1,"usada":2,
+                     "mensajes":[{"rol":"usuario","contenido":"qué es el momento de inercia"},
+                                 {"rol":"asistente","contenido":"## Momento de inercia\nEs…"}]}])");
+        f.close();
+
+        StudiaSessionStore st;
+        st.cargar();
+        const StudiaSesion *s = st.porId(QStringLiteral("viejo-1"));
+        QVERIFY(s != nullptr);
+        QCOMPARE(s->materia, QStringLiteral("Física 1"));
+        QCOMPARE(s->titulo, QStringLiteral("Momento de inercia"));
+        QVERIFY(s->tituloAuto);
+        QCOMPARE(s->mensajes.size(), 2);   // no se pierde la conversación
+        QFile::remove(ruta);
+    }
+
+    void temas_migradoSinPreguntasQuedaConNombrePorDefecto()
+    {
+        const QString ruta = StudiaSessionStore().rutaArchivo();
+        QFile f(ruta);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(R"([{"id":"v2","materia":"Química","titulo":"StudIA: Química",
+                     "creada":1,"usada":2,"mensajes":[]}])");
+        f.close();
+        StudiaSessionStore st;
+        st.cargar();
+        QCOMPARE(st.porId(QStringLiteral("v2"))->titulo,
+                 StudiaSessionStore::tituloPorDefecto());
+        QFile::remove(ruta);
+    }
+
+    // ── Controlador: temas ──
+
+    void controlador_noSePuedeAbrirTemaSinHaberPreguntado()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        // Recién elegida la materia el chat está vacío: crear otro tema dejaría
+        // dos sin nombre y sin contenido.
+        QVERIFY(!c.puedeCrearTema());
+        const QString antes = c.temaId();
+        c.nuevoTema();
+        QCOMPARE(c.temaId(), antes);            // no hizo nada
+        QCOMPARE(c.temas().size(), 1);
+    }
+
+    void controlador_alPreguntarSeHabilitaTemas()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        c.preguntar(QStringLiteral("criterio de estabilidad de Routh"));
+        QVERIFY(c.puedeCrearTema());
+    }
+
+    void controlador_siSeAbstieneElTemaSigueSinNombre()
+    {
+        // Sin material no se aprendió de qué trata el tema: ponerle de nombre
+        // la frase de abstención sería peor que dejarlo sin nombre.
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        c.preguntar(QStringLiteral("recetas de cocina peruana"));
+        QCOMPARE(c.mensajes().size(), 2);          // pregunta + abstención
+        QCOMPARE(c.tituloTema(), StudiaSessionStore::tituloPorDefecto());
+    }
+
+    void controlador_temasDeLaMateriaSonIndependientes()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        c.preguntar(QStringLiteral("criterio de estabilidad de Routh"));
+        const QString primero = c.temaId();
+        const int mensajesPrimero = c.mensajes().size();
+        QVERIFY(mensajesPrimero > 0);
+
+        c.nuevoTema();
+        QVERIFY(c.temaId() != primero);
+        QVERIFY(c.mensajes().isEmpty());        // arranca limpio
+        QCOMPARE(c.temas().size(), 2);
+
+        // Volver al primero devuelve su conversación intacta.
+        c.abrirTema(primero);
+        QCOMPARE(c.temaId(), primero);
+        QCOMPARE(c.mensajes().size(), mensajesPrimero);
+    }
+
+    void controlador_borrarElTemaAbiertoDejaOtroEnPie()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        c.preguntar(QStringLiteral("criterio de estabilidad de Routh"));
+        const QString unico = c.temaId();
+        c.borrarTema(unico);
+        // La materia sigue elegida y hay un tema nuevo y vacío: la página nunca
+        // queda sin chat.
+        QVERIFY(c.materiaElegida());
+        QVERIFY(c.temaId() != unico);
+        QVERIFY(!c.temaId().isEmpty());
+        QVERIFY(c.mensajes().isEmpty());
+    }
+
+    void controlador_renombrarTema()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        c.preguntar(QStringLiteral("criterio de estabilidad de Routh"));
+        QVERIFY(c.renombrarTema(c.temaId(), QStringLiteral("Estabilidad")));
+        QCOMPARE(c.tituloTema(), QStringLiteral("Estabilidad"));
+        QVERIFY(!c.renombrarTema(c.temaId(), QString()));
     }
 
     // ── Controlador: camino sin red ──
@@ -1780,21 +2092,48 @@ private slots:
         StudiaController c;
         QVERIFY(c.abrirIndice(m_db));
         c.setMateria(QStringLiteral("Sistemas de Control"));
-        QCOMPARE(c.tituloSesion(), QStringLiteral("StudIA: Sistemas de Control"));
-        c.limpiar();
+        // Materia recién elegida: un tema vacío, todavía sin nombre propio.
+        QCOMPARE(c.tituloTema(), StudiaSessionStore::tituloPorDefecto());
         c.preguntar(QStringLiteral("recetas de cocina peruana"));   // se abstiene
         QCOMPARE(c.mensajes().size(), 2);
 
         // Otra materia → otra conversación, vacía.
         c.setMateria(QStringLiteral("Redes Industriales"));
-        QCOMPARE(c.tituloSesion(), QStringLiteral("StudIA: Redes Industriales"));
-        c.limpiar();
         QVERIFY(c.mensajes().isEmpty());
 
         // Al volver, el historial de la primera sigue ahí.
         c.setMateria(QStringLiteral("Sistemas de Control"));
         QCOMPARE(c.mensajes().size(), 2);
-        c.limpiar();
+    }
+
+    void controlador_elPanelListaMateriasNoTemas()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        c.preguntar(QStringLiteral("criterio de estabilidad de Routh"));
+        c.nuevoTema();
+        c.preguntar(QStringLiteral("polos y ceros"));
+        // Dos temas, pero UNA sola fila en el panel: navega entre materias.
+        QCOMPARE(c.temas().size(), 2);
+        QCOMPARE(c.materiasConChats().size(), 1);
+        QCOMPARE(c.materiasConChats().first().toMap()
+                     .value(QStringLiteral("temas")).toInt(), 2);
+    }
+
+    void controlador_borrarLosChatsDeUnaMateriaSueltaLaMateria()
+    {
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        c.setMateria(QStringLiteral("Sistemas de Control"));
+        c.preguntar(QStringLiteral("criterio de estabilidad de Routh"));
+        c.nuevoTema();
+        c.borrarChatsDeMateria(QStringLiteral("Sistemas de Control"));
+        // Si la materia quedara elegida, sesionActual() le crearía un tema y el
+        // chat reaparecería como si el borrado no hubiera funcionado.
+        QVERIFY(!c.materiaElegida());
+        QVERIFY(c.materiasConChats().isEmpty());
+        QVERIFY(c.mensajes().isEmpty());
     }
 
     void controlador_seAbstieneSinFragmentos()

@@ -3,6 +3,9 @@
 #include <QHash>
 #include <QRegularExpression>
 #include <QStringList>
+#include <QTextBlock>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <QVariantMap>
 
 #include <algorithm>
@@ -423,6 +426,90 @@ QString recortarTrasAbstencion(const QString &respuesta, const QString &frase)
     // Se conserva lo que haya antes (a veces abre con un "Lamentablemente…")
     // más la frase, y se descarta el resto.
     return respuesta.left(i + frase.size()).trimmed();
+}
+
+QString aHtmlConInterlineado(const QString &texto, bool markdown, int porcentaje,
+                             int pixeles)
+{
+    QTextDocument doc;
+    // El tamano tiene que ir DENTRO del HTML: al exportar, Qt escribe el
+    // font-size del documento en el <body>, y ese le gana al font.pixelSize del
+    // TextEdit. Sin esto el texto sale con el tamano por defecto de Qt (9pt,
+    // ~12px) y se ve mas chico que antes de pasar a texto seleccionable.
+    //
+    // Los titulos no se tocan: Qt los exporta como `x-large`, que es relativo
+    // al cuerpo, asi que escalan solos.
+    QFont f = doc.defaultFont();
+    f.setPointSizeF(pixeles * 0.75);   // 96 dpi logicos: 1 pt = 4/3 px
+    doc.setDefaultFont(f);
+
+    if (markdown)
+        doc.setMarkdown(texto);
+    else
+        doc.setPlainText(texto);
+
+    // El interlineado se pone bloque por bloque y no con un <div> envolvente:
+    // asi lo heredan tambien los items de lista y los titulos, que Qt exporta
+    // como bloques propios.
+    QTextCursor cur(&doc);
+    cur.beginEditBlock();
+    for (QTextBlock b = doc.begin(); b.isValid(); b = b.next()) {
+        QTextBlockFormat f = b.blockFormat();
+        f.setLineHeight(porcentaje, QTextBlockFormat::ProportionalHeight);
+        cur.setPosition(b.position());
+        cur.setBlockFormat(f);
+    }
+    cur.endEditBlock();
+    return doc.toHtml();
+}
+
+QString tituloDeRespuesta(const QString &respuesta)
+{
+    // Titulo Markdown: "## Criterio de Routh". Es lo que se busca primero.
+    static const QRegularExpression encabezado(
+        QStringLiteral("^[ \\t]*#{1,6}[ \\t]+(.+)$"),
+        QRegularExpression::MultilineOption);
+    // Renglon entero en negrita: "**Criterio de Routh**", que el modelo usa
+    // como titulo cuando no pone almohadillas.
+    static const QRegularExpression negritaSola(
+        QStringLiteral("^[ \\t]*\\*\\*(.+?)\\*\\*[ \\t]*:?[ \\t]*$"),
+        QRegularExpression::MultilineOption);
+
+    QString t;
+    if (const auto m = encabezado.match(respuesta); m.hasMatch())
+        t = m.captured(1);
+    else if (const auto m2 = negritaSola.match(respuesta); m2.hasMatch())
+        t = m2.captured(1);
+    else {
+        // Sin titulo: la primera linea con texto, que suele ser la frase de
+        // apertura y describe el tema igual.
+        for (const QString &linea : respuesta.split(QLatin1Char('\n'))) {
+            const QString l = linea.trimmed();
+            if (!l.isEmpty() && !l.startsWith(QStringLiteral("```"))) {
+                t = l;
+                break;
+            }
+        }
+    }
+
+    // Se limpia el marcado que haya quedado: en un titulo los asteriscos y los
+    // backticks se leen como basura.
+    t.remove(QLatin1Char('*')).remove(QLatin1Char('`')).remove(QLatin1Char('#'));
+    t.replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" "));
+    t = t.trimmed();
+    while (t.endsWith(QLatin1Char(':')) || t.endsWith(QLatin1Char('.')))
+        t.chop(1);
+    t = t.trimmed();
+    if (t.isEmpty())
+        return QString();
+    if (t.size() <= kLargoTitulo)
+        return t;
+    // Se corta en el ultimo espacio para no partir una palabra al medio.
+    QString corto = t.left(kLargoTitulo);
+    const int esp = corto.lastIndexOf(QLatin1Char(' '));
+    if (esp > kLargoTitulo / 2)
+        corto = corto.left(esp);
+    return corto.trimmed() + QStringLiteral("…");
 }
 
 QVariantList flashcards(const QString &respuesta)

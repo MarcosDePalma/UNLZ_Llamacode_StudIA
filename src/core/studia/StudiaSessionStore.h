@@ -4,50 +4,76 @@
 #include <QVariantList>
 #include <QVector>
 
-// Una conversacion de StudIA. Hay UNA por materia: al cambiar de materia en el
-// selector se cambia de sesion, para que no se mezclen los conceptos ni el
-// contexto de dos asignaturas distintas.
+// Un TEMA: una conversacion de StudIA dentro de una materia.
+//
+// Hay varios por materia. La idea es que el estudiante pueda preguntar sobre
+// ecuaciones en un tema y sobre integrales en otro sin que se le mezclen: cada
+// tema arrastra SOLO su propio historial, asi que una repregunta corta ("¿y por
+// que?") se resuelve contra lo que se hablo en ese tema y no contra otro.
+//
+// La identidad es el `id`, no la materia: por eso pueden convivir varios de la
+// misma materia. El `titulo` lo pone el sistema con la primera pregunta y el
+// estudiante lo puede cambiar; `tituloAuto` recuerda si todavia es el
+// automatico, para no pisar el que escribio a mano.
 struct StudiaSesion {
     QString id;
-    QString materia;      // clave de negocio: identifica la sesion
-    QString titulo;       // "StudIA: Economía 1"
-    double  creada = 0;   // epoch ms
-    double  usada = 0;    // epoch ms del ultimo mensaje
-    QVariantList mensajes;   // {rol, contenido, escribiendo, fuentes, modo}
+    QString materia;
+    QString titulo;              // nombre del tema
+    bool    tituloAuto = true;   // false en cuanto el estudiante lo renombra
+    double  creada = 0;          // epoch ms
+    double  usada = 0;           // epoch ms del ultimo mensaje
+    QVariantList mensajes;       // {rol, contenido, escribiendo, fuentes, modo}
 
     QVariantMap toMap() const;
 };
 
 // Persistencia de las conversaciones en AppLocalData/LlamaCode/studia/.
-// Un unico JSON: son pocas sesiones (una por materia) y de tamano acotado.
+// Un unico JSON: son pocas y de tamano acotado.
 class StudiaSessionStore
 {
 public:
-    // Titulo canonico de la sesion de una materia.
-    static QString tituloDe(const QString &materia);
+    // Nombre de un tema recien creado, mientras no haya una respuesta que le de
+    // uno. Un tema donde StudIA se abstuvo se queda con este: no aprendimos
+    // nada del tema como para nombrarlo.
+    static QString tituloPorDefecto();
 
     void cargar();                 // lee del disco (idempotente)
     void guardar() const;          // vuelca al disco
     QString rutaArchivo() const;
 
-    // Devuelve la sesion de esa materia, creandola si no existia.
-    StudiaSesion &obtenerOCrear(const QString &materia);
-    // Puntero a la sesion de la materia, o nullptr si no existe.
-    StudiaSesion *buscar(const QString &materia);
-    const StudiaSesion *buscar(const QString &materia) const;
-    // Borra la conversacion de una materia (la sesion desaparece de la lista).
-    bool borrar(const QString &materia);
-    // Vacia los mensajes pero conserva la sesion.
-    bool limpiar(const QString &materia);
+    StudiaSesion *porId(const QString &id);
+    const StudiaSesion *porId(const QString &id) const;
 
-    // Sesiones ordenadas de la mas usada recientemente a la mas vieja.
-    QVector<StudiaSesion> ordenadasPorUso() const;
-    QVariantList paraQml() const;
+    // Crea un tema nuevo en esa materia. Devuelve su id ("" si no hay materia).
+    QString crear(const QString &materia);
+    // Id del tema mas usado recientemente de la materia, o "" si no hay ninguno.
+    QString ultimoDe(const QString &materia) const;
+
+    bool borrar(const QString &id);
+    bool limpiar(const QString &id);          // vacia los mensajes, conserva el tema
+    // Renombre manual: marca el titulo como propio del estudiante. Un titulo
+    // vacio no se acepta (dejaria una fila sin nombre en la lista).
+    bool renombrar(const QString &id, const QString &titulo);
+    // Titulo automatico. No hace nada si el estudiante ya le puso nombre a
+    // mano —eso gana siempre— ni si el titulo viene vacio.
+    bool titular(const QString &id, const QString &titulo);
+
+    // Temas de una materia, del mas usado recientemente al mas viejo.
+    QVector<StudiaSesion> deMateria(const QString &materia) const;
+    QVariantList paraQml(const QString &materia) const;
     int cantidad() const { return m_sesiones.size(); }
+    int cantidadDe(const QString &materia) const;
 
-    // Ultimas preguntas del usuario en esa materia, de la mas reciente a la mas
+    // Una fila por MATERIA que tenga algun tema, de la mas usada a la mas
+    // vieja: {materia, temas, mensajes, usada}. Es lo que lista el panel
+    // lateral, que navega entre materias y no entre temas.
+    QVariantList resumenPorMateria() const;
+    // Borra TODOS los temas de una materia. Devuelve cuantos saco.
+    int borrarMateria(const QString &materia);
+
+    // Ultimas preguntas del usuario EN ESE TEMA, de la mas reciente a la mas
     // vieja (para expandir la consulta de una repregunta corta).
-    QStringList ultimasPreguntas(const QString &materia, int cuantas) const;
+    QStringList ultimasPreguntas(const QString &id, int cuantas) const;
 
 private:
     QVector<StudiaSesion> m_sesiones;

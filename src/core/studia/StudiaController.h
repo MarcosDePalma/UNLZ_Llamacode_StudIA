@@ -4,6 +4,7 @@
 #include "StudiaPlot.h"
 #include "StudiaPrompt.h"
 #include "StudiaSessionStore.h"
+#include "StudiaTexto.h"
 
 #include <QByteArray>
 #include <QObject>
@@ -56,8 +57,17 @@ class StudiaController : public QObject
     // Materia activa. Cambiarla conmuta de conversacion (o crea una nueva).
     Q_PROPERTY(QString  materia      READ materia      WRITE setMateria     NOTIFY materiaChanged)
     Q_PROPERTY(bool     materiaElegida READ materiaElegida                  NOTIFY materiaChanged)
-    Q_PROPERTY(QString  tituloSesion READ tituloSesion                      NOTIFY materiaChanged)
-    Q_PROPERTY(QVariantList sesiones READ sesiones                          NOTIFY sesionesChanged)
+    // Temas de la materia actual: varias conversaciones que no se mezclan.
+    Q_PROPERTY(QVariantList temas    READ temas                             NOTIFY sesionesChanged)
+    Q_PROPERTY(QString  temaId       READ temaId                            NOTIFY sesionesChanged)
+    Q_PROPERTY(QString  tituloTema   READ tituloTema                        NOTIFY sesionesChanged)
+    // Un tema sin preguntas todavia no es un tema: abrir otro dejaria dos
+    // vacios y ninguno con nombre. Hasta que no se pregunte algo, no se puede
+    // crear el siguiente.
+    Q_PROPERTY(bool     puedeCrearTema READ puedeCrearTema                  NOTIFY sesionesChanged)
+    // Materias que tienen algun chat. El panel lateral navega entre MATERIAS;
+    // entre los temas de una materia se navega con el boton "Temas".
+    Q_PROPERTY(QVariantList materiasConChats READ materiasConChats          NOTIFY sesionesChanged)
     // Modo de tutor activo ("libre", "resumen", "flashcards", ...).
     Q_PROPERTY(QString  modo         READ modo         WRITE setModo        NOTIFY modoChanged)
     Q_PROPERTY(QVariantList modos    READ modos                             CONSTANT)
@@ -106,8 +116,11 @@ public:
     QString materia() const { return m_materia; }
     void setMateria(const QString &m);
     bool materiaElegida() const { return !m_materia.trimmed().isEmpty(); }
-    QString tituloSesion() const { return StudiaSessionStore::tituloDe(m_materia); }
-    QVariantList sesiones() const { return m_sesiones.paraQml(); }
+    QVariantList temas() const { return m_sesiones.paraQml(m_materia); }
+    QString temaId() const { return m_temaId; }
+    QString tituloTema() const;
+    bool puedeCrearTema() const;
+    QVariantList materiasConChats() const { return m_sesiones.resumenPorMateria(); }
 
     QString modo() const { return m_modo; }
     void setModo(const QString &m);
@@ -132,8 +145,15 @@ public:
     // Conversacion
     Q_INVOKABLE void preguntar(const QString &texto);
     Q_INVOKABLE void detener();
-    Q_INVOKABLE void limpiar();                            // vacia la sesion actual
-    Q_INVOKABLE void borrarSesion(const QString &materia);
+    Q_INVOKABLE void limpiar();                            // vacia el tema actual
+
+    // Temas
+    Q_INVOKABLE void nuevoTema();
+    Q_INVOKABLE void abrirTema(const QString &id);
+    Q_INVOKABLE void borrarTema(const QString &id);
+    Q_INVOKABLE bool renombrarTema(const QString &id, const QString &titulo);
+    // Saca del historial todos los temas de una materia (la ✕ del panel).
+    Q_INVOKABLE void borrarChatsDeMateria(const QString &materia);
     // Busqueda cruda, sin modelo. Para inspeccionar el indice y para medir la
     // calidad de recuperacion en la evaluacion.
     Q_INVOKABLE QVariantList buscar(const QString &consulta, int k = 6) const;
@@ -163,6 +183,13 @@ public:
     // ¿Esta respuesta tiene tarjetas exportables? Para mostrar u ocultar el botón.
     Q_INVOKABLE int contarFlashcards(const QString &respuesta) const;
 
+    // Contenido de una burbuja como HTML con interlineado. La UI lo muestra en
+    // un TextEdit para poder seleccionar un fragmento con el mouse; el HTML es
+    // lo que permite conservar el interlineado, que TextEdit no tiene como
+    // propiedad (ver StudiaTexto::aHtmlConInterlineado).
+    Q_INVOKABLE QString htmlDe(const QString &texto, bool markdown) const
+    { return StudiaTexto::aHtmlConInterlineado(texto, markdown); }
+
     // Fuentes para la UI, AGRUPADAS por documento: si un mismo PDF aportó las
     // páginas 11, 14 y 16 se muestra una sola entrada "doc · pág. 11, 14, 16"
     // en vez de repetir el nombre del archivo tres veces. Cada entrada trae:
@@ -189,6 +216,10 @@ signals:
 
 private:
     StudiaSesion *sesionActual();
+    // Le pone nombre al tema con el titulo de la respuesta, salvo que StudIA se
+    // haya abstenido: de una abstencion no se aprende de que trata el tema.
+    void titularConRespuesta(const QString &respuesta);
+    static bool esAbstencion(const QString &respuesta);
     void agregarMensaje(const QString &rol, const QString &contenido,
                         const QVariantList &fuentes = {}, bool escribiendo = false,
                         const QString &modo = QString());
@@ -234,6 +265,7 @@ private:
     QStringList        m_colaAdjuntos;
     QProcess          *m_procAdjunto = nullptr;
     QString            m_materia;
+    QString            m_temaId;      // tema abierto dentro de la materia
     QString            m_modo = QStringLiteral("libre");
     QString            m_serverUrl;
     QString            m_modelo = QStringLiteral("studia");

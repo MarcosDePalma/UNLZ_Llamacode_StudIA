@@ -109,7 +109,7 @@ QString StudiaController::elegirIndice()
         QStringLiteral("Índice de StudIA (*.db);;Todos los archivos (*)"));
 }
 
-// ── Materia y sesiones ───────────────────────────────────────────────────────
+// ── Materia y temas ──────────────────────────────────────────────────────────
 
 void StudiaController::setMateria(const QString &m)
 {
@@ -121,11 +121,17 @@ void StudiaController::setMateria(const QString &m)
     detener();
     m_materia = nueva;
     QSettings().setValue(QLatin1String(kClaveMateria), m_materia);
+    m_temaId.clear();
     if (!m_materia.isEmpty()) {
-        m_sesiones.obtenerOCrear(m_materia);   // crea "StudIA: <materia>" si no estaba
+        // Se retoma el ultimo tema de la materia; si no habia ninguno se abre
+        // uno vacio, que es lo mismo que ver al elegir una materia por primera
+        // vez.
+        m_temaId = m_sesiones.ultimoDe(m_materia);
+        if (m_temaId.isEmpty())
+            m_temaId = m_sesiones.crear(m_materia);
         m_sesiones.guardar();
-        emit sesionesChanged();
     }
+    emit sesionesChanged();
     emit materiaChanged();
     emit mensajesChanged();
 }
@@ -134,38 +140,136 @@ StudiaSesion *StudiaController::sesionActual()
 {
     if (m_materia.trimmed().isEmpty())
         return nullptr;
-    return &m_sesiones.obtenerOCrear(m_materia);
+    if (StudiaSesion *s = m_sesiones.porId(m_temaId))
+        return s;
+    // El tema se borro o todavia no se abrio ninguno: se abre uno.
+    m_temaId = m_sesiones.crear(m_materia);
+    return m_sesiones.porId(m_temaId);
+}
+
+QString StudiaController::tituloTema() const
+{
+    const StudiaSesion *s = m_sesiones.porId(m_temaId);
+    return s ? s->titulo : QStringLiteral("StudIA");
+}
+
+bool StudiaController::puedeCrearTema() const
+{
+    // Con la materia recien elegida el tema esta vacio: crear otro dejaria dos
+    // sin nombre y sin contenido. Recien cuando el actual tiene algo, tiene
+    // sentido empezar uno nuevo.
+    const StudiaSesion *s = m_sesiones.porId(m_temaId);
+    return s && !s->mensajes.isEmpty();
 }
 
 QVariantList StudiaController::mensajes() const
 {
-    const StudiaSesion *s = m_sesiones.buscar(m_materia);
+    const StudiaSesion *s = m_sesiones.porId(m_temaId);
     return s ? s->mensajes : QVariantList{};
 }
 
 void StudiaController::limpiar()
 {
     detener();
-    if (m_sesiones.limpiar(m_materia)) {
+    if (m_sesiones.limpiar(m_temaId)) {
         m_sesiones.guardar();
         emit mensajesChanged();
         emit sesionesChanged();
     }
 }
 
-void StudiaController::borrarSesion(const QString &materia)
+void StudiaController::nuevoTema()
 {
-    const QString objetivo = materia.trimmed();
-    const bool eraLaActiva = (objetivo == m_materia);
+    if (m_materia.trimmed().isEmpty() || !puedeCrearTema())
+        return;
+    detener();
+    m_temaId = m_sesiones.crear(m_materia);
+    m_sesiones.guardar();
+    emit sesionesChanged();
+    emit mensajesChanged();
+}
+
+void StudiaController::abrirTema(const QString &id)
+{
+    const StudiaSesion *s = m_sesiones.porId(id);
+    if (!s || id == m_temaId)
+        return;
+    // Cambiar de tema interrumpe lo que se este generando: la respuesta
+    // pertenece al tema anterior y no debe caer en el nuevo.
+    detener();
+    m_temaId = id;
+    if (s->materia != m_materia) {
+        m_materia = s->materia;
+        QSettings().setValue(QLatin1String(kClaveMateria), m_materia);
+        emit materiaChanged();
+    }
+    emit sesionesChanged();
+    emit mensajesChanged();
+}
+
+void StudiaController::borrarTema(const QString &id)
+{
+    const bool eraElAbierto = (id == m_temaId);
+    if (eraElAbierto)
+        detener();
+    if (!m_sesiones.borrar(id))
+        return;
+    // Si se borro el que estaba abierto se pasa al siguiente de la materia, y
+    // si no queda ninguno se abre uno vacio: la pagina nunca queda sin chat.
+    if (eraElAbierto) {
+        m_temaId = m_sesiones.ultimoDe(m_materia);
+        if (m_temaId.isEmpty() && !m_materia.isEmpty())
+            m_temaId = m_sesiones.crear(m_materia);
+        emit mensajesChanged();
+    }
+    m_sesiones.guardar();
+    emit sesionesChanged();
+}
+
+bool StudiaController::renombrarTema(const QString &id, const QString &titulo)
+{
+    if (!m_sesiones.renombrar(id, titulo))
+        return false;
+    m_sesiones.guardar();
+    emit sesionesChanged();
+    return true;
+}
+
+void StudiaController::titularConRespuesta(const QString &respuesta)
+{
+    // Si StudIA se abstuvo no hay tema del que hablar: el chat sigue siendo
+    // "Tema nuevo" y la proxima respuesta con contenido lo nombra.
+    if (esAbstencion(respuesta))
+        return;
+    m_sesiones.titular(m_temaId, StudiaTexto::tituloDeRespuesta(respuesta));
+}
+
+bool StudiaController::esAbstencion(const QString &respuesta)
+{
+    const QString frase = StudiaPrompt::fraseAbstencion();
+    if (frase.isEmpty())
+        return false;
+    // La respuesta ya paso por recortarTrasAbstencion, asi que cuando el
+    // sistema se abstuvo termina en la frase; puede abrir con un "Lamentablemente".
+    const int i = respuesta.indexOf(frase);
+    return i >= 0 && i <= StudiaTexto::kMargenAbstencion;
+}
+
+void StudiaController::borrarChatsDeMateria(const QString &materia)
+{
+    const QString m = materia.trimmed();
+    const bool eraLaActiva = (m == m_materia);
     if (eraLaActiva)
         detener();
-    if (!m_sesiones.borrar(objetivo))
+    if (m_sesiones.borrarMateria(m) == 0)
         return;
     m_sesiones.guardar();
-    // Si se borró la conversación abierta hay que soltar la materia: si no,
-    // sesionActual() la volvería a crear y el chat reaparecería solo.
+    // Si se borro la materia abierta se la suelta: si no, sesionActual() le
+    // crearia un tema nuevo y el chat reaparecería como si no se hubiera
+    // borrado nada.
     if (eraLaActiva) {
         m_materia.clear();
+        m_temaId.clear();
         QSettings().setValue(QLatin1String(kClaveMateria), QString());
         emit materiaChanged();
         emit mensajesChanged();
@@ -541,12 +645,18 @@ void StudiaController::agregarMensaje(const QString &rol, const QString &conteni
     });
     s->usada = double(QDateTime::currentMSecsSinceEpoch());
     emit mensajesChanged();
+    // La lista de temas muestra la cantidad de mensajes y se ordena por uso, y
+    // el boton "nuevo tema" se habilita con el primer mensaje: los tres
+    // dependen de esto.
+    emit sesionesChanged();
 }
 
 QVector<StudiaPrompt::Turno> StudiaController::historialReciente() const
 {
     QVector<StudiaPrompt::Turno> out;
-    const StudiaSesion *s = m_sesiones.buscar(m_materia);
+    // El historial sale del TEMA abierto, no de la materia: es lo que mantiene
+    // separadas dos conversaciones de la misma asignatura.
+    const StudiaSesion *s = m_sesiones.porId(m_temaId);
     if (!s)
         return out;
     // Se toman los ultimos turnos completos, sin contar el mensaje que se acaba
@@ -589,7 +699,7 @@ void StudiaController::preguntar(const QString &texto)
     // El contexto se arma ANTES de sumar la pregunta nueva.
     const QVector<StudiaPrompt::Turno> historial = historialReciente();
     const QStringList previas =
-        m_sesiones.ultimasPreguntas(m_materia, kPreguntasParaExpandir);
+        m_sesiones.ultimasPreguntas(m_temaId, kPreguntasParaExpandir);
 
     agregarMensaje(QStringLiteral("usuario"), pregunta, {}, false, idModo);
 
@@ -784,6 +894,10 @@ void StudiaController::cerrarStream(bool ok, const QString &err)
                 msg[QStringLiteral("fuentes")] = QVariantList{};   // se abstuvo
         }
         s->mensajes[m_idxRespuesta] = msg;
+        // El nombre del tema sale del titulo de la respuesta, no de la
+        // pregunta: el modelo encabeza con el concepto y la pregunta suele ser
+        // coloquial. Se hace aca, con la respuesta ya completa.
+        titularConRespuesta(msg.value(QStringLiteral("contenido")).toString());
     }
     m_idxRespuesta = -1;
     m_acumulado.clear();

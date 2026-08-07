@@ -218,3 +218,10 @@
 
 # --- Sistemas de Control ---
 5A/10C/(0_043)Sistemas_de_Control/Bibliografía/Resumen modelización - Análisis temporal.pdf
+
+# --- Datos personales de terceros (2026-08-06) ---
+# Listados de alumnos con nombres, notas y DNI. No son material
+# de estudio y no deben entrar al indice bajo ninguna circunstancia.
+2A/3C/(0_011)Matemática_1/Material de Trabajo/ECO II 32 TN (1er Bim 2020) Situacion FINAL.pdf
+3A/5C/(0_020)Cálculo_1/notas 2do parcial.pdf
+3A/6C/(0_027)Mecánica_Teórica/Otros TPS y Parciales/Cursada 1/20231C_MT_MyM_notas.pdf
