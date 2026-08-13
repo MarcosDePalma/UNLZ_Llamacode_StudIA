@@ -40,6 +40,10 @@ void AppControllerTests::initTestCase()
     // Aísla AppData/AppLocalData a una ubicación de test.
     QStandardPaths::setTestModeEnabled(true);
     QVERIFY(m_tmp.isValid());
+    // Y los perfiles, que viven en Documentos y NO los redirige el modo test.
+    // Sin esto, createRecommendedLaunchProfileBuildsProfile() creaba un perfil
+    // real por cada corrida de la suite en la máquina de quien la ejecuta.
+    qputenv("LLAMACODE_PROFILES_DIR", m_tmp.filePath(QStringLiteral("profiles")).toLocal8Bit());
 }
 
 void AppControllerTests::exportUserDataToWritesBackup()

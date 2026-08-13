@@ -9,6 +9,9 @@
 // primer ProfileManager del proceso (lo hacemos en initTestCase).
 
 #include <QtTest>
+#include <QCoreApplication>
+#include <QProcess>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include "core/profiles/ProfileTypes.h"
 #include "core/profiles/ProfileManager.h"
@@ -38,6 +41,8 @@ private slots:
     void migracion_noPisaLoQueYaHayEnElDestino();
     void migracion_sinOrigenNoHaceNada();
     void rutaDePerfiles_respetaLaVariableDeEntorno();
+    void rutaDePerfiles_bajoTestNuncaEsLaDelUsuario();
+    void rutaDePerfiles_imprimeLaRaiz();
 
 private:
     QTemporaryDir m_dir;
@@ -389,6 +394,43 @@ void ProfilesTests::rutaDePerfiles_respetaLaVariableDeEntorno()
              QDir::cleanPath(QString::fromLocal8Bit(qgetenv("LLAMACODE_PROFILES_DIR"))));
     // Y la ruta vieja ya no se usa como default.
     QVERIFY(!ProfileManager::profilesRoot().contains(QStringLiteral("cristian")));
+}
+
+void ProfilesTests::rutaDePerfiles_bajoTestNuncaEsLaDelUsuario()
+{
+    // Los perfiles viven en Documentos, y setTestModeEnabled() NO redirige esa
+    // carpeta: sólo AppData y AppLocalData. Un test que se olvide de setear
+    // LLAMACODE_PROFILES_DIR escribía perfiles de verdad en la máquina de quien
+    // corre la suite —pasó: se acumularon 29 perfiles basura antes de notarlo—.
+    //
+    // Se comprueba en un proceso aparte porque profilesRoot() cachea su
+    // resultado en un static: dentro de este binario ya quedó fijado por la
+    // variable de entorno de initTestCase.
+    QProcess p;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.remove(QStringLiteral("LLAMACODE_PROFILES_DIR"));
+    p.setProcessEnvironment(env);
+    p.start(QCoreApplication::applicationFilePath(),
+            {QStringLiteral("rutaDePerfiles_imprimeLaRaiz")});
+    QVERIFY(p.waitForFinished(30000));
+    const QString salida = QString::fromLocal8Bit(p.readAllStandardOutput());
+
+    const QString docs =
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    QVERIFY2(!docs.isEmpty(), "sin carpeta de Documentos no se puede comprobar");
+    const QString raiz = salida.section(QStringLiteral("RAIZ="), 1).section('\n', 0, 0).trimmed();
+    QVERIFY2(!raiz.isEmpty(), qPrintable(salida));
+    QVERIFY2(!QDir::cleanPath(raiz).startsWith(QDir::cleanPath(docs)),
+             qPrintable(QStringLiteral("los tests escribirían en %1").arg(raiz)));
+}
+
+void ProfilesTests::rutaDePerfiles_imprimeLaRaiz()
+{
+    // Caso auxiliar del anterior: corre en el subproceso, sin la variable de
+    // entorno, y sólo informa dónde caerían los perfiles.
+    QStandardPaths::setTestModeEnabled(true);
+    printf("RAIZ=%s\n", qPrintable(ProfileManager::profilesRoot()));
+    fflush(stdout);
 }
 
 QTEST_MAIN(ProfilesTests)

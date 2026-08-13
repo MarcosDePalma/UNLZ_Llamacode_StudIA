@@ -1,6 +1,7 @@
 ﻿#include <QtTest>
 #include <QDir>
 #include <QFile>
+#include <QSettings>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -8,6 +9,7 @@
 
 #include "core/studia/StudiaController.h"
 #include "core/studia/StudiaEmbed.h"
+#include "core/studia/StudiaHerramientas.h"
 #include "core/studia/StudiaIndex.h"
 #include "core/studia/StudiaPrompt.h"
 #include "core/studia/StudiaSessionStore.h"
@@ -44,6 +46,10 @@ private:
                 "CREATE VIRTUAL TABLE fragmentos_fts USING fts5(texto, "
                 "content='fragmentos', content_rowid='id', "
                 "tokenize=\"unicode61 remove_diacritics 2\")",
+                // De dónde se ingestó: con esto la app reubica los documentos
+                // cuando el corpus viaja con la aplicación.
+                "CREATE TABLE indice_info (clave TEXT PRIMARY KEY, valor TEXT)",
+                "INSERT INTO indice_info VALUES ('corpus_raiz','C:/corpus')",
             };
             for (const char *s : ddl)
                 if (!q.exec(QLatin1String(s)))
@@ -133,6 +139,12 @@ private slots:
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);
+        // setTestModeEnabled redirige carpetas, no el registro de Windows: con
+        // el formato nativo, un QSettings del test escribe en HKCU igual que la
+        // app. Forzando el formato .ini las preferencias caen dentro de la
+        // carpeta de test y no se toca nada del usuario. Es la misma clase de
+        // fuga que llenaba de perfiles duplicados la carpeta Documentos.
+        QSettings::setDefaultFormat(QSettings::IniFormat);
         QVERIFY(m_dir.isValid());
         m_db = m_dir.filePath(QStringLiteral("studia_test.db"));
         QVERIFY2(construirIndice(m_db), "no se pudo construir el indice de prueba");
@@ -2279,6 +2291,170 @@ private slots:
         QCOMPARE(d.value(QStringLiteral("estado")).toString(), QStringLiteral("ok"));
         QVERIFY(d.contains(QStringLiteral("ruta")));
         QVERIFY(idx.documentos(QStringLiteral("No Existe")).isEmpty());
+    }
+
+    // ── Que la app se pueda entregar armada ──
+
+    void empaquetado_elIndiceSeBuscaJuntoAlEjecutable()
+    {
+        // Sin esto, quien recibe la app tiene que salir a buscar el índice con
+        // un diálogo de archivos: la ruta guardada es la de OTRA máquina.
+        const QString esperado = QCoreApplication::applicationDirPath()
+                                 + QStringLiteral("/StudIA/studia.db");
+        QFile f(esperado);
+        const bool habia = f.exists();
+        if (!habia) {
+            QDir().mkpath(QFileInfo(esperado).absolutePath());
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("x");
+            f.close();
+        }
+        QCOMPARE(StudiaController::indiceEmpaquetado(), esperado);
+        if (!habia) {
+            QFile::remove(esperado);
+            QCOMPARE(StudiaController::indiceEmpaquetado(), QString());
+        }
+    }
+
+    void empaquetado_elIndiceGuardaDeDondeSalio()
+    {
+        // Es lo que permite recalcular dónde quedó cada documento cuando el
+        // corpus viaja con la aplicación.
+        StudiaIndex idx;
+        QVERIFY(idx.abrir(m_db));
+        QCOMPARE(idx.corpusRaiz(), QStringLiteral("C:/corpus"));
+    }
+
+    void empaquetado_unDocumentoSeReubicaEnLaCarpetaQueHaya()
+    {
+        // El caso real: el índice dice D:\...\DATA\... y en esta máquina el
+        // corpus está en otro lado.
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+        // Las rutas del índice de prueba (C:/corpus/...) no existen: sin una
+        // carpeta donde reubicarlas, no se inventa ninguna.
+        QVERIFY(c.reubicarDocumento(QStringLiteral("C:/corpus/ogata.pdf")).isEmpty());
+        // Una ruta que ni siquiera cuelga de la raíz indexada, tampoco.
+        QVERIFY(c.reubicarDocumento(QStringLiteral("Z:/no/existe.pdf")).isEmpty());
+        QVERIFY(c.reubicarDocumento(QString()).isEmpty());
+        // Un archivo que sí está se devuelve tal cual, sin tocar nada.
+        QCOMPARE(c.reubicarDocumento(m_db), m_db);
+    }
+
+    void empaquetado_losDocumentosSeBuscanEnVariosLados()
+    {
+        // Los 7,7 GB de documentos no entran en el instalador, asi que llegan
+        // aparte y pueden terminar en cualquier lado: copiados a C:\StudIA_Docs,
+        // o leidos directo de un disco externo. La carpeta elegida por el
+        // copiador tiene que pesar mas que la que quedo grabada al indexar.
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+
+        QTemporaryDir copiados;
+        QVERIFY(copiados.isValid());
+
+        QSettings().remove(QStringLiteral("studia/carpetaDocumentos"));
+        const QString sinNada = c.carpetaCorpus();
+
+        QSettings().setValue(QStringLiteral("studia/carpetaDocumentos"),
+                             copiados.path());
+        QSettings().sync();
+        QCOMPARE(c.carpetaCorpus(), copiados.path());
+        QVERIFY(c.carpetaCorpus() != sinNada);
+
+        // Si esa carpeta desaparece (el disco externo que se desconecto), no se
+        // devuelve una ruta muerta: se sigue buscando en el resto.
+        QSettings().setValue(QStringLiteral("studia/carpetaDocumentos"),
+                             QStringLiteral("Z:/carpeta/que/no/existe"));
+        QSettings().sync();
+        QCOMPARE(c.carpetaCorpus(), sinNada);
+
+        QSettings().remove(QStringLiteral("studia/carpetaDocumentos"));
+        QSettings().sync();
+    }
+
+    void empaquetado_cuandoElDocumentoNoEstaSeExplicaPorQue()
+    {
+        // Un clic que no hace nada se lee como "se colgó". Y con la copia que se
+        // entrega sin el corpus, ese clic pasa a ser el caso normal.
+        StudiaController c;
+        QVERIFY(c.abrirIndice(m_db));
+
+        // Un archivo que está: no hay nada que explicar.
+        QVERIFY(c.motivoDocumento(m_db).isEmpty());
+
+        const QString sinRuta   = c.motivoDocumento(QString());
+        const QString deCatedra = c.motivoDocumento(QStringLiteral("C:/corpus/ogata.pdf"));
+        const QString suelta    = c.motivoDocumento(QStringLiteral("Z:/no/existe.pdf"));
+        QVERIFY(!sinRuta.isEmpty());
+        QVERIFY(!deCatedra.isEmpty());
+        QVERIFY(!suelta.isEmpty());
+
+        // Y sobre todo no dicen lo mismo: que esta copia no traiga el corpus es
+        // esperado y el texto citado sigue estando; que falte un archivo suelto
+        // es otra cosa. Se comparan entre sí para no atar el test a la
+        // redacción, que ya cambió una vez.
+        if (c.carpetaCorpus().isEmpty())
+            QVERIFY(deCatedra != suelta);
+        QVERIFY(sinRuta != deCatedra);
+    }
+
+    void servidorEmbeddings_diceQueLeFaltaSiNoEstaElModelo()
+    {
+        // Nunca puede quedar en silencio: si falta el modelo, la búsqueda sigue
+        // siendo léxica y el estudiante tiene que enterarse por qué.
+        StudiaEmbedServer s;
+        QVERIFY(!s.activo());
+        s.iniciar();
+        // O levantó (hay modelo y binario en esta máquina), o explicó por qué no.
+        QVERIFY(s.activo() || !s.motivo().isEmpty());
+        s.detener();
+    }
+
+    void herramientas_informaCadaUnaYQueHabilita()
+    {
+        const QVector<StudiaHerramientas::Herramienta> hs = StudiaHerramientas::revisar();
+        QVERIFY(hs.size() >= 4);
+        QSet<QString> ids;
+        for (const StudiaHerramientas::Herramienta &h : hs) {
+            QVERIFY2(!h.id.isEmpty(), "sin id no se puede identificar");
+            QVERIFY2(!h.nombre.isEmpty(), qPrintable(h.id));
+            // Lo que importa para el estudiante: qué pierde si falta. Sin esto
+            // el aviso diría "falta matplotlib" y no significaría nada.
+            QVERIFY2(!h.habilita.isEmpty(), qPrintable(h.id));
+            QVERIFY2(!ids.contains(h.id), qPrintable(h.id));
+            ids.insert(h.id);
+        }
+        QVERIFY(ids.contains(QStringLiteral("python")));
+        QVERIFY(ids.contains(QStringLiteral("tesseract")));
+        QVERIFY(ids.contains(QStringLiteral("mermaid")));
+    }
+
+    void herramientas_elConteoCoincideConLaLista()
+    {
+        int n = 0;
+        for (const StudiaHerramientas::Herramienta &h : StudiaHerramientas::revisar())
+            if (!h.presente)
+                ++n;
+        QCOMPARE(StudiaHerramientas::faltantes(), n);
+    }
+
+    void herramientas_lleganAQmlConTodasLasClaves()
+    {
+        const QVariantList l = StudiaHerramientas::paraQml();
+        QCOMPARE(l.size(), StudiaHerramientas::revisar().size());
+        for (const QVariant &v : l) {
+            const QVariantMap m = v.toMap();
+            for (const QString &k : {QStringLiteral("id"), QStringLiteral("nombre"),
+                                     QStringLiteral("habilita"), QStringLiteral("presente")})
+                QVERIFY2(m.contains(k), qPrintable(k));
+        }
+    }
+
+    void servidorEmbeddings_laUrlEsLaQueUsaElResto()
+    {
+        QCOMPARE(StudiaEmbedServer::url(),
+                 QStringLiteral("http://127.0.0.1:%1").arg(StudiaEmbedServer::kPuerto));
     }
 
     // ── Temas: varias conversaciones por materia ──

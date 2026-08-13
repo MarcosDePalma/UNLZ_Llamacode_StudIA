@@ -1,5 +1,7 @@
 #pragma once
 #include "StudiaEmbed.h"
+#include "StudiaEmbedServer.h"
+#include "StudiaHerramientas.h"
 #include "StudiaIndex.h"
 #include "StudiaPlot.h"
 #include "StudiaPrompt.h"
@@ -100,6 +102,18 @@ public:
     StudiaPlot *graficos() { return &m_graficos; }
     QString urlEmbeddings() const { return m_embed.url(); }
     void setUrlEmbeddings(const QString &u);
+    // Ruta del corpus con el que trabajar. La empaquetada junto al ejecutable
+    // si existe; si no, la que se uso al indexar.
+    QString carpetaCorpus() const;
+
+    // Herramientas externas: cuales hay y que funcion habilita cada una. Sin
+    // esto se apagaban en silencio y el estudiante no tenia como enterarse.
+    Q_INVOKABLE QVariantList herramientas() const
+    { return StudiaHerramientas::paraQml(); }
+    Q_INVOKABLE int herramientasFaltantes() const
+    { return StudiaHerramientas::faltantes(); }
+    // Abre el instalador que las consigue. false si no se encuentra el script.
+    Q_INVOKABLE bool instalarHerramientas() const;
     // Servidor que se va a usar realmente. Si no se configuró uno aparte, se
     // usa el MISMO llama-server del chat: alcanza con arrancarlo con
     // --embeddings y no hace falta levantar un segundo proceso. Un servidor
@@ -140,6 +154,9 @@ public:
     // Indice
     Q_INVOKABLE bool abrirIndice(const QString &dbPath);
     Q_INVOKABLE QString rutaGuardada() const;
+    // Indice que viaja con la aplicacion (<appdir>/StudIA/studia.db). "" si no
+    // esta. Es lo que permite que quien recibe la app no configure nada.
+    static QString indiceEmpaquetado();
     Q_INVOKABLE QString elegirIndice();
 
     // Conversacion
@@ -158,6 +175,15 @@ public:
     // calidad de recuperacion en la evaluacion.
     Q_INVOKABLE QVariantList buscar(const QString &consulta, int k = 6) const;
     Q_INVOKABLE bool abrirDocumento(const QString &ruta) const;
+    // Donde esta REALMENTE el documento. El indice guarda rutas absolutas de la
+    // maquina que lo genero; si el corpus viaja con la app, hay que reubicarlo.
+    // "" si no se encuentra en ningun lado.
+    Q_INVOKABLE QString reubicarDocumento(const QString &ruta) const;
+    // Por que no se puede abrir, en castellano y para mostrar tal cual. "" si si
+    // se puede. Distingue dos casos que al estudiante le importan de manera muy
+    // distinta: que esta copia no traiga los documentos originales (normal, el
+    // texto citado igual esta en el indice) o que ese archivo puntual falte.
+    Q_INVOKABLE QString motivoDocumento(const QString &ruta) const;
     // Texto con el que la UI prellena la barra al elegir un modo del menu.
     Q_INVOKABLE QString prefijoDeModo(const QString &idModo) const;
 
@@ -279,6 +305,7 @@ private:
     StudiaIndex        m_propio;   // bibliografia que subio el estudiante
     StudiaPlot         m_graficos;
     StudiaEmbed        m_embed;
+    StudiaEmbedServer  m_servidorEmbed;   // lo levanta la app, ya no el .bat
     StudiaSessionStore m_sesiones;
     QString            m_errorIndice;
     QString            m_ultimoAdjunto;

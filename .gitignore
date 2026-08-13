@@ -90,3 +90,6 @@ tuner_selftest.exe
 # Python bytecode (tools/studia y demas scripts)
 __pycache__/
 *.pyc
+
+# Instaladores armados (giga y pico el principal, 7,7 GB el de documentos)
+/dist/

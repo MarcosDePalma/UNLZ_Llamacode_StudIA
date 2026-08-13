@@ -29,6 +29,15 @@ namespace {
 const char *kClaveRuta    = "studia/rutaIndice";
 const char *kClaveMateria = "studia/materia";
 const char *kClaveEmbed   = "studia/urlEmbeddings";
+// Donde dejo los documentos originales el copiador (installer\copiar_documentos).
+// Puede apuntar a un disco externo: no hace falta que esten en C:.
+const char *kClaveCorpus  = "studia/carpetaDocumentos";
+
+// Destino por defecto de ese copiador. Es corto a proposito: Windows corta las
+// rutas en 260 caracteres y las carpetas de la facultad son largas. Metiendo el
+// corpus adentro de la carpeta de instalacion, 76 de los 2937 documentos no
+// entrarian; aca afuera quedan 2.
+const char *kCorpusCorto  = "C:/StudIA_Docs";
 
 // Cuantos turnos previos se le pasan al modelo como contexto y cuanto se
 // recorta cada uno. Alcanza para que entienda una repregunta sin inflar el
@@ -63,10 +72,21 @@ StudiaController::StudiaController(QObject *parent) : QObject(parent)
                                           "Se usó búsqueda por palabras.").arg(motivo));
         continuarPregunta({});
     });
+    // El servidor de embeddings lo levanta la app: antes habia que arrancarlo a
+    // mano y al reiniciar la PC la busqueda semantica quedaba apagada sin aviso.
+    connect(&m_servidorEmbed, &StudiaEmbedServer::estadoCambiado, this, [this] {
+        if (m_servidorEmbed.activo() && m_embed.url().isEmpty())
+            m_embed.setUrl(StudiaEmbedServer::url());
+        emit ajustesChanged();
+    });
+    m_servidorEmbed.iniciar();
+
     refrescarIndicePropio();
     const QString guardada = rutaGuardada();
     if (!guardada.isEmpty() && QFileInfo::exists(guardada))
         abrirIndice(guardada);
+    else if (!indiceEmpaquetado().isEmpty())
+        abrirIndice(indiceEmpaquetado());
     // Restaurar la ultima materia, si sigue existiendo en el indice.
     const QString mat = QSettings().value(QLatin1String(kClaveMateria)).toString();
     if (!mat.isEmpty() && materias().contains(mat))
@@ -80,6 +100,46 @@ StudiaController::~StudiaController() { detener(); }
 QString StudiaController::rutaGuardada() const
 {
     return QSettings().value(QLatin1String(kClaveRuta)).toString();
+}
+
+bool StudiaController::instalarHerramientas() const
+{
+    const QString bat = StudiaHerramientas::rutaInstalador();
+    if (bat.isEmpty())
+        return false;
+    // En una consola propia: el instalador tarda, pide confirmaciones y va
+    // contando lo que hace. Meterlo en un proceso silencioso escondería
+    // justamente lo que el estudiante necesita ver.
+    return QProcess::startDetached(QStringLiteral("cmd.exe"),
+                                   {QStringLiteral("/c"), QStringLiteral("start"),
+                                    QStringLiteral(""), bat},
+                                   QFileInfo(bat).absolutePath());
+}
+
+QString StudiaController::indiceEmpaquetado()
+{
+    const QString p = StudiaEmbedServer::carpetaEmpaquetada()
+                      + QStringLiteral("/studia.db");
+    return QFileInfo::exists(p) ? p : QString();
+}
+
+QString StudiaController::carpetaCorpus() const
+{
+    // De mas especifica a mas general. La primera que exista gana.
+    const QStringList candidatas = {
+        // La que viaja con la app: es la que de verdad esta en esta maquina.
+        StudiaEmbedServer::carpetaEmpaquetada() + QStringLiteral("/DATA_StudIA"),
+        // La que eligio el copiador. Va antes que el destino por defecto porque
+        // puede ser un disco externo que el estudiante prefirio no copiar.
+        QSettings().value(QLatin1String(kClaveCorpus)).toString(),
+        QLatin1String(kCorpusCorto),
+        // La que se uso al indexar: misma maquina que genero el indice.
+        m_index.corpusRaiz(),
+    };
+    for (const QString &c : candidatas)
+        if (!c.isEmpty() && QFileInfo(c).isDir())
+            return c;
+    return QString();
 }
 
 bool StudiaController::abrirIndice(const QString &dbPath)
@@ -355,11 +415,59 @@ void StudiaController::setUmbralAbstencion(double u)
     emit ajustesChanged();
 }
 
+QString StudiaController::reubicarDocumento(const QString &ruta) const
+{
+    if (ruta.isEmpty())
+        return QString();
+    if (QFileInfo::exists(ruta))
+        return ruta;                     // esta donde dice el indice
+
+    // No esta: el indice se generó en otra maquina, o el corpus se mudo. Se
+    // recalcula la parte relativa a la raiz con la que se indexo y se busca esa
+    // misma cola dentro del corpus que haya aca.
+    const QString raizVieja = QDir::fromNativeSeparators(m_index.corpusRaiz());
+    const QString corpus = carpetaCorpus();
+    if (raizVieja.isEmpty() || corpus.isEmpty())
+        return QString();
+
+    const QString actual = QDir::fromNativeSeparators(ruta);
+    if (!actual.startsWith(raizVieja, Qt::CaseInsensitive))
+        return QString();
+    QString rel = actual.mid(raizVieja.size());
+    while (rel.startsWith(QLatin1Char('/')))
+        rel.remove(0, 1);
+
+    const QString candidato = corpus + QLatin1Char('/') + rel;
+    return QFileInfo::exists(candidato) ? candidato : QString();
+}
+
+QString StudiaController::motivoDocumento(const QString &ruta) const
+{
+    if (ruta.isEmpty())
+        return tr("Esta cita no tiene un archivo asociado.");
+    if (!reubicarDocumento(ruta).isEmpty())
+        return QString();                // se puede abrir
+
+    // No aparece. Son dos situaciones distintas y conviene no confundirlas: si
+    // la copia se entrego sin los documentos originales esto es lo esperado y no
+    // hay nada roto; si el corpus esta pero el archivo no, ahi si falta algo.
+    const QString raiz = QDir::fromNativeSeparators(m_index.corpusRaiz());
+    const bool esDeCatedra = !raiz.isEmpty()
+                             && QDir::fromNativeSeparators(ruta)
+                                    .startsWith(raiz, Qt::CaseInsensitive);
+    if (esDeCatedra && carpetaCorpus().isEmpty())
+        return tr("Esta copia de StudIA no incluye los documentos originales. "
+                  "El texto citado sí está en el índice: es el que se usó para "
+                  "responder.");
+    return tr("No se encontró el archivo. Puede que lo hayan movido o borrado.");
+}
+
 bool StudiaController::abrirDocumento(const QString &ruta) const
 {
-    if (ruta.isEmpty() || !QFileInfo::exists(ruta))
+    const QString real = reubicarDocumento(ruta);
+    if (real.isEmpty())
         return false;
-    return QDesktopServices::openUrl(QUrl::fromLocalFile(ruta));
+    return QDesktopServices::openUrl(QUrl::fromLocalFile(real));
 }
 
 // ── Bibliografia propia (indice aparte) ──────────────────────────────────────

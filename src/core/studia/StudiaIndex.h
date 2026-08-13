@@ -42,6 +42,11 @@ public:
     void cerrar();
     bool abierto() const { return m_abierto; }
     QString rutaDb() const { return m_ruta; }
+    // Carpeta desde la que se ingesto este indice. Los documentos guardan su
+    // ruta absoluta; con esta se puede recalcular la parte relativa y
+    // encontrarlos en otra maquina. Vacia en indices viejos, anteriores a que
+    // el ingestor la registrara.
+    QString corpusRaiz() const { return m_corpusRaiz; }
 
     // Recupera hasta `k` fragmentos relevantes. Si `materia` no esta vacia,
     // acota la busqueda a esa materia. Limita a `maxPorDoc` fragmentos del
@@ -164,6 +169,7 @@ public:
 private:
     QString m_conn;      // nombre de la conexion QSqlDatabase (unico por instancia)
     QString m_ruta;
+    QString m_corpusRaiz;
     bool    m_abierto = false;
     double  m_umbral = -7.0;
     bool    m_exigirEvidencia = true;

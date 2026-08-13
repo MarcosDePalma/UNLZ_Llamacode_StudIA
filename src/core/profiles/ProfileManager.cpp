@@ -681,6 +681,23 @@ QString ProfileManager::profilesRoot()
         const QByteArray env = qgetenv("LLAMACODE_PROFILES_DIR");
         if (!env.isEmpty())
             return QString::fromLocal8Bit(env);
+
+        // Bajo test, NUNCA los Documentos del usuario.
+        //
+        // setTestModeEnabled() redirige AppData y AppLocalData, pero NO
+        // DocumentsLocation, que es donde viven los perfiles. Un test que se
+        // olvide de setear LLAMACODE_PROFILES_DIR escribe perfiles de verdad en
+        // la máquina de quien corre la suite. Ya pasó: un caso de
+        // test_appcontroller creaba un perfil de lanzamiento por corrida y
+        // llegaron a acumularse 29 en el equipo de desarrollo.
+        //
+        // Que cada test se acuerde no alcanza como garantía; esto lo hace
+        // imposible.
+        if (QStandardPaths::isTestModeEnabled()) {
+            return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+                   + QStringLiteral("/profiles");
+        }
+
         // Documentos del usuario ACTUAL. Antes esto estaba fijo a la carpeta de
         // otro usuario, lo que obligaba a permisos de administrador para editar
         // los perfiles propios.

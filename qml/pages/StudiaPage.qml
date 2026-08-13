@@ -61,6 +61,14 @@ Item {
                        Qt.rgba(c.r, c.g, c.b, root.fuerzaDelTinte))
     }
 
+    // Abrir la fuente de una cita. Cuando el documento no está, callarse deja al
+    // estudiante haciendo clic sin entender por qué no pasa nada: el caso normal
+    // es que la copia se haya entregado sin el corpus original.
+    function abrirDoc(ruta) {
+        if (!Studia.abrirDocumento(ruta))
+            aviso.mostrar(Studia.motivoDocumento(ruta))
+    }
+
     function enviar() {
         const t = entrada.text.trim()
         if (t.length === 0 || Studia.generando) return
@@ -441,6 +449,59 @@ Item {
                     anchors { fill: parent; margins: 14 }
                     spacing: 10
 
+                    // Herramientas externas que faltan. Sin este aviso se
+                    // apagaban en silencio: el botón de adjuntar o de graficar
+                    // no hacía nada y no había forma de saber por qué.
+                    Rectangle {
+                        id: avisoHerr
+                        property var faltan: []
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: herrTxt.implicitHeight + 16
+                        visible: faltan.length > 0
+                        radius: 6
+                        color: Theme.warningBg !== undefined ? Theme.warningBg : Theme.surfaceBg
+                        border.color: Theme.borderColor
+
+                        function revisar() {
+                            const todas = Studia.herramientas()
+                            const f = []
+                            for (let i = 0; i < todas.length; ++i)
+                                if (!todas[i].presente) f.push(todas[i])
+                            faltan = f
+                        }
+                        Component.onCompleted: revisar()
+
+                        Text {
+                            id: herrTxt
+                            anchors { fill: parent; margins: 8 }
+                            text: {
+                                let s = "⚠ Faltan " + avisoHerr.faltan.length
+                                      + (avisoHerr.faltan.length === 1
+                                         ? " herramienta: " : " herramientas: ")
+                                const nombres = []
+                                for (let i = 0; i < avisoHerr.faltan.length; ++i)
+                                    nombres.push(avisoHerr.faltan[i].habilita)
+                                return s + nombres.join(", ")
+                                     + ".\nEl chat anda igual. Clic para instalarlas."
+                            }
+                            color: Theme.textSecondary
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (Studia.instalarHerramientas())
+                                    aviso.mostrarOk("Se abrió el instalador. Cuando "
+                                        + "termine, reiniciá StudIA.")
+                                else
+                                    aviso.mostrar("No se encontró el instalador "
+                                        + "(tools/studia/instalar_dependencias.bat).")
+                            }
+                        }
+                    }
+
                     // Estado de la búsqueda semántica. Click para configurarla.
                     Rectangle {
                         Layout.fillWidth: true
@@ -580,7 +641,7 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: Studia.abrirDocumento(modelData.ruta)
+                                onClicked: root.abrirDoc(modelData.ruta)
                             }
 
                             Rectangle {
@@ -1218,7 +1279,7 @@ Item {
                                             hoverEnabled: true
                                             onEntered: parent.border.color = Theme.accent
                                             onExited:  parent.border.color = Theme.borderColor
-                                            onClicked: Studia.abrirDocumento(modelData.ruta)
+                                            onClicked: root.abrirDoc(modelData.ruta)
                                         }
                                     }
                                 }

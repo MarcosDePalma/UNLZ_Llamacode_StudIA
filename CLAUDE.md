@@ -81,3 +81,35 @@ sesiones/persistencia sin red. Al tocar esos paths, agregar el stub.
 - App: `build.bat [Debug|Release|Both]` (tiene `pause`; correr con `< nul` para no colgar).
 - Tests: `tests.bat [Debug|Release]` (sin `pause`).
 - La lógica core vive en la lib estática `llamacode_core`; el app y los tests linkean contra ella.
+
+## Entrega (instaladores)
+`installer\compilar.bat` arma con Inno Setup lo que se le manda a otra persona.
+Sale a `dist\` (ignorado por git).
+
+- **App** (`StudIA.iss`) — un solo `.exe` de 1,21 GB: app + `studia.db` + bge-m3.
+  Instala sin pedir administrador (`PrivilegesRequired=lowest`) y deja en
+  `HKA\Software\StudIA\InstallDir` dónde quedó.
+- **Documentos** (`copiar_documentos.ps1`) — los 7,7 GB del corpus, aparte y en
+  pendrive. No es un instalador y no puede serlo, por dos límites de Windows:
+  un `.exe` no pasa de 4,2 GB, y las rutas del corpus superan los 260
+  caracteres (máximo relativo: 261, o sea que no entran ni en la raíz del
+  disco). Usa `robocopy`, que sí las maneja, y por eso el destino por defecto
+  es corto (`C:\StudIA_Docs`): metido dentro de la carpeta de instalación se
+  perderían 76 de 2937 archivos; ahí afuera, 2.
+
+Tres cosas que hay que mantener y no son obvias:
+- `compilar.ps1` copia el runtime de MSVC al lado del ejecutable. Sin eso la app
+  no abre en una PC sin Visual Studio. `llama-server.exe` vive en otra carpeta y
+  no las alcanza: de ese se ocupa `instalar_dependencias.ps1` vía winget.
+- `compilar.ps1` también copia los scripts del repo a `build\Release\StudIA`
+  antes de empaquetar, para no publicar la versión vieja de uno que se tocó
+  después del último build.
+- El corpus **no** hace falta para responder: el texto está dentro de
+  `studia.db`. Sólo habilita abrir el PDF desde una cita. `carpetaCorpus()`
+  busca en cascada: la carpeta empaquetada, la que dejó el copiador en
+  `studia/carpetaDocumentos`, `C:\StudIA_Docs`, y por último la raíz con la que
+  se indexó.
+
+`installer\PROBAR_EN_PC_LIMPIA.md` documenta cómo verificarlo de verdad. Lo que
+no se puede probar en la máquina de desarrollo son las ramas de *instalación*
+del script de dependencias: acá ya está todo instalado.

@@ -86,6 +86,8 @@ set(CORE_SOURCES
     src/core/studia/StudiaTexto.cpp
     src/core/studia/StudiaPlot.cpp
     src/core/studia/StudiaEmbed.cpp
+    src/core/studia/StudiaEmbedServer.cpp
+    src/core/studia/StudiaHerramientas.cpp
     src/core/studia/StudiaPrompt.cpp
     src/core/studia/StudiaSessionStore.cpp
     src/core/studia/StudiaController.cpp
@@ -138,6 +140,8 @@ set(HEADERS
     src/core/studia/StudiaTexto.h
     src/core/studia/StudiaPlot.h
     src/core/studia/StudiaEmbed.h
+    src/core/studia/StudiaEmbedServer.h
+    src/core/studia/StudiaHerramientas.h
     src/core/studia/StudiaPrompt.h
     src/core/studia/StudiaSessionStore.h
     src/core/studia/StudiaController.h

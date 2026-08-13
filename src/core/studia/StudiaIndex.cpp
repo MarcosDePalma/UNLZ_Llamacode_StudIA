@@ -261,6 +261,16 @@ bool StudiaIndex::abrir(const QString &dbPath, QString *err)
 
     m_ruta = dbPath;
     m_abierto = true;
+
+    // Desde donde se ingesto. Los indices generados antes de que el ingestor lo
+    // registrara no tienen la tabla: ahi queda vacio y la app cae a la ruta
+    // absoluta de cada documento, como hacia antes.
+    m_corpusRaiz.clear();
+    QSqlQuery qi(QSqlDatabase::database(m_conn));
+    if (qi.exec(QStringLiteral("SELECT valor FROM indice_info WHERE clave='corpus_raiz'"))
+        && qi.next()) {
+        m_corpusRaiz = qi.value(0).toString();
+    }
     return true;
 }
 

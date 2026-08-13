@@ -72,6 +72,16 @@ MIN_CHARS_FRAGMENTO = 40
 # ── Esquema de la base ────────────────────────────────────────────────────────
 
 ESQUEMA = """
+-- Datos del indice en si. Hoy guarda 'corpus_raiz': la carpeta desde la que se
+-- ingesto. Los documentos guardan su ruta ABSOLUTA, que en otra maquina no
+-- existe; sabiendo cual era la raiz, la app puede recalcular la parte relativa
+-- y encontrar el archivo dentro del corpus que tenga a mano. Sin esto, el
+-- indice viaja pero los documentos no se pueden abrir.
+CREATE TABLE IF NOT EXISTS indice_info (
+    clave TEXT PRIMARY KEY,
+    valor TEXT
+);
+
 CREATE TABLE IF NOT EXISTS documentos (
     id           INTEGER PRIMARY KEY,
     ruta         TEXT NOT NULL UNIQUE,   -- ruta absoluta al archivo original
@@ -678,6 +688,11 @@ def main():
         return 0
 
     con = abrir_db(args.db, args.limpiar)
+    # Queda registrado de donde salio este indice: es lo que le permite a la app
+    # reubicar los documentos si el corpus se movio o viaja con la aplicacion.
+    con.execute("INSERT OR REPLACE INTO indice_info(clave, valor) VALUES ('corpus_raiz', ?)",
+                (os.path.abspath(args.corpus),))
+    con.commit()
     stats, frags, chars, seg = procesar(con, args.corpus, archivos,
                                         descartados=descartados)
 
