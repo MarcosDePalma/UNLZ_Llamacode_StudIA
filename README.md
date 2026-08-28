@@ -2,17 +2,50 @@
   <img src="https://github.com/JonatanBogadoUNLZ/PPS-Jonatan-Bogado/blob/9952aac097aca83a1aadfc26679fc7ec57369d82/LOGO%20AZUL%20HORIZONTAL%20-%20fondo%20transparente.png?raw=true" alt="Universidad Nacional de Lomas de Zamora — Facultad de Ingeniería" width="520">
 </p>
 
-<h1 align="center">UNLZ_Llamacode</h1>
+<h1 align="center">UNLZ_Llamacode_StudIA</h1>
 
 <p align="center">
   <strong>Universidad Nacional de Lomas de Zamora — Facultad de Ingeniería</strong><br>
-  Proyecto institucional · Práctica Profesional Supervisada / Investigación aplicada
+  Fork de <a href="https://github.com/cristianlukas/UNLZ_Llamacode">UNLZ_Llamacode</a> · Agrega el módulo <strong>StudIA</strong> · Práctica Profesional Supervisada 2026 1C
 </p>
 
 <p align="center">
   🇦🇷 <strong>Español</strong> (este documento) ·
   🇬🇧 <a href="README.en.md">English</a>
 </p>
+
+---
+
+## 🎓 Sobre este fork
+
+Este repositorio es un **fork de [cristianlukas/UNLZ_Llamacode](https://github.com/cristianlukas/UNLZ_Llamacode)**
+—la estación de trabajo de IA local de la Facultad— que agrega **StudIA**, un asistente
+de estudio que responde preguntas **usando exclusivamente la documentación académica
+indexada** (apuntes, libros y trabajos prácticos de la carrera), citando el documento y
+la página de cada afirmación y ejecutándose por completo en la máquina del estudiante.
+
+StudIA se desarrolló como **Práctica Profesional Supervisada** de Ingeniería
+Mecatrónica (FI-UNLZ).
+
+| | |
+|---|---|
+| **Autor del módulo** | Marcos De Palma — Ing. Mecatrónica, FI-UNLZ |
+| **Rama del desarrollo** | `feature/studia` |
+| **Aporte sobre el proyecto base** | 55 archivos · ~14.700 líneas · 7 commits |
+| **Documentación de la PPS** | [2026_1C_PPS_Asistente_de_Estudio_DE-PALMA](https://github.com/MarcosDePalma/2026_1C_PPS_Asistente_de_Estudio_DE-PALMA) — informe, cronograma, Gantt y manuales |
+| **Qué agrega** | [`src/core/studia/`](src/core/studia/) · [`qml/pages/StudiaPage.qml`](qml/pages/StudiaPage.qml) · [`tools/studia/`](tools/studia/) · [`tests/test_studia.cpp`](tests/test_studia.cpp) · [`installer/`](installer/) |
+| **Qué NO modifica** | el agente, el chat, los backends, los servidores de modelos ni el modo voz del proyecto original |
+
+**Documentación del módulo:** [StudIA (asistente de estudio)](#studia-asistente-de-estudio-sobre-corpus-académico) — más abajo en este mismo README.
+
+Ver exactamente qué aporta la PPS sobre el proyecto original:
+
+```
+https://github.com/cristianlukas/UNLZ_Llamacode/compare/main...MarcosDePalma:UNLZ_Llamacode_StudIA:feature/studia
+```
+
+> El resto de este README es la documentación del **proyecto original**, que se mantiene
+> tal cual salvo la sección de StudIA.
 
 ---
 

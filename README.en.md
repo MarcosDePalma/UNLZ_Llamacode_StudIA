@@ -2,17 +2,39 @@
   <img src="https://github.com/JonatanBogadoUNLZ/PPS-Jonatan-Bogado/blob/9952aac097aca83a1aadfc26679fc7ec57369d82/LOGO%20AZUL%20HORIZONTAL%20-%20fondo%20transparente.png?raw=true" alt="National University of Lomas de Zamora — Faculty of Engineering" width="520">
 </p>
 
-<h1 align="center">UNLZ_Llamacode</h1>
+<h1 align="center">UNLZ_Llamacode_StudIA</h1>
 
 <p align="center">
   <strong>National University of Lomas de Zamora (UNLZ) — Faculty of Engineering</strong><br>
-  Institutional project · Supervised Professional Practice / Applied research
+  Fork of <a href="https://github.com/cristianlukas/UNLZ_Llamacode">UNLZ_Llamacode</a> · Adds the <strong>StudIA</strong> module · Supervised Professional Practice 2026
 </p>
 
 <p align="center">
   🇦🇷 <a href="README.md">Español</a> ·
   🇬🇧 <strong>English</strong> (this document)
 </p>
+
+---
+
+## 🎓 About this fork
+
+This repository is a **fork of [cristianlukas/UNLZ_Llamacode](https://github.com/cristianlukas/UNLZ_Llamacode)**
+that adds **StudIA**, a study assistant that answers questions **using only the indexed
+academic corpus** —lecture notes, books and problem sets— citing the source document and
+page, and running entirely on the student's machine.
+
+StudIA was developed as a **Supervised Professional Practice (PPS)** project in
+Mechatronics Engineering at FI-UNLZ. Development lives on the `feature/studia` branch:
+55 files, ~14,700 lines, 7 commits. It adds `src/core/studia/`,
+`qml/pages/StudiaPage.qml`, `tools/studia/`, `tests/test_studia.cpp` and `installer/`,
+and does **not** modify the agent, chat, backends or model servers of the base project.
+
+The module documentation is in the Spanish README:
+[StudIA (asistente de estudio)](README.md#studia-asistente-de-estudio-sobre-corpus-académico).
+PPS documentation (report, schedule, Gantt, manuals):
+[2026_1C_PPS_Asistente_de_Estudio_DE-PALMA](https://github.com/MarcosDePalma/2026_1C_PPS_Asistente_de_Estudio_DE-PALMA).
+
+> The rest of this README documents the **original project**.
 
 ---
 
