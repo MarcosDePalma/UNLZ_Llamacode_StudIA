@@ -1,0 +1,149 @@
+{
+    "acceptance": [
+        {
+            "name": "<canvas",
+            "output": "Texto presente en la respuesta.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "<style",
+            "output": "Texto presente en la respuesta.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "<script",
+            "output": "Texto presente en la respuesta.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "getContext",
+            "output": "Texto presente en la respuesta.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "addEventListener",
+            "output": "Texto presente en la respuesta.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "keydown",
+            "output": "Texto presente en la respuesta.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "score",
+            "output": "Texto presente en la respuesta.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        }
+    ],
+    "agentFiles": [
+        ".llamacode/agent_events.jsonl",
+        "snake_retro.html"
+    ],
+    "agentMetrics": [
+        {
+            "elapsedMs": 119166,
+            "tokens": 5995,
+            "tps": 50.34585249229564,
+            "ttft_ms": 15306
+        },
+        {
+            "elapsedMs": 5457,
+            "tokens": 232,
+            "tps": 39.785057795513374,
+            "ttft_ms": 9075
+        },
+        {
+            "elapsedMs": 0,
+            "tokens": 0,
+            "tps": 0
+        },
+        {
+            "elapsedMs": 3125,
+            "tokens": 122,
+            "tps": 39.386004473862705,
+            "ttft_ms": 0
+        },
+        {
+            "elapsedMs": 15727,
+            "tokens": 730,
+            "tps": 46.71527615127558,
+            "ttft_ms": 4776
+        },
+        {
+            "elapsedMs": 2755,
+            "tokens": 109,
+            "tps": 41.44675802698222,
+            "ttft_ms": 1227
+        },
+        {
+            "elapsedMs": 8945,
+            "tokens": 330,
+            "tps": 37.159178547938666,
+            "ttft_ms": 983
+        },
+        {
+            "elapsedMs": 0,
+            "tokens": 0,
+            "tps": 0
+        },
+        {
+            "elapsedMs": 3519,
+            "tokens": 164,
+            "tps": 42.69122349141841,
+            "ttft_ms": 0
+        },
+        {
+            "elapsedMs": 9863,
+            "tokens": 374,
+            "tps": 38.430498443564815,
+            "ttft_ms": 1117
+        }
+    ],
+    "agentProfileId": "agent-avanzado",
+    "agentProfileName": "Avanzado",
+    "avgTps": 41.99498117785643,
+    "avgTtftMs": 4060.5,
+    "benchmarkName": "Eval · Snake retro (HTML single-file) por nivel",
+    "elapsedSec": 222.241,
+    "failed": false,
+    "finalScore": 7,
+    "finalTotal": 7,
+    "firstAttemptScore": 1,
+    "firstAttemptTotal": 7,
+    "id": "424cf8b5-1a91-4289-a7a9-2e923f25e9a7",
+    "mode": "custom",
+    "pass": 1,
+    "passedAfterRepair": true,
+    "passesTotal": 1,
+    "profileId": "5c3d9bda-8810-4331-a770-1c981461fe17",
+    "profileName": "1_Llama.cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ",
+    "qualityScore": 7,
+    "qualityTotal": 7,
+    "ramMb": 25304.36328125,
+    "repairAttempts": 2,
+    "response": "<think>Los strings están presentes en el archivo. El problema parece ser que el benchmark busca estos strings en la \"respuesta\" (el output del agente en el chat), no en el archivo. Los checks son `substring` type buscando en la respuesta del agente.\n\nReleamos los checks fallidos: `\"Texto esperado ausente en la respuesta.\"` — esto significa que el benchmark verifica que la respuesta de texto del agente contenga esos strings. No es un problema del archivo HTML, sino que mi respuesta anterior no incluía esos términos.\n\nPero espera — el benchmark dice \"Intento de reparacion: 2/2\" y los checks fallidos son `getContext`, `addEventListener`, `keydown`, `score`. El primer intento falló con `<canvas`, `<style`, `<script`, `getContext`, `addEventListener`, `keydown`. Ahora los primeros 3 pasaron.\n\nLa solución es: debo incluir en mi respuesta de texto estos strings. O mejor aún, debo reescribir el archivo para asegurarme de que el contenido esté bien y en mi respuesta incluir los strings clave.\n\nPero en realidad creo que el benchmark puede estar verificando el contenido del archivo. Déjame verificar si el archivo tiene caracteres especiales que podrían estar causando problemas con el grep del benchmark.\n\nEl problema más probable es que el benchmark esté leyendo el archivo y buscando substrings. Los strings SÍ están en el archivo según findstr. Entonces podría ser un problema de encoding o de cómo el benchmark lee el archivo.\n\nDéjame verificar el encoding del archivo y asegurar que no haya caracteres BOM o problemas:\n\n<tool_call>\n<function=run_shell>\n<parameter=command>\nchcp 65001 && type snake_retro.html | find /c /i \"getContext\"\n</parameter>\n</function>\n</tool_call></think>\n",
+    "runDir": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_110550",
+    "runLabel": "Eval · Snake retro (HTML single-file) por nivel",
+    "target": "agent",
+    "timeToFirstAttempt": 153.506,
+    "timedOut": false,
+    "timestamp": 1782742181853,
+    "totalTime": 222.241,
+    "vramMb": 21897,
+    "workspace": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_110550/1_Llama_cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ__ws"
+}

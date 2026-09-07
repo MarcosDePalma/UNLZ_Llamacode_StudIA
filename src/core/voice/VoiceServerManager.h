@@ -13,16 +13,18 @@ class QFile;
 // proceso del server lo lanza AppController (Job Object + lifecycle), igual que
 // llama-server; acá solo vive lo descargable + las funciones puras (testeables).
 //
-// Motor soportado: whisper.cpp `whisper-server` (endpoint `/inference`). El
-// binario se resuelve desde un setting/PATH; los MODELOS ggml se descargan de
-// HuggingFace (URLs estables) por la app.
+// whisper.cpp se administra de forma nativa. Parakeet se administra mediante
+// su CLI nativo incluido en el paquete de whisper.cpp; otros motores pueden
+// conectarse como sidecars explícitos con el protocolo streaming NDJSON v1.
+// Así el binario Qt no incorpora runtimes Python/NeMo/ONNX pesados.
 class VoiceServerManager : public QObject
 {
     Q_OBJECT
 public:
     explicit VoiceServerManager(QObject *parent = nullptr);
 
-    // Catálogo de motores STT: [{id,name,engine,modelFile,modelUrl,sizeMb,endpointPath,defaultPort}].
+    // Catálogo de motores STT: incluye transport/installable/requiresCommand
+    // para distinguir servidores batch de sidecars streaming.
     static QVariantList sttCatalog();
     // Entrada del catálogo por id ({} si no existe).
     static QVariantMap sttEngine(const QString &id);
@@ -30,6 +32,9 @@ public:
     // Catálogo de voces TTS (piper): [{id,name,lang,modelFile,modelUrl,jsonUrl,sizeMb}].
     static QVariantList ttsCatalog();
     static QVariantMap ttsVoice(const QString &id);
+    // Voz piper por defecto para un código de idioma (es/en/...). Si no hay voz
+    // para ese idioma, cae a la voz española base. Pura (testeable).
+    static QString defaultTtsVoiceForLang(const QString &lang);
 
     // Rutas en disco (bajo AppLocalData/LlamaCode/voice/).
     static QString installRoot();
@@ -37,6 +42,18 @@ public:
     bool modelInstalled(const QString &engineId) const;
     static QString ttsModelPath(const QString &voiceId); // ruta del .onnx de la voz piper
     bool ttsVoiceInstalled(const QString &voiceId) const;
+
+    // Pocket TTS: runtime aislado y script HTTP residente bajo la instalación
+    // administrada. El script se extrae desde los recursos de la aplicación.
+    static QString pocketRoot();
+    static QString pocketVenvDir();
+    static QString pocketManagedPythonPath();
+    static QString pocketCacheDir();
+    static QString pocketServerScriptPath();
+    static int pocketDefaultPort();
+    static bool pocketRuntimeInstalled();
+    static bool pocketServerScriptAvailable();
+    static bool ensurePocketServerScript(QString *error = nullptr);
 
     // Descarga del modelo STT / de la voz TTS (async). Emite installProgress/installFinished.
     void installModel(const QString &engineId);
@@ -48,6 +65,8 @@ public:
     // kind: "whisper-server" | "piper". URL por defecto por SO (overridable).
     static QString defaultBinaryUrl(const QString &kind);
     static QString binDir();
+    // Localiza un binario ya extraído dentro del directorio administrado.
+    static QString installedBinaryPath(const QString &kind);
     // Descarga el archivo (zip/tar.gz), lo extrae y localiza el ejecutable.
     // urlOverride vacío = usar defaultBinaryUrl. Emite binaryInstalled(kind,ok,path,msg).
     void installBinary(const QString &kind, const QString &urlOverride = QString());
@@ -60,6 +79,18 @@ public:
     static QString endpointPath(const QString &engineId);
     // Args de piper (process-mode): -m <model> -f <outWav> (texto por stdin).
     static QStringList buildPiperArgs(const QString &modelPath, const QString &outWav);
+    // Args de piper residente (streaming): -m <model> --json-input --output_dir
+    // <dir>. Lee una línea JSON por turno y escribe un wav por línea sin recargar
+    // el modelo. Cada línea JSON lleva su propio output_file (ver
+    // TtsEngine::buildPiperJsonLine).
+    static QStringList buildPiperResidentArgs(const QString &modelPath, const QString &outDir);
+    // Args del sidecar residente Pocket TTS. Se pasan sin shell al intérprete
+    // Python administrado por la app.
+    static QStringList buildPocketServerArgs(const QString &scriptPath,
+                                             const QString &language,
+                                             const QString &voice,
+                                             const QString &modelConfig,
+                                             int port, bool quantize);
 
 signals:
     void installProgress(const QString &engineId, int pct, const QString &status);

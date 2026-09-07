@@ -4,7 +4,7 @@
 # Installs every dependency (git, cmake, ninja, g++, Python, and Qt 6.8.3 via
 # aqtinstall), clones the repo into an isolated folder, builds and launches.
 #
-#   curl -fsSL https://raw.githubusercontent.com/guideahon/UNLZ_Llamacode/main/scripts/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/cristianlukas/UNLZ_Llamacode/main/scripts/bootstrap.sh | bash
 #
 # Qt is installed via aqtinstall (not distro packages) because the code needs
 # Qt >= 6.5 (QQmlApplicationEngine::loadFromModule) and most LTS distros ship an
@@ -13,17 +13,17 @@
 # Override defaults via env vars:
 #   LC_DIR=/path/to/install   (default: $HOME/LlamaCode)
 #   LC_BRANCH=main
-#   LC_CONFIG=Release         (Release|Debug)
+#   LC_CONFIG=Debug           (Debug default; Release is the stable channel)
 #   LC_QTVER=6.8.3
 #   LC_QTROOT=$HOME/Qt
 #   LC_NORUN=1                (skip launching)
 
 set -euo pipefail
 
-REPO="https://github.com/guideahon/UNLZ_Llamacode.git"
+REPO="https://github.com/cristianlukas/UNLZ_Llamacode.git"
 DIR="${LC_DIR:-$HOME/LlamaCode}"
 BRANCH="${LC_BRANCH:-main}"
-CONFIG="${LC_CONFIG:-Release}"
+CONFIG="${LC_CONFIG:-Debug}"
 QTVER="${LC_QTVER:-6.8.3}"
 QTROOT="${LC_QTROOT:-$HOME/Qt}"
 

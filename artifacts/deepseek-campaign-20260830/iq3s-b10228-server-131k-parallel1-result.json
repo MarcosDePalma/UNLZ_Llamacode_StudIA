@@ -1,0 +1,22 @@
+{
+  "model": "D:\\Models\\llamacpp\\DeepSeek-V4-Flash-0731-UD-IQ3_S\\DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+  "usage": {
+    "completion_tokens": 256,
+    "prompt_tokens": 50,
+    "total_tokens": 306,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 50,
+    "prompt_ms": 85793.301,
+    "prompt_per_token_ms": 1715.8660200000002,
+    "prompt_per_second": 0.5827960856757335,
+    "predicted_n": 256,
+    "predicted_ms": 97819.598,
+    "predicted_per_token_ms": 382.1078046875,
+    "predicted_per_second": 2.6170624827143536
+  }
+}

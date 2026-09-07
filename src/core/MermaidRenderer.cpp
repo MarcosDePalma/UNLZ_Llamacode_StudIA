@@ -205,3 +205,28 @@ QString MermaidRenderer::renderSvg(const QString &source)
 
     return img.save(out, "PNG") ? out : QString();
 }
+
+bool MermaidRenderer::exportPng(const QString &source, const QString &destPath)
+{
+    if (destPath.trimmed().isEmpty())
+        return false;
+    // mermaid: PNG cacheado (".png"). svg: rasteriza a ".svg.png" si hace falta.
+    QString png = cachedPath(source);
+    if (png.isEmpty())
+        png = renderSvg(source);
+    if (png.isEmpty() || !QFileInfo::exists(png))
+        return false;
+    QFile::remove(destPath);  // QFile::copy no pisa destinos existentes
+    return QFile::copy(png, destPath);
+}
+
+bool MermaidRenderer::exportSource(const QString &source, const QString &destPath)
+{
+    if (destPath.trimmed().isEmpty())
+        return false;
+    QFile f(destPath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    const QByteArray bytes = source.toUtf8();
+    return f.write(bytes) == bytes.size();
+}

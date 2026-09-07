@@ -1,0 +1,99 @@
+[
+  {
+    "level": "agent-chat",
+    "runLabel": "Eval · Snake retro (HTML single-file) por nivel",
+    "q": "7/7",
+    "first": "7/7",
+    "repairs": 0,
+    "sec": 161.035,
+    "tps": 36.721538688965744,
+    "ttft": 10234,
+    "files": [
+      ".llamacode/agent_events.jsonl",
+      "snake_retro.html"
+    ],
+    "runDir": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152107",
+    "workspace": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152107/1_Llama_cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ__ws",
+    "timestamp": 1782757442384,
+    "id": "32928c00-2977-4dcf-a251-3f921fbe27a1",
+    "failed": false
+  },
+  {
+    "level": "agent-basico",
+    "runLabel": "Eval · Snake retro (HTML single-file) por nivel",
+    "q": "7/7",
+    "first": "7/7",
+    "repairs": 0,
+    "sec": 147.918,
+    "tps": 40.350476428488214,
+    "ttft": 20107,
+    "files": [
+      ".llamacode/agent_events.jsonl",
+      "snake_retro.html"
+    ],
+    "runDir": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152415",
+    "workspace": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152415/1_Llama_cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ__ws",
+    "timestamp": 1782757611964,
+    "id": "9b3aa9d5-d0fa-4b34-9505-6892e099d887",
+    "failed": false
+  },
+  {
+    "level": "agent-intermedio",
+    "runLabel": "Eval · Snake retro (HTML single-file) por nivel",
+    "q": "7/7",
+    "first": "7/7",
+    "repairs": 0,
+    "sec": 181.382,
+    "tps": 39.919916216393034,
+    "ttft": 6339.75,
+    "files": [
+      ".llamacode/agent_events.jsonl",
+      "snake_retro.html"
+    ],
+    "runDir": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152707",
+    "workspace": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152707/1_Llama_cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ__ws",
+    "timestamp": 1782757818050,
+    "id": "2c24031f-44af-4d0d-a603-3d9eea977728",
+    "failed": false
+  },
+  {
+    "level": "agent-avanzado",
+    "runLabel": "Eval · Snake retro (HTML single-file) por nivel",
+    "q": "7/7",
+    "first": "7/7",
+    "repairs": 0,
+    "sec": 231.582,
+    "tps": 42.19868674805085,
+    "ttft": 3659.909090909091,
+    "files": [
+      ".llamacode/agent_events.jsonl",
+      ".playwright-mcp/console-2026-06-29T18-33-39-002Z.log",
+      ".playwright-mcp/page-2026-06-29T18-33-39-341Z.yml",
+      "snake_retro.html"
+    ],
+    "runDir": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_153026",
+    "workspace": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_153026/1_Llama_cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ__ws",
+    "timestamp": 1782758067255,
+    "id": "6f12bb7a-b1cb-4941-9d18-062186b5e192",
+    "failed": false
+  },
+  {
+    "level": "agent-maximo",
+    "runLabel": "Eval · Snake retro (HTML single-file) por nivel",
+    "q": "7/7",
+    "first": "7/7",
+    "repairs": 0,
+    "sec": 256.829,
+    "tps": 39.771779582369554,
+    "ttft": 17071,
+    "files": [
+      ".llamacode/agent_events.jsonl",
+      "snake.html"
+    ],
+    "runDir": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_153449",
+    "workspace": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_153449/1_Llama_cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ__ws",
+    "timestamp": 1782758355598,
+    "id": "dfb64608-4b5b-4a87-a9a0-20a10c12c47b",
+    "failed": false
+  }
+]

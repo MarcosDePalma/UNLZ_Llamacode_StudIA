@@ -1,6 +1,8 @@
 #include "EffectiveProfileBuilder.h"
+#include "MtpDetection.h"
 #include "../GGUFScanner.h"
 #include <QFileInfo>
+#include <QRegularExpression>
 
 namespace {
 struct SamplingFlag {
@@ -87,11 +89,92 @@ static void removeFlagWithValue(QStringList &args, const QStringList &names)
     }
 }
 
+static int llamaCppBuildNumber(const LlamaBinary &bin)
+{
+    const QString haystack = (bin.versionHint + QLatin1Char(' ') + bin.name
+                              + QLatin1Char(' ') + bin.path).toLower();
+    const QRegularExpression re(QStringLiteral("\\bb(\\d{4,})\\b"));
+    const QRegularExpressionMatch m = re.match(haystack);
+    if (!m.hasMatch())
+        return 0;
+    return m.captured(1).toInt();
+}
+
+static bool supportsGemma4AssistantDraft(const LlamaBinary &bin)
+{
+    const int build = llamaCppBuildNumber(bin);
+    return build == 0 || build >= 9763;
+}
+
+void EffectiveProfileBuilder::applyAdaptiveSpeculation(const ModelProfile &mp,
+                                                       const LlamaBinary &bin,
+                                                       QStringList &args,
+                                                       QStringList &warnings,
+                                                       QStringList &errors)
+{
+    if (!mp.specDraftAdaptive)
+        return;
+
+    if (mp.specDraftNMax <= 0) {
+        errors.append(QStringLiteral(
+            "Adaptive speculative decoding requiere spec-draft-n-max mayor que cero."));
+        return;
+    }
+    if (mp.specDraftNMin < 0 || mp.specDraftNMin > mp.specDraftNMax) {
+        errors.append(QStringLiteral(
+            "Adaptive speculative decoding requiere 0 <= spec-draft-n-min <= "
+            "spec-draft-n-max."));
+        return;
+    }
+
+    // La capacidad se valida como obligatoria: activar el modo adaptativo en un
+    // binario que sólo conoce el MTP fijo produce una configuración engañosa.
+    addFlag(bin, "--spec-draft-adaptive", {}, args, warnings, true, &errors);
+    if (mp.specDraftNMin > 0)
+        addFlag(bin, "--spec-draft-n-min", QString::number(mp.specDraftNMin), args,
+                warnings, true, &errors);
+}
+
+static bool isNinfer3090(const LlamaBinary &bin)
+{
+    const QString tag = (bin.flavor + QLatin1Char(' ') + bin.name + QLatin1Char(' ')
+                         + bin.path).toLower();
+    const QString exe = QFileInfo(bin.path).fileName();
+    return tag.contains(QStringLiteral("ninfer-3090"))
+        || tag.contains(QStringLiteral("ninfer-rtx3090"))
+        || exe.compare(QStringLiteral("ninfer-serve.exe"), Qt::CaseInsensitive) == 0
+        || exe.compare(QStringLiteral("ninfer-serve"), Qt::CaseInsensitive) == 0;
+}
+
 EffectiveProfile EffectiveProfileBuilder::build(const Context &ctx)
 {
     EffectiveProfile result;
     QStringList args;
     QMap<QString, QString> env = ctx.binary.envDefaults;
+
+    // Cloud/remote OpenAI-compatible profiles are already served by an external
+    // process. They must be fingerprintable and selectable without pretending
+    // that a local llama-server binary or GGUF is required.
+    if (ctx.backend.isCloud()) {
+        if (ctx.backend.cloudBaseUrl.trimmed().isEmpty())
+            result.blockingErrors.append("Cloud backend has no base URL.");
+        if (ctx.backend.cloudModel.trimmed().isEmpty())
+            result.blockingErrors.append("Cloud backend has no model.");
+
+        for (auto it = ctx.backend.envOverrides.cbegin();
+             it != ctx.backend.envOverrides.cend(); ++it)
+            env[it.key()] = it.value();
+        for (auto it = ctx.launch.envOverrides.cbegin();
+             it != ctx.launch.envOverrides.cend(); ++it)
+            env[it.key()] = it.value();
+
+        result.effectiveArgs = ctx.launch.extraArgs;
+        result.effectiveEnv = env;
+        result.commandLine = QStringLiteral("<external> %1 model=%2")
+                             .arg(ctx.backend.cloudBaseUrl.trimmed(),
+                                  ctx.backend.cloudModel.trimmed());
+        return result;
+    }
 
     // Validate binary
     if (ctx.binary.id.isEmpty()) {
@@ -107,11 +190,14 @@ EffectiveProfile EffectiveProfileBuilder::build(const Context &ctx)
     applyBackend(ctx.backend, args, env, result.warnings, result.blockingErrors);
     applyModel(ctx.model, ctx.catalogModel, ctx.mmprojModel, ctx.draftModel,
                ctx.binary, args, result.warnings, result.blockingErrors);
-    // Speculative decoding activo: hay draft model resuelto. Con MTP, un KV-cache
-    // cuantizado (q4_0/q8_0) colapsa el draft acceptance ~a 0 (necesita f16); ver
-    // reportes de comunidad sobre Gemma4 QAT+MTP. Forzamos f16 y avisamos.
+    // Speculative decoding activo: el perfil puede elegir explícitamente el KV.
+    // La política del catálogo admite q8_0 o menor; no se debe elevar en silencio
+    // a f16 porque eso vuelve incomparable la candidata y aumenta el uso de VRAM.
+    // La aceptación del draft puede bajar con KV cuantizado, por lo que se avisa
+    // y se deja que el benchmark mida el costo real.
     const bool specDecoding =
-        !ctx.model.draftModelId.isEmpty() && ctx.draftModel.isAvailable;
+        !ctx.model.specType.isEmpty()
+        || (!ctx.model.draftModelId.isEmpty() && ctx.draftModel.isAvailable);
     applyRuntime(ctx.runtime, ctx.binary, args, result.warnings,
                  result.blockingErrors, specDecoding);
 
@@ -134,13 +220,58 @@ EffectiveProfile EffectiveProfileBuilder::build(const Context &ctx)
         for (const QString &t : tokens)
             extraTokens.append(t);
     }
-    for (const QString &cur : extraTokens) {
+    // El draft puede venir del ModelProfile o declarado a mano en los extraArgs con
+    // una ruta absoluta (--spec-draft-model / -md / --model-draft). Si está ahí y el
+    // archivo existe, el perfil es válido: exigir además draftModelId lo rechazaba
+    // por una vía que llama-server sí acepta.
+    bool draftInExtraArgs = false;
+    for (int i = 0; i + 1 < extraTokens.size(); ++i) {
+        const QString &t = extraTokens.at(i);
+        if (t != QLatin1String("--spec-draft-model") && t != QLatin1String("-md")
+            && t != QLatin1String("--model-draft"))
+            continue;
+        if (QFileInfo::exists(extraTokens.at(i + 1))) { draftInExtraArgs = true; break; }
+        result.warnings.append(
+            QStringLiteral("El draft declarado en los argumentos no está en disco: %1")
+                .arg(extraTokens.at(i + 1)));
+    }
+
+    for (int i = 0; i < extraTokens.size(); ++i) {
+        const QString &cur = extraTokens.at(i);
         if (!cur.startsWith(u'-')) { args.append(cur); continue; }
+        if (cur == QLatin1String("--spec-type") && i + 1 < extraTokens.size()
+            && extraTokens.at(i + 1).contains(QStringLiteral("draft"), Qt::CaseInsensitive)
+            && extraTokens.at(i + 1).compare(QStringLiteral("draft-dspark"),
+                                             Qt::CaseInsensitive) != 0
+            && ctx.model.draftModelId.isEmpty()
+            && !draftInExtraArgs
+            && !MtpDetection::isSelfContained(ctx.catalogModel.fileName)) {
+            result.blockingErrors.append(QStringLiteral(
+                "Este perfil declara %1 %2, pero no tiene draftModel asociado. "
+                "Corregí el perfil o instalá un perfil actualizado que declare y descargue el draft.")
+                .arg(cur, extraTokens.at(i + 1)));
+        }
+        // Flags de speculative/MTP/ngram: si el binario NO los soporta (p.ej.
+        // fallback a llama.cpp oficial sin MTP), descartarlos junto con su valor
+        // para no romper el arranque. Solo si el binario declara supportedFlags.
+        const bool isSpec = cur.startsWith(QStringLiteral("--spec-"))
+                            || cur.startsWith(QStringLiteral("--ngram-"))
+                            || cur.startsWith(QStringLiteral("--draft-"));
+        if (isSpec && !ctx.binary.supportedFlags.isEmpty()
+            && !ctx.binary.supportsFlag(ctx.binary.resolveFlag(cur))) {
+            result.blockingErrors.append(QStringLiteral(
+                "Este perfil requiere la capacidad %1, pero el binario actual no la soporta. "
+                "Actualizá o elegí un binario compatible antes de iniciar.")
+                .arg(cur));
+            if (i + 1 < extraTokens.size() && !extraTokens.at(i + 1).startsWith(u'-'))
+                ++i;   // saltar el valor asociado
+            continue;
+        }
         args.append(ctx.binary.resolveFlag(cur));
     }
 
-    // Asegurar --jinja: necesario para tool-calling por template.
-    if (!args.contains(QStringLiteral("--jinja")))
+    // NInfer ya incorpora el chat-template en el artefacto y no acepta --jinja.
+    if (!isNinfer3090(ctx.binary) && !args.contains(QStringLiteral("--jinja")))
         args << QStringLiteral("--jinja");
 
     applyReasoningControl(ctx, args, result.warnings);
@@ -283,6 +414,24 @@ void EffectiveProfileBuilder::applyModel(const ModelProfile &mp,
         errors.append(QStringLiteral("Model unavailable: %1").arg(model.fileName));
         return;
     }
+    if (isNinfer3090(bin)) {
+        if (!model.absolutePath.endsWith(QStringLiteral(".ninfer"), Qt::CaseInsensitive)) {
+            errors.append(QStringLiteral(
+                "NInfer-3090 sólo acepta artefactos .ninfer; el perfil apunta a '%1'.")
+                .arg(model.fileName));
+            return;
+        }
+        args << model.absolutePath;
+        if (!mp.mmprojId.isEmpty() || !mp.draftModelId.isEmpty())
+            warnings.append(QStringLiteral(
+                "NInfer-3090 usa visión/MTP embebidos en el artefacto; se ignoran "
+                "mmproj y draft externos del perfil."));
+        if (mp.specDraftAdaptive)
+            errors.append(QStringLiteral(
+                "NInfer-3090 no admite adaptive speculative decoding administrado por LlamaCode."));
+        return;
+    }
+
     args << "--model" << model.absolutePath;
 
     // Gemma QAT q4_0 crudo (Google-style): degradado en llama.cpp. Avisar que el
@@ -296,31 +445,63 @@ void EffectiveProfileBuilder::applyModel(const ModelProfile &mp,
     }
 
     if (!mp.mmprojId.isEmpty()) {
-        if (!mmproj.isAvailable)
-            warnings.append("mmproj model unavailable, vision disabled.");
+        if (!mmproj.isAvailable || mmproj.absolutePath.isEmpty())
+            warnings.append("mmproj opcional no disponible; visión desactivada.");
         else
             addFlag(bin, "--mmproj", mmproj.absolutePath, args, warnings);
     }
 
-    if (!mp.draftModelId.isEmpty()) {
-        if (!draft.isAvailable) {
-            warnings.append("Draft model unavailable, speculative decoding disabled.");
+    const bool selfContainedMtp = mp.specType == QLatin1String("draft-mtp")
+        && mp.draftModelId.isEmpty()
+        && MtpDetection::isSelfContained(model.fileName);
+    if (selfContainedMtp) {
+        addFlag(bin, "--spec-type", "draft-mtp", args, warnings);
+        if (mp.specDraftNMax > 0)
+            addFlag(bin, "--spec-draft-n-max", QString::number(mp.specDraftNMax), args, warnings);
+        if (mp.specDraftConfMin > 0.0)
+            addFlag(bin, "--spec-draft-conf-min",
+                    QString::number(mp.specDraftConfMin, 'f', 3), args, warnings);
+        applyAdaptiveSpeculation(mp, bin, args, warnings, errors);
+    } else if (!mp.draftModelId.isEmpty()) {
+        if (!draft.isAvailable || draft.absolutePath.isEmpty()) {
+            errors.append(QStringLiteral(
+                "Draft model unavailable: este perfil declara speculative/MTP con draft, "
+                "pero el draft no está instalado. Instalá las dependencias del perfil antes de iniciar."));
+        } else if (mp.specType == QLatin1String("draft-mtp")
+                   && !supportsGemma4AssistantDraft(bin)) {
+            errors.append(QStringLiteral(
+                "Este perfil requiere llama-server b9763 o superior para cargar "
+                "draft MTP gemma4-assistant. El binario actual es '%1'. "
+                "Actualizá el binario compatible del perfil antes de iniciar.")
+                .arg(bin.versionHint.isEmpty() ? bin.path : bin.versionHint));
         } else {
-            addFlag(bin, "--draft-model", draft.absolutePath, args, warnings);
-            // Flags de speculative decoding / MTP. Solo se emiten los seteados;
-            // vacío/0 = default del binario.
-            if (!mp.specType.isEmpty())
-                addFlag(bin, "--spec-type", mp.specType, args, warnings);
+            // beellama (MTP/DFlash con draft separado) usa --spec-draft-model;
+            // el spec-decoding plano de llama.cpp usa --draft-model.
+            const QString draftFlag = !mp.specType.isEmpty()
+                ? QStringLiteral("--spec-draft-model") : QStringLiteral("--draft-model");
+            addFlag(bin, draftFlag, draft.absolutePath, args, warnings);
+            // Flags de speculative decoding. MTP externo no necesita --spec-type
+            // en este flujo; DSpark sí lo declara explícitamente en llama.cpp.
+            if (mp.specType == QLatin1String("draft-dspark"))
+                addFlag(bin, "--spec-type", "draft-dspark", args, warnings);
             if (mp.specDraftNMax > 0)
                 addFlag(bin, "--spec-draft-n-max",
                         QString::number(mp.specDraftNMax), args, warnings);
+            if (mp.specDraftConfMin > 0.0)
+                addFlag(bin, "--spec-draft-conf-min",
+                        QString::number(mp.specDraftConfMin, 'f', 3), args, warnings);
             if (!mp.specDraftNgl.isEmpty())
                 addFlag(bin, "--spec-draft-ngl", mp.specDraftNgl, args, warnings);
             if (!mp.specDraftTypeK.isEmpty())
                 addFlag(bin, "--spec-draft-type-k", mp.specDraftTypeK, args, warnings);
             if (!mp.specDraftTypeV.isEmpty())
                 addFlag(bin, "--spec-draft-type-v", mp.specDraftTypeV, args, warnings);
+            applyAdaptiveSpeculation(mp, bin, args, warnings, errors);
         }
+    } else if (mp.specDraftAdaptive) {
+        errors.append(QStringLiteral(
+            "Adaptive speculative decoding requiere un modelo MTP/DFlash autocontenido "
+            "o un draft model asociado."));
     }
 }
 
@@ -332,6 +513,15 @@ void EffectiveProfileBuilder::applyRuntime(const RuntimePreset &rt,
                                            bool specDecoding)
 {
     Q_UNUSED(errors)
+    if (isNinfer3090(bin)) {
+        args << "--max-context" << QString::number(rt.ctx);
+        args << "--prefill-chunk" << QString::number(qMax(128, qMin(rt.ubatch, 1024)));
+        args << "--kv-dtype"
+             << ((rt.cacheType == QStringLiteral("f16") || rt.cacheType == QStringLiteral("bf16"))
+                     ? QStringLiteral("bf16") : QStringLiteral("int8"));
+        args << "--text-only";
+        return;
+    }
     args << "--ctx-size" << QString::number(rt.ctx);
     args << "--batch-size" << QString::number(rt.batch);
     args << "--ubatch-size" << QString::number(rt.ubatch);
@@ -357,15 +547,39 @@ void EffectiveProfileBuilder::applyRuntime(const RuntimePreset &rt,
     if (rt.parallelSlots > 1)
         args << "--parallel" << QString::number(rt.parallelSlots);
 
+    if (specDecoding && rt.parallelSlots > 1) {
+        warnings.append(QStringLiteral(
+            "Speculative decoding con --parallel > 1: la aceptación y la salida "
+            "pueden divergir según el backend; validá con parallel=1."));
+    }
+
     if (!rt.cacheType.isEmpty() && rt.cacheType != "f16") {
         if (specDecoding) {
             warnings.append(QStringLiteral(
-                "Speculative decoding active: KV cache quant '%1' kills draft "
-                "acceptance; forcing f16.").arg(rt.cacheType));
-        } else {
-            addFlag(bin, "--cache-type-k", rt.cacheType, args, warnings);
+                "Speculative decoding active: se respeta KV cache quant '%1'; "
+                "puede reducir la aceptación del draft.").arg(rt.cacheType));
         }
+        addFlag(bin, "--cache-type-k", rt.cacheType, args, warnings);
     }
+
+    // llama.cpp b10228+ acepta varias reglas separadas por coma en un unico
+    // --override-tensor. Repetir el flag conserva solo la ultima regla y puede
+    // cambiar silenciosamente la colocacion/cuantiacion de tensores.
+    QStringList validTensorOverrides;
+    for (const QString &spec : rt.tensorOverrides) {
+        const QString s = spec.trimmed();
+        if (s.isEmpty())
+            continue;
+        if (!s.contains('=')) {
+            warnings.append(QStringLiteral(
+                "Ignoring malformed tensor override '%1' (expected '<regex>=<type>').")
+                .arg(s));
+            continue;
+        }
+        validTensorOverrides.append(s);
+    }
+    if (!validTensorOverrides.isEmpty())
+        addFlag(bin, "--override-tensor", validTensorOverrides.join(','), args, warnings);
 }
 
 void EffectiveProfileBuilder::addFlag(const LlamaBinary &bin, const QString &flag,

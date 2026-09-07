@@ -1,0 +1,31 @@
+{
+  "id": "harness_tool_contract_v1",
+  "bundledVersion": 1,
+  "name": "Harness Tool Contract v1",
+  "description": "Smoke determinista para medir si un harness respeta una secuencia mínima de herramientas declarada por la tarea.",
+  "source": "bundled",
+  "protocolVersion": 1,
+  "recommendedPasses": 5,
+  "evaluation": {
+    "kind": "tool-contract",
+    "target": "agent",
+    "metrics": ["toolCalls", "toolCallQuality", "elapsedSec", "repairAttempts"]
+  },
+  "prompts": [
+    {
+      "id": "inspect_then_write",
+      "category": "tool-contract",
+      "isSpeed": false,
+      "maxTokens": 2500,
+      "prompt": "En el workspace aislado, usá exactamente dos llamadas de herramienta: primero read_file para inspeccionar README.md y después write_file para crear tool_contract.txt con una línea CONTRACT_OK. No uses otras herramientas. Verificá el archivo y respondé brevemente.",
+      "acceptance": {
+        "files": ["tool_contract.txt"],
+        "expectSubstrings": ["CONTRACT_OK"],
+        "toolCalls": [
+          {"tool": "read_file"},
+          {"tool": "write_file"}
+        ]
+      }
+    }
+  ]
+}

@@ -5,13 +5,37 @@ Button {
     id: root
     property bool danger: false
     property bool secondary: false
+    property string iconSource: ""
 
-    contentItem: Text {
-        text: root.text
-        font.pixelSize: 13
-        color: root.danger ? Theme.btnDangerText : (root.secondary ? Theme.btnSecondaryText : Theme.btnPrimaryText)
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
+    contentItem: Item {
+        // El implicitWidth/Height TIENE que salir del contenido: un Item plano
+        // no lo deriva de sus hijos, asi que con `anchors.fill: parent` a secas
+        // valia 0 y TODOS los botones de la app median 24px de ancho. Donde el
+        // layout los estira (RowLayout + fillWidth) no se notaba; en un Flow de
+        // chips quedaban encimados y con el texto desbordado.
+        implicitWidth: contentRow.implicitWidth
+        implicitHeight: contentRow.implicitHeight
+
+        Row {
+            id: contentRow
+            anchors.centerIn: parent
+            spacing: root.iconSource.length > 0 && root.text.length > 0 ? 5 : 0
+
+            Image {
+                source: root.iconSource
+                visible: source.length > 0
+                width: 17; height: 17
+                fillMode: Image.PreserveAspectFit
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+                text: root.text
+                font.pixelSize: 13
+                color: root.danger ? Theme.btnDangerText : (root.secondary ? Theme.btnSecondaryText : Theme.btnPrimaryText)
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
     }
 
     background: Rectangle {

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import LlamaCode 1.0
+import "../components/BenchmarkScore.js" as BenchmarkScore
 
 Item {
     id: root
@@ -11,8 +12,9 @@ Item {
         try { return JSON.parse(App.readSetting("benchSelectedIds", "[]")) } catch (e) { return [] }
     }
     onSelectedIdsChanged: App.writeSetting("benchSelectedIds", JSON.stringify(selectedIds))
-    property string sortColumn: ""
-    property int sortDirection: 0
+    // El historial abre mostrando primero las corridas más recientes.
+    property string sortColumn: "date"
+    property int sortDirection: -1
     property var failureRow: ({})
     property string modeFilter: ""
     property string benchmarkFilter: ""
@@ -20,9 +22,9 @@ Item {
     property var columnFilters: ({})
     // Anchos redimensionables por columna del historial.
     property var colW: ({
-        profile: 200, target: 58, benchmark: 100, score: 60, firstAttemptScore: 58,
-        finalScore: 58, repairAttempts: 52, timeToFirstAttempt: 62, totalTime: 62,
-        passedAfterRepair: 68, tps: 60, ttft: 60, seconds: 70, ram: 60, vram: 60, date: 118
+        profile: 200, target: 58, agentProfile: 96, benchmark: 100, thinking: 58, score: 60, firstAttemptScore: 58,
+        finalScore: 58, qpm: 68, repairAttempts: 52, timeToFirstAttempt: 62, totalTime: 62,
+        passedAfterRepair: 68, tps: 60, ttft: 60, nonGeneration: 78, firstTool: 78, firstWrite: 78, firstEvaluable: 82, seconds: 70, ram: 60, vram: 60, vramGpu0: 66, vramGpu1: 66, date: 118
     })
     function colWidth(c) { const w = colW[c]; return (w !== undefined && w > 0) ? w : 60 }
     function setColWidth(c, w) {
@@ -78,31 +80,37 @@ Item {
         const label = (row.runLabel ?? "").toString()
         return label.length > 0 && label !== "standard" ? label : mode.toUpperCase()
     }
+    function thinkingLabel(row) {
+        if (row.thinkingEnabled === true || row.thinking === true) return "On"
+        if (row.thinkingEnabled === false || row.thinking === false) return "Off"
+        return "—"
+    }
     function sortValue(row, column) {
         if (column === "profile") return (row.profileName ?? "").toString().toLowerCase()
         if (column === "target") return benchmarkTargetLabel(row).toLowerCase()
+        if (column === "agentProfile") return (row.agentProfileName ?? "").toString().toLowerCase()
         if (column === "benchmark") return benchmarkNameLabel(row).toLowerCase()
-        if (column === "score") {
-            const total = row.qualityTotal ?? 0
-            return total > 0 ? (row.qualityScore ?? 0) / total : -1
-        }
-        if (column === "firstAttemptScore") {
-            const total = row.firstAttemptTotal ?? row.qualityTotal ?? 0
-            return total > 0 ? (row.firstAttemptScore ?? row.qualityScore ?? 0) / total : -1
-        }
-        if (column === "finalScore") {
-            const total = row.finalTotal ?? row.qualityTotal ?? 0
-            return total > 0 ? (row.finalScore ?? row.qualityScore ?? 0) / total : -1
-        }
+        if (column === "thinking") return thinkingLabel(row).toLowerCase()
+        if (column === "score") return BenchmarkScore.sortKey(row, "qualityScore", "qualityTotal")
+        if (column === "firstAttemptScore")
+            return BenchmarkScore.sortKey(row, "firstAttemptScore", "firstAttemptTotal")
+        if (column === "finalScore") return BenchmarkScore.sortKey(row, "finalScore", "finalTotal")
+        if (column === "qpm") return BenchmarkScore.qualityPerMinute(row)
         if (column === "repairAttempts") return row.repairAttempts ?? 0
         if (column === "timeToFirstAttempt") return row.timeToFirstAttempt ?? row.elapsedSec ?? 0
         if (column === "totalTime") return row.totalTime ?? row.elapsedSec ?? 0
         if (column === "passedAfterRepair") return (row.passedAfterRepair ?? false) ? 1 : 0
         if (column === "tps") return row.avgTps ?? 0
         if (column === "ttft") return row.avgTtftMs ?? 0
+        if (column === "nonGeneration") return row.nonGenerationSec ?? 0
+        if (column === "firstTool") return row.firstToolCallSec ?? -1
+        if (column === "firstWrite") return row.firstWriteSec ?? -1
+        if (column === "firstEvaluable") return row.firstEvaluableSec ?? -1
         if (column === "seconds") return row.elapsedSec ?? 0
         if (column === "ram") return row.ramMb ?? 0
         if (column === "vram") return row.vramMb ?? 0
+        if (column === "vramGpu0") return row.vramGpu0Mb ?? 0
+        if (column === "vramGpu1") return row.vramGpu1Mb ?? 0
         if (column === "date") return row.timestamp ?? 0
         return ""
     }
@@ -152,19 +160,28 @@ Item {
     function columnLabel(row, column) {
         if (column === "profile") return (row.profileName ?? "").toString()
         if (column === "target") return benchmarkTargetLabel(row)
+        if (column === "agentProfile") { const n = (row.agentProfileName ?? "").toString(); return n.length ? n : "—" }
         if (column === "benchmark") return benchmarkNameLabel(row)
+        if (column === "thinking") return thinkingLabel(row)
         if (column === "score") return scoreLabel(row, "qualityScore", "qualityTotal")
         if (column === "firstAttemptScore") return scoreLabel(row, "firstAttemptScore", "firstAttemptTotal")
         if (column === "finalScore") return scoreLabel(row, "finalScore", "finalTotal")
+        if (column === "qpm") return BenchmarkScore.qualityPerMinuteLabel(row)
         if (column === "repairAttempts") return String(row.repairAttempts ?? 0)
         if (column === "timeToFirstAttempt") return secondsLabel(row.timeToFirstAttempt ?? row.elapsedSec)
         if (column === "totalTime") return secondsLabel(row.totalTime ?? row.elapsedSec)
         if (column === "passedAfterRepair") return (row.passedAfterRepair ?? false) ? "Sí" : "No"
         if (column === "tps") { const v = row.avgTps ?? 0; return v > 0 ? v.toFixed(1) : "—" }
         if (column === "ttft") { const v = row.avgTtftMs ?? 0; return v > 0 ? Math.round(v) + " ms" : "—" }
+        if (column === "nonGeneration") return secondsLabel(row.nonGenerationSec)
+        if (column === "firstTool") return secondsLabel(row.firstToolCallSec)
+        if (column === "firstWrite") return secondsLabel(row.firstWriteSec)
+        if (column === "firstEvaluable") return secondsLabel(row.firstEvaluableSec)
         if (column === "seconds") return secondsLabel(row.elapsedSec)
         if (column === "ram") { const v = row.ramMb ?? 0; return v > 0 ? Math.round(v) + " MB" : "—" }
         if (column === "vram") { const v = row.vramMb ?? 0; return v > 0 ? Math.round(v) + " MB" : "—" }
+        if (column === "vramGpu0") { const v = row.vramGpu0Mb ?? 0; return v > 0 ? Math.round(v) + " MB" : "—" }
+        if (column === "vramGpu1") { const v = row.vramGpu1Mb ?? 0; return v > 0 ? Math.round(v) + " MB" : "—" }
         if (column === "date") { const t = row.timestamp ?? 0; if (!t) return "—"; const d = new Date(t < 1e12 ? t * 1000 : t); return isNaN(d) ? String(t) : Qt.formatDate(d, "yyyy-MM-dd") }
         return ""
     }
@@ -189,6 +206,34 @@ Item {
     }
     function clearAllFilters() { columnFilters = ({}) }
 
+    function selectedCustomDefinition() {
+        const defs = App.customBenchmarks || []
+        for (let i = 0; i < defs.length; i++)
+            if (String(defs[i].id ?? "") === customId) return defs[i]
+        return ({})
+    }
+
+    function selectedCustomPromptCount() {
+        const prompts = selectedCustomDefinition().prompts
+        return prompts && prompts.length !== undefined ? prompts.length : 0
+    }
+
+    function customBenchmarkText(def) {
+        const name = String(def.name || "(sin nombre)")
+        const description = String(def.description || "").trim()
+        // Los packs importados ya incluyen cantidad y tareas en name/description.
+        // Para benchmarks personales sin descripción, indicar al menos su tamaño.
+        if (description.length > 0 || name.indexOf("·") >= 0) return name
+        const prompts = def.prompts
+        const count = prompts && prompts.length !== undefined ? prompts.length : 0
+        return count > 0 ? name + " · " + count + (count === 1 ? " ítem" : " ítems") : name
+    }
+
+    function recommendedTimeoutSec() {
+        const n = Number(selectedCustomDefinition().recommendedTimeoutSec ?? 0)
+        return isFinite(n) && n > 0 ? Math.round(n) : 0
+    }
+
     function filteredBenchmarkResults(rows) {
         const out = []
         const cf = columnFilters
@@ -208,15 +253,14 @@ Item {
         return sortedBenchmarkResults(filteredBenchmarkResults(App.benchmarkResults), sortColumn, sortDirection)
     }
     function scoreLabel(row, scoreKey, totalKey) {
-        const s = row[scoreKey] ?? row.qualityScore ?? 0
-        const t = row[totalKey] ?? row.qualityTotal ?? 0
-        return t > 0 ? s + "/" + t : "—"
+        return BenchmarkScore.scoreLabel(row, scoreKey, totalKey)
     }
     function scoreColor(row, scoreKey, totalKey) {
-        const s = row[scoreKey] ?? row.qualityScore ?? 0
-        const t = row[totalKey] ?? row.qualityTotal ?? 1
-        const r = s / t
-        return r >= 0.8 ? Theme.successText : r >= 0.5 ? Theme.warnText : Theme.errorText
+        const tone = BenchmarkScore.scoreTone(row, scoreKey, totalKey)
+        return tone === "muted" ? Theme.textMuted
+             : tone === "ok" ? Theme.successText
+             : tone === "warn" ? Theme.warnText
+             : Theme.errorText
     }
     function secondsLabel(value) {
         const sec = value ?? 0
@@ -235,9 +279,93 @@ Item {
         }
     }
 
+    // Snapshot reactivo: las llamadas a invokables no forman por sí solas una
+    // dependencia de binding; se refresca al marcar/desmarcar desde Perfiles.
+    property var benchmarkLaunches: App.profileManager.launchProfilesForMenu()
+    Connections {
+        target: App.profileManager
+        function onLaunchesChanged() {
+            root.benchmarkLaunches = App.profileManager.launchProfilesForMenu()
+        }
+    }
+
+    function benchmarkMarkedIds() {
+        const ids = []
+        for (const item of (root.benchmarkLaunches || [])) {
+            if (item.benchmark && item.id && ids.indexOf(item.id) < 0)
+                ids.push(item.id)
+        }
+        return ids
+    }
+
     // Custom benchmark selection: "" = standard tasks, else a custom benchmark id
     property string customId: App.readSetting("benchCustomId", "")
     onCustomIdChanged: App.writeSetting("benchCustomId", customId)
+    // Escalera explícita para comparar cualquier selección con las tres etapas
+    // públicas importadas como custom benchmarks.
+    property string stageHe0Id: App.readSetting("benchStageHe0Id", "")
+    property string stageHe20Id: App.readSetting("benchStageHe20Id", "")
+    property string stageBcbId: App.readSetting("benchStageBcbId", "")
+    onStageHe0IdChanged: App.writeSetting("benchStageHe0Id", stageHe0Id)
+    onStageHe20IdChanged: App.writeSetting("benchStageHe20Id", stageHe20Id)
+    onStageBcbIdChanged: App.writeSetting("benchStageBcbId", stageBcbId)
+
+    function customStage(def) {
+        const name = String(def.name || "").toLowerCase()
+        const count = def.prompts && def.prompts.length !== undefined ? def.prompts.length : 0
+        if (name.indexOf("bigcodebench") >= 0 || name.indexOf("bcb") >= 0) return "bcb"
+        if (name.indexOf("he0") >= 0 || (name.indexOf("humaneval") >= 0 && count === 1)) return "he0"
+        if (name.indexOf("he20") >= 0 || (name.indexOf("humaneval") >= 0 && count >= 20)) return "he20"
+        return ""
+    }
+
+    function stageDefinitions(stage) {
+        const out = []
+        for (const def of (App.customBenchmarks || []))
+            if (customStage(def) === stage) out.push(def)
+        return out
+    }
+
+    function stageModel(stage) {
+        const out = []
+        for (const def of stageDefinitions(stage))
+            out.push({ id: def.id, text: customBenchmarkText(def) })
+        if (out.length === 0)
+            out.push({ id: "", text: "(importá una suite para esta etapa)" })
+        return out
+    }
+
+    function stageIndex(id, stage) {
+        const defs = stageDefinitions(stage)
+        for (let i = 0; i < defs.length; ++i)
+            if (String(defs[i].id) === String(id)) return i
+        return 0
+    }
+
+    function synchronizeStageIds() {
+        const pick = function(current, stage) {
+            const defs = stageDefinitions(stage)
+            for (const def of defs) if (String(def.id) === String(current)) return current
+            return defs.length > 0 ? String(defs[0].id) : ""
+        }
+        stageHe0Id = pick(stageHe0Id, "he0")
+        stageHe20Id = pick(stageHe20Id, "he20")
+        stageBcbId = pick(stageBcbId, "bcb")
+    }
+
+    function stageReady() {
+        return stageHe0Id.length > 0 && stageHe20Id.length > 0 && stageBcbId.length > 0
+    }
+
+    property var proBenchmarkIds: {
+        try { return JSON.parse(App.readSetting("benchProBenchmarkIds", "[]")) } catch (e) { return [] }
+    }
+    onProBenchmarkIdsChanged: App.writeSetting("benchProBenchmarkIds", JSON.stringify(proBenchmarkIds))
+    function toggleProBenchmark(id) {
+        const a = proBenchmarkIds.slice(), i = a.indexOf(id)
+        if (i >= 0) a.splice(i, 1); else a.push(id)
+        proBenchmarkIds = a
+    }
 
     Component {
         id: sortableHeader
@@ -301,10 +429,15 @@ Item {
             Popup {
                 id: filterPopup
                 y: hdr.height + 2
-                width: 240
+                x: {
+                    const p = hdr.mapToItem(root, 0, 0)
+                    return Math.max(8 - p.x, Math.min(0, root.width - 8 - width - p.x))
+                }
+                width: Math.min(300, Math.max(220, root.width - 16))
                 padding: 0
                 modal: false
                 focus: true
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                 property var checked: ({})
 
                 function initChecked() {
@@ -347,9 +480,11 @@ Item {
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.divider }
                     // Seleccionar todo
-                    CheckBox {
+                    LcCheckBox {
                         id: selAll
+                        Layout.fillWidth: true
                         Layout.leftMargin: 8
+                        Layout.rightMargin: 8
                         text: "(Seleccionar todo)"
                         tristate: false
                         checked: {
@@ -369,11 +504,12 @@ Item {
                             width: parent.width; spacing: 1
                             Repeater {
                                 model: root.distinctColumnValues(hdr.column)
-                                delegate: CheckBox {
+                                delegate: LcCheckBox {
                                     required property string modelData
+                                    Layout.fillWidth: true
                                     checked: filterPopup.checked[modelData] === true
                                     onToggled: filterPopup.setVal(modelData, checked)
-                                    contentItem: Text { text: modelData; color: Theme.textPrimary; font.pixelSize: 12; leftPadding: parent.indicator.width + 6; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+                                    text: modelData
                                 }
                             }
                         }
@@ -390,8 +526,8 @@ Item {
     }
 
     Component.onCompleted: {
-        if (App.loadBenchmarkResults) App.loadBenchmarkResults()
-        if (App.loadCustomBenchmarks) App.loadCustomBenchmarks()
+        // Se precargan después del primer pintado desde AppController. Esta
+        // página se crea junto con Main.qml aunque aún no sea visible.
         // Restaurar ancho del panel izquierdo (si el layout ya tiene tamaño).
         tryRestoreLeftPanel()
         Qt.callLater(tryRestoreLeftPanel)
@@ -402,10 +538,17 @@ Item {
         const m = String(App.readSetting("benchMode", "short"))
         if (m === "custom") customMode.checked = true
         else if (m === "full") fullMode.checked = true
+        else if (m === "stages") stageMode.checked = true
         else shortMode.checked = true
         App.thinkingEnabled = (App.readSetting("benchThinking", App.thinkingEnabled) === true
                                || String(App.readSetting("benchThinking", "")) === "true")
         _optsRestored = true
+        synchronizeStageIds()
+    }
+
+    Connections {
+        target: App
+        function onCustomBenchmarksChanged() { root.synchronizeStageIds() }
     }
 
     ColumnLayout {
@@ -493,6 +636,29 @@ Item {
                                 font.pixelSize: 12
                             }
                         }
+                    }
+
+                    // Nivel del agente (perfil): solo aplica al objetivo Agente.
+                    // Fija capacidades + directivas para comparar al mismo nivel.
+                    Text {
+                        text: "NIVEL DEL AGENTE"
+                        color: Theme.textSecondary
+                        font.pixelSize: 10; font.bold: true
+                        visible: agentTarget.checked
+                    }
+                    LcComboBox {
+                        id: agentProfileCombo
+                        Layout.fillWidth: true
+                        visible: agentTarget.checked
+                        model: App.profileManager.agentProfiles
+                        textRole: "name"; valueRole: "profileId"
+                        currentIndex: {
+                            const saved = App.readSetting("benchAgentProfile", App.activeAgentProfileId)
+                            return Math.max(0, indexOfValue(saved))
+                        }
+                        onActivated: App.writeSetting("benchAgentProfile", currentValue)
+                        background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
+                        contentItem: Text { text: "🤖 " + agentProfileCombo.displayText; color: Theme.textPrimary; font.pixelSize: 12; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                     }
 
                     CheckBox {
@@ -596,6 +762,32 @@ Item {
                                 wrapMode: Text.Wrap
                             }
                         }
+                        Item { height: 2 }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 5
+                            TapHandler { onTapped: stageMode.checked = true }
+                            RadioButton {
+                                id: stageMode
+                                text: ""
+                                onCheckedChanged: if (root._optsRestored && checked) App.writeSetting("benchMode", "stages")
+                                ButtonGroup.group: modeGroup
+                                padding: 0
+                                leftPadding: 0
+                                rightPadding: 0
+                                Layout.minimumWidth: implicitIndicatorWidth
+                                Layout.preferredWidth: implicitIndicatorWidth
+                                Layout.maximumWidth: implicitIndicatorWidth
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "Escalera HE0 → HE20 → BCB (custom)"
+                                color: Theme.textSecondary
+                                font.pixelSize: 12
+                                wrapMode: Text.Wrap
+                            }
+                        }
                     }
 
                     // ── Selector de benchmark personalizado (solo en modo custom) ──
@@ -613,12 +805,28 @@ Item {
                                 const arr = []
                                 const cs = App.customBenchmarks || []
                                 for (let i = 0; i < cs.length; i++)
-                                    arr.push({ id: cs[i].id, text: cs[i].name || "(sin nombre)" })
+                                    arr.push({ id: cs[i].id, text: root.customBenchmarkText(cs[i]) })
                                 if (arr.length === 0)
                                     arr.push({ id: "", text: "(sin benchmarks — creá uno)" })
                                 return arr
                             }
-                            onActivated: root.customId = currentValue ?? ""
+                            onActivated: {
+                                root.customId = currentValue ?? ""
+                                const cs = App.customBenchmarks || []
+                                for (let i = 0; i < cs.length; i++) {
+                                    if (cs[i].id !== root.customId) continue
+                                    // Instalaciones anteriores pueden conservar una copia
+                                    // sembrada de la suite v1 sin este campo de metadata.
+                                    const fallback = root.customId === "agent_efficiency_e2e_v1" ? 3 : 0
+                                    const recommended = parseInt(cs[i].recommendedPasses ?? fallback)
+                                    if (recommended > 0) {
+                                        passesSpin.value = Math.min(passesSpin.to,
+                                                                    Math.max(passesSpin.from, recommended))
+                                        App.writeSetting("benchPasses", passesSpin.value)
+                                    }
+                                    break
+                                }
+                            }
                             // Reconcile selection to the saved customId. Do NOT write customId
                             // back from currentValue here: the model loads async, so an early
                             // pass would clobber the saved id with index 0 (first benchmark).
@@ -630,21 +838,33 @@ Item {
                             Component.onCompleted: _syncToSaved()
                         }
 
-                        RowLayout {
+                        GridLayout {
                             Layout.fillWidth: true
-                            spacing: 6
+                            columns: 3
+                            rowSpacing: 6
+                            columnSpacing: 6
                             LcButton {
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                text: "Pro-Benchmarks (%1)".arg(root.proBenchmarkIds.length)
+                                secondary: true
+                                onClicked: proBenchPopup.open()
+                            }
+                            LcButton {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 text: "Nuevo"
                                 onClicked: { editor.loadDef(null); editor.open() }
                             }
                             LcButton {
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 text: "Importar Eval"
                                 onClicked: evalImportDialog.open()
                             }
                             LcButton {
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 text: "Editar"
                                 enabled: root.customId !== ""
                                 onClicked: {
@@ -655,6 +875,7 @@ Item {
                             }
                             LcButton {
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 text: "Borrar"
                                 danger: true
                                 enabled: root.customId !== ""
@@ -664,6 +885,112 @@ Item {
                                     benchCombo.currentIndex = 0
                                 }
                             }
+                        }
+
+                        Popup {
+                            id: proBenchPopup
+                            width: Math.min(420, root.width - 24)
+                            height: Math.min(460, root.height - 80)
+                            anchors.centerIn: Overlay.overlay
+                            modal: true
+                            focus: true
+                            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                            background: Rectangle { color: Theme.surfaceBg; border.color: Theme.borderColor; radius: 8 }
+                            contentItem: ColumnLayout {
+                                spacing: 8
+                                Text { text: "Pro-Benchmarks"; color: Theme.textPrimary; font.pixelSize: 16; font.bold: true }
+                                Text { text: "Elegí varias suites. Se ejecutan contra todos los perfiles marcados, una por vez."; color: Theme.textSecondary; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    LcButton { text: "Todos"; secondary: true; onClicked: { const a=[]; for (const b of (App.customBenchmarks||[])) a.push(b.id); root.proBenchmarkIds=a } }
+                                    LcButton { text: "Ninguno"; secondary: true; onClicked: root.proBenchmarkIds=[] }
+                                }
+                                ScrollView {
+                                    Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                                    ColumnLayout {
+                                        width: parent.width; spacing: 2
+                                        Repeater {
+                                            model: App.customBenchmarks || []
+                                            delegate: LcCheckBox {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                text: root.customBenchmarkText(modelData)
+                                                checked: root.proBenchmarkIds.indexOf(modelData.id) >= 0
+                                                onToggled: root.toggleProBenchmark(modelData.id)
+                                            }
+                                        }
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    LcButton { text: "Cerrar"; secondary: true; Layout.fillWidth: true; onClicked: proBenchPopup.close() }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Escalera pública de tres etapas ────────────────────
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: stageMode.checked
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: "SELECCIONÁ LAS SUITES CUSTOM"
+                            color: Theme.textSecondary
+                            font.pixelSize: 10
+                            font.bold: true
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Se ejecutan en orden sobre cada perfil. Si HE0 falla, ese perfil no avanza a HE20; BCB requiere HE20 válido."
+                            color: Theme.textMuted
+                            font.pixelSize: 10
+                            wrapMode: Text.Wrap
+                        }
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: 1
+                            rowSpacing: 6
+                            Text { text: "HE0 · 1 ítem"; color: Theme.textSecondary; font.pixelSize: 11 }
+                            LcComboBox {
+                                id: stageHe0Combo
+                                Layout.fillWidth: true
+                                textRole: "text"
+                                valueRole: "id"
+                                model: root.stageModel("he0")
+                                currentIndex: root.stageIndex(root.stageHe0Id, "he0")
+                                onActivated: root.stageHe0Id = currentValue || ""
+                            }
+                            Text { text: "HE20 · 20 ítems"; color: Theme.textSecondary; font.pixelSize: 11 }
+                            LcComboBox {
+                                id: stageHe20Combo
+                                Layout.fillWidth: true
+                                textRole: "text"
+                                valueRole: "id"
+                                model: root.stageModel("he20")
+                                currentIndex: root.stageIndex(root.stageHe20Id, "he20")
+                                onActivated: root.stageHe20Id = currentValue || ""
+                            }
+                            Text { text: "BCB · 8 ítems"; color: Theme.textSecondary; font.pixelSize: 11 }
+                            LcComboBox {
+                                id: stageBcbCombo
+                                Layout.fillWidth: true
+                                textRole: "text"
+                                valueRole: "id"
+                                model: root.stageModel("bcb")
+                                currentIndex: root.stageIndex(root.stageBcbId, "bcb")
+                                onActivated: root.stageBcbId = currentValue || ""
+                            }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: !root.stageReady()
+                            text: "Importá HumanEval de 1 y 20 ítems y BigCodeBench-Hard desde el selector Custom para habilitar la escalera."
+                            color: Theme.warnText
+                            font.pixelSize: 10
+                            wrapMode: Text.Wrap
                         }
                     }
 
@@ -684,6 +1011,20 @@ Item {
                             secondary: true
                             enabled: root.selectedIds.length > 0 && !App.benchmarkRunning
                             onClicked: root.selectedIds = []
+                        }
+                        LcButton {
+                            text: "Seleccionar 🏆 benchmark (" + root.benchmarkMarkedIds().length + ")"
+                            secondary: true
+                            enabled: !App.benchmarkRunning && root.benchmarkMarkedIds().length > 0
+                            ToolTip.visible: hovered
+                            ToolTip.text: "Selecciona todos los perfiles marcados como pendientes para HE0 → HE20 → BCB"
+                            onClicked: root.selectedIds = root.benchmarkMarkedIds()
+                        }
+                        LcButton {
+                            text: "Exportar CSV"
+                            secondary: true
+                            enabled: (App.benchmarkResults || []).length > 0
+                            onClicked: csvExportDialog.open()
                         }
                     }
 
@@ -793,9 +1134,50 @@ Item {
                             id: passesSpin
                             from: 1; to: 20; editable: true
                             value: Math.min(20, Math.max(1, parseInt(App.readSetting("benchPasses", "1")) || 1))
-                            implicitWidth: 96
+                            Layout.preferredWidth: 144
+                            Layout.minimumWidth: 144
                             onValueModified: App.writeSetting("benchPasses", value)
                         }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: customMode.checked && root.customId === "agent_efficiency_e2e_v1"
+                        text: "La suite E2E recomienda 3 pasadas. Compará perfiles con Honey ON/OFF; "
+                              + "comparison.json agrupa estabilidad, mediana de calidad y tiempo. "
+                              + "Revisá también archivos tocados, tool calls, tokens y reparaciones."
+                        color: Theme.textMuted
+                        font.pixelSize: 10
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: customMode.checked && root.selectedCustomPromptCount() === 1
+                        text: "Esta suite tiene 1 ítem: sirve como smoke test, no para rankear calidad. "
+                              + "Para comparar perfiles usá una suite de al menos 10–20 ítems."
+                        color: Theme.warnText
+                        font.pixelSize: 10
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: customMode.checked && root.selectedCustomPromptCount() > 0
+                        text: "T First mide desde el primer prompt; T Total incluye setup y carga. "
+                              + "Con 2+ pasadas, la comparación usa la mediana caliente (pasadas 2+); la primera queda separada como fría."
+                        color: Theme.textMuted
+                        font.pixelSize: 10
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: customMode.checked && root.recommendedTimeoutSec() > 0
+                                 && timeoutSpin.value > 0
+                                 && timeoutSpin.value < root.recommendedTimeoutSec()
+                        text: "Esta suite recomienda al menos "
+                              + root.recommendedTimeoutSec()
+                              + " s. El timeout actual puede cortar una reparación y mostrar un resultado parcial."
+                        color: Theme.warnText
+                        font.pixelSize: 10
+                        wrapMode: Text.Wrap
                     }
 
                     // Timeout duro opcional por corrida (wall-clock, segundos). 0 = sin límite.
@@ -817,10 +1199,224 @@ Item {
                             id: timeoutSpin
                             from: 0; to: 7200; stepSize: 30; editable: true
                             value: Math.min(7200, Math.max(0, parseInt(App.readSetting("benchTimeout", "0")) || 0))
-                            implicitWidth: 96
+                            Layout.preferredWidth: 144
+                            Layout.minimumWidth: 144
                             textFromValue: function(v) { return v === 0 ? "—" : v + " s" }
                             valueFromText: function(t) { const n = parseInt(t); return isNaN(n) ? 0 : n }
                             onValueModified: App.writeSetting("benchTimeout", value)
+                        }
+                    }
+
+                    // Benchmark de concurrencia real: mantiene el mismo modelo
+                    // y dispara requests simultáneas contra variantes de slots.
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: concurrencyColumn.implicitHeight + 20
+                        color: Theme.inputBg
+                        radius: 6
+                        border.color: Theme.divider
+                        ColumnLayout {
+                            id: concurrencyColumn
+                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                            spacing: 6
+                            Text {
+                                text: "CONCURRENCIA REAL"
+                                color: Theme.textSecondary; font.pixelSize: 10; font.bold: true
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "Crea copias del perfil y compara requests simultáneas por slot."
+                                color: Theme.textMuted; font.pixelSize: 10; wrapMode: Text.Wrap
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                enabled: !App.benchmarkRunning
+                                spacing: 10
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "Slots mínimos"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    SpinBox {
+                                        id: concurrencyMin
+                                        from: 1; to: 16; value: 1; editable: true
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 86
+                                        contentItem: TextInput {
+                                            text: concurrencyMin.displayText
+                                            color: Theme.textPrimary
+                                            font.pixelSize: 13
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                            leftPadding: 20; rightPadding: 20
+                                            readOnly: !concurrencyMin.editable
+                                            validator: concurrencyMin.validator
+                                        }
+                                    }
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "Slots máximos"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    SpinBox {
+                                        id: concurrencyMax
+                                        from: 1; to: 16; value: 3; editable: true
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 86
+                                        contentItem: TextInput {
+                                            text: concurrencyMax.displayText
+                                            color: Theme.textPrimary
+                                            font.pixelSize: 13
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                            leftPadding: 20; rightPadding: 20
+                                            readOnly: !concurrencyMax.editable
+                                            validator: concurrencyMax.validator
+                                        }
+                                    }
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "Requests"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    SpinBox {
+                                        id: concurrencyRequests
+                                        from: 2; to: 32; value: 4; editable: true
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 86
+                                        contentItem: TextInput {
+                                            text: concurrencyRequests.displayText
+                                            color: Theme.textPrimary
+                                            font.pixelSize: 13
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                            leftPadding: 20; rightPadding: 20
+                                            readOnly: !concurrencyRequests.editable
+                                            validator: concurrencyRequests.validator
+                                        }
+                                    }
+                                }
+                            }
+                            LcButton {
+                                Layout.fillWidth: true
+                                text: "Medir concurrencia"
+                                secondary: true
+                                enabled: !App.benchmarkRunning && root.selectedIds.length === 1
+                                ToolTip.visible: hovered
+                                ToolTip.text: root.selectedIds.length === 1
+                                    ? "Compara 1..N slots con 4 requests simultáneas"
+                                    : "Seleccioná exactamente un perfil"
+                                onClicked: App.startConcurrencyBenchmark(root.selectedIds[0],
+                                    concurrencyMin.value, concurrencyMax.value,
+                                    concurrencyRequests.value, 128)
+                            }
+                        }
+                    }
+
+                    // Medición reproducible del servidor: separada del score E2E
+                    // porque PP/TG/TTFT y la calidad responden preguntas distintas.
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: serverSpeedColumn.implicitHeight + 20
+                        color: Theme.inputBg
+                        radius: 6
+                        border.color: Theme.divider
+                        ColumnLayout {
+                            id: serverSpeedColumn
+                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                            spacing: 6
+                            Text {
+                                text: "SERVER SPEED v1"
+                                color: Theme.accent; font.pixelSize: 10; font.bold: true
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "Corpus fijo por categoría: PP/TG, TTFT, ITL, cold/warm, prefill 2K–64K y concurrencia. Guarda condiciones y hash para comparar máquinas."
+                                color: Theme.textMuted; font.pixelSize: 10; wrapMode: Text.Wrap
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true; enabled: !App.benchmarkRunning; spacing: 8
+                                Text { text: "Pasadas"; color: Theme.textSecondary; font.pixelSize: 11; Layout.fillWidth: true }
+                                SpinBox {
+                                    id: serverSpeedPasses
+                                    from: 1; to: 100; editable: true
+                                    value: Math.min(100, Math.max(1, parseInt(App.readSetting("serverSpeedPasses", "5")) || 5))
+                                    Layout.preferredWidth: 76
+                                    onValueModified: App.writeSetting("serverSpeedPasses", value)
+                                }
+                                Text { text: "Warmup"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                SpinBox {
+                                    id: serverSpeedWarmup
+                                    from: 0; to: 10; editable: true
+                                    value: isNaN(parseInt(App.readSetting("serverSpeedWarmup", "1"))) ? 1
+                                           : Math.min(10, Math.max(0, parseInt(App.readSetting("serverSpeedWarmup", "1"))))
+                                    Layout.preferredWidth: 76
+                                    onValueModified: App.writeSetting("serverSpeedWarmup", value)
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true; enabled: !App.benchmarkRunning; spacing: 8
+                                Text { text: "Prefill máx."; color: Theme.textSecondary; font.pixelSize: 11; Layout.fillWidth: true }
+                                SpinBox {
+                                    id: serverSpeedPrefill
+                                    from: 0; to: 65536; stepSize: 2048; editable: true
+                                    value: isNaN(parseInt(App.readSetting("serverSpeedPrefill", "65536"))) ? 65536
+                                           : Math.min(65536, Math.max(0, parseInt(App.readSetting("serverSpeedPrefill", "65536"))))
+                                    Layout.preferredWidth: 100
+                                    textFromValue: function(v) { return v === 0 ? "off" : v + " tok" }
+                                    valueFromText: function(t) { const n = parseInt(t); return isNaN(n) ? 0 : n }
+                                    onValueModified: App.writeSetting("serverSpeedPrefill", value)
+                                }
+                                CheckBox {
+                                    id: serverSpeedPrefillEnabled
+                                    text: "PP"; checked: App.readSetting("serverSpeedIncludePrefill", "true") !== "false"
+                                    onToggled: App.writeSetting("serverSpeedIncludePrefill", checked ? "true" : "false")
+                                }
+                                CheckBox {
+                                    id: serverSpeedConcurrencyEnabled
+                                    text: "Slots"; checked: App.readSetting("serverSpeedIncludeConcurrency", "true") !== "false"
+                                    onToggled: App.writeSetting("serverSpeedIncludeConcurrency", checked ? "true" : "false")
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true; enabled: !App.benchmarkRunning; spacing: 8
+                                Text { text: "Slots / req."; color: Theme.textSecondary; font.pixelSize: 11; Layout.fillWidth: true }
+                                SpinBox {
+                                    id: serverSpeedSlots
+                                    from: 1; to: 16; editable: true
+                                    value: Math.min(16, Math.max(1, parseInt(App.readSetting("serverSpeedSlots", "4")) || 4))
+                                    Layout.preferredWidth: 68
+                                    onValueModified: App.writeSetting("serverSpeedSlots", value)
+                                }
+                                SpinBox {
+                                    id: serverSpeedRequests
+                                    from: 1; to: 32; editable: true
+                                    value: Math.min(32, Math.max(1, parseInt(App.readSetting("serverSpeedRequests", "4")) || 4))
+                                    Layout.preferredWidth: 68
+                                    onValueModified: App.writeSetting("serverSpeedRequests", value)
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: 6
+                                LcButton {
+                                    Layout.fillWidth: true
+                                    text: "Medir servidor"
+                                    secondary: true
+                                    enabled: !App.benchmarkRunning && root.selectedIds.length > 0
+                                    onClicked: App.startServerSpeedBenchmark(root.selectedIds,
+                                        serverSpeedPasses.value, serverSpeedWarmup.value,
+                                        serverSpeedPrefillEnabled.checked,
+                                        serverSpeedConcurrencyEnabled.checked,
+                                        serverSpeedPrefill.value, serverSpeedSlots.value,
+                                        serverSpeedRequests.value)
+                                }
+                                LcButton {
+                                    Layout.fillWidth: true
+                                    text: "A/B + A/A"
+                                    secondary: true
+                                    enabled: !App.benchmarkRunning && root.selectedIds.length === 2
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: "Compara los dos perfiles seleccionados con orden AB/BA y control A/A"
+                                    onClicked: App.startServerSpeedABBenchmark(root.selectedIds[0], root.selectedIds[1],
+                                        Math.max(2, serverSpeedPasses.value * 2), serverSpeedWarmup.value)
+                                }
+                            }
                         }
                     }
 
@@ -834,17 +1430,35 @@ Item {
                             danger: App.benchmarkRunning
                             enabled: App.benchmarkRunning
                                      || (root.selectedIds.length > 0
-                                         && (!customMode.checked || root.customId !== ""))
+                                         && (stageMode.checked
+                                             ? root.stageReady()
+                                             : ((!customMode.checked || root.customId !== "")
+                                                 || root.proBenchmarkIds.length > 0)))
                             onClicked: {
                                 if (App.benchmarkRunning) {
                                     App.cancelBenchmark()
+                                } else if (stageMode.checked) {
+                                    App.startThreeStageBenchmark(root.selectedIds,
+                                                                 root.stageHe0Id,
+                                                                 root.stageHe20Id,
+                                                                 root.stageBcbId,
+                                                                 passesSpin.value,
+                                                                 agentTarget.checked ? "agent" : "model",
+                                                                 timeoutSpin.value,
+                                                                 agentTarget.checked ? agentProfileCombo.currentValue : "")
+                                } else if (root.proBenchmarkIds.length > 0) {
+                                    App.startProBenchmarks(root.selectedIds, root.proBenchmarkIds, passesSpin.value,
+                                                           agentTarget.checked ? "agent" : "model", timeoutSpin.value,
+                                                           agentTarget.checked ? agentProfileCombo.currentValue : "")
                                 } else if (customMode.checked) {
                                     if (root.customId !== "")
                                         App.startCustomBenchmark(root.selectedIds, root.customId, passesSpin.value,
-                                                                 agentTarget.checked ? "agent" : "model", timeoutSpin.value)
+                                                                 agentTarget.checked ? "agent" : "model", timeoutSpin.value,
+                                                                 agentTarget.checked ? agentProfileCombo.currentValue : "")
                                 } else {
                                     App.startBenchmark(root.selectedIds, shortMode.checked ? "short" : "full", passesSpin.value,
-                                                       agentTarget.checked ? "agent" : "model", timeoutSpin.value)
+                                                       agentTarget.checked ? "agent" : "model", timeoutSpin.value,
+                                                       agentTarget.checked ? agentProfileCombo.currentValue : "")
                                 }
                             }
                         }
@@ -905,26 +1519,58 @@ Item {
                     anchors { fill: parent; margins: 20 }
                     spacing: 12
 
-                    RowLayout {
+                    ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 8
 
-                        Text {
-                            text: "▾ por columna para filtrar/ordenar"
-                            color: Theme.textMuted
-                            font.pixelSize: 11
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                Layout.fillWidth: true
+                                text: "▾ por columna para filtrar/ordenar"
+                                color: Theme.textMuted
+                                font.pixelSize: 11
+                            }
+                            Text {
+                                text: resultsList.count + " resultados"
+                                color: Theme.textMuted
+                                font.pixelSize: 11
+                            }
                         }
-                        LcButton {
-                            text: root.activeFilterCount() > 0 ? "Limpiar filtros (" + root.activeFilterCount() + ")" : "Limpiar filtros"
-                            secondary: true
-                            enabled: root.activeFilterCount() > 0
-                            onClicked: root.clearAllFilters()
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: resultsList.count + " resultados"
-                            color: Theme.textMuted
-                            font.pixelSize: 11
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: 2
+                            rowSpacing: 6
+                            columnSpacing: 6
+                            LcButton {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                text: root.activeFilterCount() > 0 ? "Limpiar filtros (" + root.activeFilterCount() + ")" : "Limpiar filtros"
+                                secondary: true
+                                enabled: root.activeFilterCount() > 0
+                                onClicked: root.clearAllFilters()
+                            }
+                            LcButton {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                text: "Best 25"
+                                secondary: true
+                                onClicked: best25Popup.open()
+                            }
+                            LcButton {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                text: "Best modelos · speed"
+                                secondary: true
+                                onClicked: bestModelosSpeedPopup.open()
+                            }
+                            LcButton {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                text: "Best modelos · quality"
+                                secondary: true
+                                onClicked: bestModelosQualityPopup.open()
+                            }
                         }
                     }
 
@@ -939,22 +1585,264 @@ Item {
                             spacing: 0
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("profile"); onLoaded: { item.title = "Perfil"; item.column = "profile"; item.fill = true } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("target"); onLoaded: { item.title = "Modo"; item.column = "target" } }
+                            Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("agentProfile"); onLoaded: { item.title = "Nivel"; item.column = "agentProfile" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("benchmark"); onLoaded: { item.title = "Benchmark"; item.column = "benchmark" } }
+                            Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("thinking"); onLoaded: { item.title = "Think"; item.column = "thinking" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("score"); onLoaded: { item.title = "Score"; item.column = "score" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("firstAttemptScore"); onLoaded: { item.title = "First"; item.column = "firstAttemptScore" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("finalScore"); onLoaded: { item.title = "Final"; item.column = "finalScore" } }
+                            Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("qpm"); onLoaded: { item.title = "QPM"; item.column = "qpm" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("repairAttempts"); onLoaded: { item.title = "Fixes"; item.column = "repairAttempts" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("timeToFirstAttempt"); onLoaded: { item.title = "T First"; item.column = "timeToFirstAttempt" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("totalTime"); onLoaded: { item.title = "T Total"; item.column = "totalTime" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("passedAfterRepair"); onLoaded: { item.title = "Repaired"; item.column = "passedAfterRepair" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("tps"); onLoaded: { item.title = "TPS"; item.column = "tps" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("ttft"); onLoaded: { item.title = "TTFT"; item.column = "ttft" } }
+                            Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("nonGeneration"); onLoaded: { item.title = "T No Gen."; item.column = "nonGeneration" } }
+                            Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("firstTool"); onLoaded: { item.title = "1ª Tool"; item.column = "firstTool" } }
+                            Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("firstWrite"); onLoaded: { item.title = "1ª Escritura"; item.column = "firstWrite" } }
+                            Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("firstEvaluable"); onLoaded: { item.title = "1ª Evaluable"; item.column = "firstEvaluable" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("seconds"); onLoaded: { item.title = "Segundos"; item.column = "seconds" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("ram"); onLoaded: { item.title = "RAM"; item.column = "ram" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("vram"); onLoaded: { item.title = "VRAM"; item.column = "vram" } }
+                            Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("vramGpu0"); onLoaded: { item.title = "VRAM G0"; item.column = "vramGpu0" } }
+                            Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("vramGpu1"); onLoaded: { item.title = "VRAM G1"; item.column = "vramGpu1" } }
                             Loader { sourceComponent: sortableHeader; Layout.preferredWidth: root.colWidth("date"); onLoaded: { item.title = "Fecha"; item.column = "date" } }
                             Item { Layout.fillWidth: true; height: 30 }
                             Item { Layout.preferredWidth: 34; height: 30 }
+                        }
+                    }
+
+                    Popup {
+                        id: best25Popup
+                        width: Math.min(860, root.width - 40)
+                        height: Math.min(470, root.height - 100)
+                        anchors.centerIn: parent
+                        modal: true
+                        padding: 12
+                        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                        background: Rectangle { color: Theme.surfaceBg; radius: 8; border.color: Theme.divider }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 8
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: "tabla_best_25 · HumanEval (1 ítem)"
+                                    color: Theme.textPrimary; font.pixelSize: 15; font.bold: true
+                                }
+                                Item { Layout.fillWidth: true }
+                                LcButton {
+                                    text: "Seleccionar 25"
+                                    secondary: true
+                                    enabled: (App.benchmarkBest25 || []).length > 0
+                                    onClicked: {
+                                        const ids = []
+                                        for (const row of (App.benchmarkBest25 || []))
+                                            if (ids.indexOf(row.profileId) < 0) ids.push(row.profileId)
+                                        root.selectedIds = ids
+                                        best25Popup.close()
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "Fast >60 TPS · Balanced >40 TPS · Quality >5 TPS. Orden: calidad y luego TPS."
+                                color: Theme.textMuted; font.pixelSize: 11
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true; height: 28; color: Theme.baseBg; radius: 4
+                                RowLayout {
+                                    anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
+                                    Text { Layout.preferredWidth: 70; text: "Grupo / #"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Text { Layout.fillWidth: true; text: "Perfil"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Text { Layout.preferredWidth: 80; text: "TPS"; color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                    Text { Layout.preferredWidth: 80; text: "Calidad"; color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                    Text { Layout.preferredWidth: 90; text: "T First"; color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                }
+                            }
+                            ListView {
+                                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 1
+                                model: App.benchmarkBest25 || []
+                                ScrollBar.vertical: LcScrollBar {}
+                                delegate: Rectangle {
+                                    width: ListView.view.width; height: 29; color: index % 2 ? Theme.baseBg : "transparent"
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
+                                        Text {
+                                            Layout.preferredWidth: 70
+                                            text: (modelData.best25Category || "") + " #" + (modelData.best25Rank || "")
+                                            color: modelData.best25Category === "Fast" ? Theme.successText
+                                                 : modelData.best25Category === "Balanced" ? Theme.accent : Theme.warnText
+                                            font.pixelSize: 11; font.bold: true
+                                        }
+                                        Text { Layout.fillWidth: true; text: modelData.profileName || ""; color: Theme.textPrimary; font.pixelSize: 11; elide: Text.ElideRight }
+                                        Text { Layout.preferredWidth: 80; text: Number(modelData.avgTps || 0).toFixed(1); color: Theme.textPrimary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                        Text { Layout.preferredWidth: 80; text: (modelData.qualityScore || 0) + "/" + (modelData.qualityTotal || 0); color: Theme.successText; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                        Text { Layout.preferredWidth: 90; text: root.secondsLabel(modelData.timeToFirstAttempt); color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                    }
+                                }
+                                Text {
+                                    anchors.centerIn: parent; visible: parent.count === 0
+                                    text: "Todavía no hay corridas rápidas válidas para construir la tabla."
+                                    color: Theme.textMuted; font.pixelSize: 12
+                                }
+                            }
+                        }
+                    }
+
+                    Popup {
+                        id: bestModelosSpeedPopup
+                        width: Math.min(900, root.width - 40)
+                        height: Math.min(470, root.height - 100)
+                        anchors.centerIn: parent
+                        modal: true
+                        padding: 12
+                        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                        background: Rectangle { color: Theme.surfaceBg; radius: 8; border.color: Theme.divider }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 8
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: "tabla_best_modelos_speed"
+                                    color: Theme.textPrimary; font.pixelSize: 15; font.bold: true
+                                }
+                                Item { Layout.fillWidth: true }
+                                LcButton {
+                                    text: "Seleccionar top 3 + ⚡ BEST + 🏆 BENCH"
+                                    secondary: true
+                                    enabled: (App.benchmarkHumanEval20Candidates || []).length > 0
+                                    onClicked: {
+                                        const ids = []
+                                        for (const row of (App.benchmarkHumanEval20Candidates || []))
+                                            if (ids.indexOf(row.profileId) < 0) ids.push(row.profileId)
+                                        root.selectedIds = ids
+                                        bestModelosSpeedPopup.close()
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "HumanEval/0 evalúa hasta 10 perfiles por GGUF; HumanEval/20 recibe sólo los 3 ganadores de cada GGUF y todos los controles ⚡ BEST / 🏆 BENCH."
+                                color: Theme.textMuted; font.pixelSize: 11
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true; height: 28; color: Theme.baseBg; radius: 4
+                                RowLayout {
+                                    anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
+                                    Text { Layout.preferredWidth: 70; text: "# / Grupo"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Text { Layout.preferredWidth: 250; text: "GGUF"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Text { Layout.fillWidth: true; text: "Perfil"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Text { Layout.preferredWidth: 75; text: "TPS"; color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                    Text { Layout.preferredWidth: 75; text: "Calidad"; color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                }
+                            }
+                            ListView {
+                                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 1
+                                model: App.benchmarkBestModelosSpeed || []
+                                ScrollBar.vertical: LcScrollBar {}
+                                delegate: Rectangle {
+                                    width: ListView.view.width; height: 29; color: index % 2 ? Theme.baseBg : "transparent"
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
+                                        Text {
+                                            Layout.preferredWidth: 70
+                                            text: "#" + (modelData.bestModelosSpeedRank || "") + " " + (modelData.best25Category || "")
+                                            color: Theme.accent; font.pixelSize: 11; font.bold: true
+                                        }
+                                        Text { Layout.preferredWidth: 250; text: modelData.ggufName || "—"; color: Theme.textSecondary; font.pixelSize: 11; elide: Text.ElideMiddle }
+                                        Text { Layout.fillWidth: true; text: modelData.profileName || ""; color: Theme.textPrimary; font.pixelSize: 11; elide: Text.ElideRight }
+                                        Text { Layout.preferredWidth: 75; text: Number(modelData.avgTps || 0).toFixed(1); color: Theme.textPrimary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                        Text { Layout.preferredWidth: 75; text: (modelData.qualityScore || 0) + "/" + (modelData.qualityTotal || 0); color: Theme.successText; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                    }
+                                }
+                                Text {
+                                    anchors.centerIn: parent; visible: parent.count === 0
+                                    text: "Todavía no hay candidatos con GGUF resuelto."
+                                    color: Theme.textMuted; font.pixelSize: 12
+                                }
+                            }
+                        }
+                    }
+
+                    Popup {
+                        id: bestModelosQualityPopup
+                        width: Math.min(980, root.width - 40)
+                        height: Math.min(470, root.height - 100)
+                        anchors.centerIn: parent
+                        modal: true
+                        padding: 12
+                        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                        background: Rectangle { color: Theme.surfaceBg; radius: 8; border.color: Theme.divider }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 8
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: "tabla_best_modelos_quality · HumanEval (20 ítems)"
+                                    color: Theme.textPrimary; font.pixelSize: 15; font.bold: true
+                                }
+                                Item { Layout.fillWidth: true }
+                                LcButton {
+                                text: "Seleccionar finalistas"
+                                    secondary: true
+                                    enabled: (App.benchmarkBestModelosQuality || []).length > 0
+                                    onClicked: {
+                                        const ids = []
+                                        for (const row of (App.benchmarkBestModelosQuality || []))
+                                            if (ids.indexOf(row.profileId) < 0) ids.push(row.profileId)
+                                        root.selectedIds = ids
+                                        bestModelosQualityPopup.close()
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "HumanEval/20 compara los 3 mejores por GGUF con todos los controles ⚡ BEST / 🏆 BENCH; infra/timeouts quedan fuera."
+                                color: Theme.textMuted; font.pixelSize: 11
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true; height: 28; color: Theme.baseBg; radius: 4
+                                RowLayout {
+                                    anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
+                                    Text { Layout.preferredWidth: 45; text: "#"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Text { Layout.preferredWidth: 220; text: "GGUF"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Text { Layout.fillWidth: true; text: "Perfil"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Text { Layout.preferredWidth: 85; text: "Origen"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Text { Layout.preferredWidth: 70; text: "Calidad"; color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                    Text { Layout.preferredWidth: 60; text: "TPS"; color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                    Text { Layout.preferredWidth: 75; text: "T total"; color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                }
+                            }
+                            ListView {
+                                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 1
+                                model: App.benchmarkBestModelosQuality || []
+                                ScrollBar.vertical: LcScrollBar {}
+                                delegate: Rectangle {
+                                    width: ListView.view.width; height: 29; color: index % 2 ? Theme.baseBg : "transparent"
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
+                                        Text { Layout.preferredWidth: 45; text: modelData.bestModelosQualityRank || (index + 1); color: Theme.accent; font.pixelSize: 11; font.bold: true }
+                                        Text { Layout.preferredWidth: 220; text: modelData.ggufName || "—"; color: Theme.textSecondary; font.pixelSize: 11; elide: Text.ElideMiddle }
+                                        Text { Layout.fillWidth: true; text: modelData.profileName || ""; color: Theme.textPrimary; font.pixelSize: 11; elide: Text.ElideRight }
+                                        Text { Layout.preferredWidth: 85; text: modelData.humanEval20Control ? (modelData.benchmarkControl ? "🏆 BENCH" : "⚡ BEST") : "Top 3"; color: Theme.accent; font.pixelSize: 11 }
+                                        Text { Layout.preferredWidth: 70; text: (modelData.qualityScore || 0) + "/" + (modelData.qualityTotal || 0); color: Theme.successText; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                        Text { Layout.preferredWidth: 60; text: Number(modelData.avgTps || 0).toFixed(1); color: Theme.textPrimary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                        Text { Layout.preferredWidth: 75; text: root.secondsLabel(modelData.totalTime || modelData.elapsedSec); color: Theme.textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignRight }
+                                    }
+                                }
+                                Text {
+                                    anchors.centerIn: parent; visible: parent.count === 0
+                                    text: "Todavía no hay resultados válidos de HumanEval (20 ítems)."
+                                    color: Theme.textMuted; font.pixelSize: 12
+                                }
+                            }
                         }
                     }
 
@@ -1023,6 +1911,11 @@ Item {
                                     enabled: (modelData.runDir ?? "") !== ""
                                     onTriggered: App.openBenchmarkFolder(modelData.runDir ?? "")
                                 }
+                                MenuSeparator {}
+                                MenuItem {
+                                    text: "Borrar fila"
+                                    onTriggered: App.removeBenchmarkResultById(modelData.id ?? "")
+                                }
                             }
 
                             // ── Main row ───────────────────────────────────
@@ -1032,7 +1925,9 @@ Item {
                                 spacing: 0
 
                                 Text {
-                                    text: modelData.profileName ?? ""
+                                    text: (modelData.comparisonProfileName ?? "") !== ""
+                                          ? (modelData.profileName ?? "") + " vs " + modelData.comparisonProfileName
+                                          : (modelData.profileName ?? "")
                                     color: Theme.textPrimary; font.pixelSize: 12
                                     elide: Text.ElideRight
                                     Layout.preferredWidth: root.colWidth("profile")
@@ -1043,10 +1938,22 @@ Item {
                                     Layout.preferredWidth: root.colWidth("target"); horizontalAlignment: Text.AlignRight
                                 }
                                 Text {
+                                    text: root.columnLabel(modelData, "agentProfile")
+                                    color: Theme.textMuted; font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                    Layout.preferredWidth: root.colWidth("agentProfile"); horizontalAlignment: Text.AlignRight
+                                }
+                                Text {
                                     text: root.benchmarkNameLabel(modelData)
                                     color: Theme.textSecondary; font.pixelSize: 11
                                     elide: Text.ElideRight
                                     Layout.preferredWidth: root.colWidth("benchmark"); horizontalAlignment: Text.AlignRight
+                                }
+                                Text {
+                                    text: root.thinkingLabel(modelData)
+                                    color: root.thinkingLabel(modelData) === "On" ? Theme.textSecondary : Theme.textMuted
+                                    font.pixelSize: 11
+                                    Layout.preferredWidth: root.colWidth("thinking"); horizontalAlignment: Text.AlignRight
                                 }
                                 Item {
                                     Layout.preferredWidth: root.colWidth("score")
@@ -1054,25 +1961,19 @@ Item {
                                     Text {
                                         anchors.fill: parent
                                         visible: !resultRow.failed
-                                        text: {
-                                            const s = modelData.qualityScore ?? 0
-                                            const t = modelData.qualityTotal ?? 0
-                                            return t > 0 ? s + "/" + t : "—"
-                                        }
-                                        color: {
-                                            const s = modelData.qualityScore ?? 0
-                                            const t = modelData.qualityTotal ?? 1
-                                            const r = s / t
-                                            return r >= 0.8 ? Theme.successText : r >= 0.5 ? Theme.warnText : Theme.errorText
-                                        }
+                                        text: root.scoreLabel(modelData, "qualityScore", "qualityTotal")
+                                        color: root.scoreColor(modelData, "qualityScore", "qualityTotal")
                                         font.pixelSize: 12; font.bold: true
                                         horizontalAlignment: Text.AlignRight
                                         verticalAlignment: Text.AlignVCenter
                                     }
                                     LcButton {
                                         anchors { verticalCenter: parent.verticalCenter; right: parent.right }
-                                        width: 52; height: 24
-                                        text: "Fallo"
+                                        width: BenchmarkScore.runStatus(modelData) === "timeout" ? 66
+                                              : BenchmarkScore.runStatus(modelData) === "infrastructure" ? 54
+                                              : 68
+                                        height: 24
+                                        text: BenchmarkScore.statusLabel(modelData)
                                         danger: true
                                         visible: resultRow.failed
                                         onClicked: {
@@ -1094,6 +1995,18 @@ Item {
                                     font.pixelSize: 11
                                     font.bold: true
                                     Layout.preferredWidth: root.colWidth("finalScore"); horizontalAlignment: Text.AlignRight
+                                }
+                                Text {
+                                    text: BenchmarkScore.qualityPerMinuteLabel(modelData)
+                                    color: {
+                                        const tone = BenchmarkScore.qualityPerMinuteTone(modelData)
+                                        return tone === "ok" ? Theme.successText
+                                             : tone === "warn" ? Theme.warnText
+                                             : tone === "error" ? Theme.errorText : Theme.textMuted
+                                    }
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    Layout.preferredWidth: root.colWidth("qpm"); horizontalAlignment: Text.AlignRight
                                 }
                                 Text {
                                     text: (modelData.repairAttempts ?? 0).toString()
@@ -1134,6 +2047,14 @@ Item {
                                     Layout.preferredWidth: root.colWidth("ttft"); horizontalAlignment: Text.AlignRight
                                 }
                                 Text {
+                                    text: root.secondsLabel(modelData.nonGenerationSec)
+                                    color: Theme.warnText; font.pixelSize: 10
+                                    Layout.preferredWidth: root.colWidth("nonGeneration"); horizontalAlignment: Text.AlignRight
+                                }
+                                Text { text: root.secondsLabel(modelData.firstToolCallSec); color: Theme.textSecondary; font.pixelSize: 10; Layout.preferredWidth: root.colWidth("firstTool"); horizontalAlignment: Text.AlignRight }
+                                Text { text: root.secondsLabel(modelData.firstWriteSec); color: Theme.textSecondary; font.pixelSize: 10; Layout.preferredWidth: root.colWidth("firstWrite"); horizontalAlignment: Text.AlignRight }
+                                Text { text: root.secondsLabel(modelData.firstEvaluableSec); color: Theme.textSecondary; font.pixelSize: 10; Layout.preferredWidth: root.colWidth("firstEvaluable"); horizontalAlignment: Text.AlignRight }
+                                Text {
                                     text: {
                                         const sec = modelData.elapsedSec ?? 0
                                         return sec > 0 ? sec.toFixed(1) + " s" : "—"
@@ -1159,6 +2080,22 @@ Item {
                                 }
                                 Text {
                                     text: {
+                                        const mb = modelData.vramGpu0Mb ?? 0
+                                        return mb > 0 ? mb.toFixed(0) + " MB" : "—"
+                                    }
+                                    color: Theme.textSecondary; font.pixelSize: 11
+                                    Layout.preferredWidth: root.colWidth("vramGpu0"); horizontalAlignment: Text.AlignRight
+                                }
+                                Text {
+                                    text: {
+                                        const mb = modelData.vramGpu1Mb ?? 0
+                                        return mb > 0 ? mb.toFixed(0) + " MB" : "—"
+                                    }
+                                    color: Theme.textSecondary; font.pixelSize: 11
+                                    Layout.preferredWidth: root.colWidth("vramGpu1"); horizontalAlignment: Text.AlignRight
+                                }
+                                Text {
+                                    text: {
                                         const ts = modelData.timestamp ?? 0
                                         return ts > 0 ? Qt.formatDateTime(new Date(ts), "d MMM HH:mm") : ""
                                     }
@@ -1176,7 +2113,7 @@ Item {
                                         color: delHover.containsMouse ? Theme.errorText : "transparent"
                                         border.color: delHover.containsMouse ? Theme.errorText : Theme.divider
                                         border.width: 1
-                                        visible: rowHover.containsMouse || delHover.containsMouse
+                                        visible: Boolean(rowHover.containsMouse || delHover.containsMouse)
                                         Text {
                                             anchors.centerIn: parent
                                             text: "✕"; font.pixelSize: 12
@@ -1211,7 +2148,8 @@ Item {
                                         spacing: 8
                                         Text {
                                             id: failureSummary
-                                            text: modelData.failureMessage ?? "Falló la pasada."
+                                            text: BenchmarkScore.statusLabel(modelData) + ": "
+                                                  + (modelData.failureMessage ?? "Falló la pasada.")
                                             color: Theme.errorText
                                             font.pixelSize: 11
                                             elide: Text.ElideRight
@@ -1226,6 +2164,43 @@ Item {
                                                 failureDialog.open()
                                             }
                                         }
+                                    }
+                                }
+
+                                Column {
+                                    visible: (modelData.mode ?? "").toString().indexOf("server-speed") === 0
+                                    width: taskList.width
+                                    spacing: 2
+                                    Text {
+                                        text: {
+                                            const ab = (modelData.mode ?? "") === "server-speed-ab"
+                                            if (ab) {
+                                                const s = modelData.pairedSummary || {}
+                                                const n = modelData.nullTestSummary || {}
+                                                return "A/B TG: " + Number(s.deltaPctMedian || 0).toFixed(1) + "% mediana · "
+                                                       + (s.winner || "sin datos") + " · A/A: "
+                                                       + (modelData.nullTestPassed === false ? "inestable" : "OK")
+                                            }
+                                            const s = modelData.serverSpeedSummary || {}
+                                            return "TG p50 " + (Number(s.decodeTpsP50 || 0) > 0 ? Number(s.decodeTpsP50).toFixed(1) : "—")
+                                                   + " t/s · PP p50 " + (Number(s.promptTpsP50 || 0) > 0 ? Number(s.promptTpsP50).toFixed(1) : "—")
+                                                   + " t/s · TTFT p50 " + (Number(s.ttftMsP50 || 0) > 0 ? Math.round(Number(s.ttftMsP50)) : "—") + " ms"
+                                        }
+                                        color: Theme.accent; font.pixelSize: 11; font.bold: true
+                                    }
+                                    Text {
+                                        visible: (modelData.mode ?? "") !== "server-speed-ab"
+                                        text: {
+                                            const cold = modelData.coldSummary || {}
+                                            const warm = modelData.warmSummary || {}
+                                            const pre = modelData.prefillSummary || {}
+                                            const slots = (modelData.concurrencySweep || []).length
+                                            return "Cold/Warm TG: " + Number(cold.decodeTpsMean || 0).toFixed(1) + "/"
+                                                   + Number(warm.decodeTpsMean || 0).toFixed(1) + " t/s · prefill: "
+                                                   + (Number(pre.promptTpsMean || 0) > 0 ? Number(pre.promptTpsMean).toFixed(1) : "—")
+                                                   + " t/s · puntos slots: " + slots
+                                        }
+                                        color: Theme.textMuted; font.pixelSize: 10
                                     }
                                 }
 
@@ -1353,7 +2328,7 @@ Item {
         }
     }
 
-    Dialog {
+    LcDialog {
         id: failureDialog
         modal: true
         parent: Overlay.overlay
@@ -1362,9 +2337,10 @@ Item {
         width: Math.min(parent ? parent.width - 80 : 900, 900)
         height: Math.min(parent ? parent.height - 80 : 680, 680)
         title: "Fallo de benchmark"
+        footer: null
 
         background: Rectangle {
-            color: Theme.cardBg
+            color: Theme.popupBg
             radius: 8
             border.color: Theme.borderColor
         }
@@ -1432,6 +2408,17 @@ Item {
 
     // ── Editor de benchmark personalizado ──────────────────────────────────────
     FileDialog {
+        id: csvExportDialog
+        title: "Exportar resultados CSV"
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["CSV (*.csv)"]
+        onAccepted: {
+            const path = selectedFile.toString().replace(/^file:\/\//, "")
+            App.exportBenchmarkResultsCsv(decodeURIComponent(path))
+        }
+    }
+
+    FileDialog {
         id: evalImportDialog
         title: "Importar EvalSuite (JSON)"
         nameFilters: ["EvalSuite JSON (*.json)"]
@@ -1447,15 +2434,30 @@ Item {
         }
     }
 
-    Dialog {
+    LcDialog {
         id: importErrorDialog
         property alias text: importErrorLabel.text
         modal: true
         parent: Overlay.overlay
         x: Math.round((parent.width - width) / 2)
         y: Math.round((parent.height - height) / 2)
+        width: Math.min(420, parent.width - 48)
+        height: 190
+        leftPadding: 20
+        rightPadding: 20
         title: "No se pudo importar la EvalSuite"
-        standardButtons: Dialog.Ok
+        standardButtons: Dialog.NoButton
+        footer: Rectangle {
+            color: Theme.popupHeaderBg
+            height: 56
+            radius: 12
+            Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.popupHeaderBorder }
+            LcButton {
+                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                text: "Aceptar"
+                onClicked: importErrorDialog.close()
+            }
+        }
         Label { id: importErrorLabel; wrapMode: Text.WordWrap; width: 360 }
     }
 

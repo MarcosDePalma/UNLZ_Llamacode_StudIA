@@ -1,0 +1,8 @@
+ggml_cuda_init: found 2 CUDA devices (Total VRAM: 49151 MiB):
+  Device 0: NVIDIA GeForce RTX 3090, compute capability 8.6, VMM: yes, VRAM: 24575 MiB
+  Device 1: NVIDIA GeForce RTX 3090, compute capability 8.6, VMM: yes, VRAM: 24575 MiB
+load_backend: loaded CUDA backend from D:\Models\llamacpp\llama.cpp-b10331-cuda12.4\ggml-cuda.dll
+load_backend: loaded RPC backend from D:\Models\llamacpp\llama.cpp-b10331-cuda12.4\ggml-rpc.dll
+load_backend: loaded CPU backend from D:\Models\llamacpp\llama.cpp-b10331-cuda12.4\ggml-cpu-zen4.dll
+[
+D:\a\llama.cpp\llama.cpp\ggml\src\ggml-cuda\ggml-cuda.cu:106: CUDA error

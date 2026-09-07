@@ -8,6 +8,7 @@ struct ModelRoot {
     QString path;
     QString label;
     QString scanMode;  // "manual", "startup", "watch"
+    QString kind = "dir";  // "dir" (filesystem GGUF) | "ollama" (Ollama blob store)
     bool enabled = true;
     int priority = 0;
     QStringList tags;

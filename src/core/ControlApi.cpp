@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QUrlQuery>
+#include <QUuid>
 #include <QVariant>
 
 ControlApi::ControlApi(QObject *target, QObject *parent)
@@ -40,10 +41,16 @@ void ControlApi::onNewConnection()
             if (hdrEnd < 0) return;
             const QByteArray headers = data.left(hdrEnd);
             int contentLen = 0;
+            QHash<QByteArray, QByteArray> headerMap;
             const QList<QByteArray> lines = headers.split('\n');
             for (const QByteArray &l : lines) {
-                if (l.toLower().startsWith("content-length:"))
-                    contentLen = l.mid(l.indexOf(':') + 1).trimmed().toInt();
+                const int colon = l.indexOf(':');
+                if (colon <= 0) continue;
+                const QByteArray name = l.left(colon).trimmed().toLower();
+                const QByteArray value = l.mid(colon + 1).trimmed();
+                headerMap.insert(name, value);
+                if (name == "content-length")
+                    contentLen = value.toInt();
             }
             const QByteArray body = data.mid(hdrEnd + 4);
             if (body.size() < contentLen) return;   // esperar resto
@@ -53,7 +60,7 @@ void ControlApi::onNewConnection()
             if (parts.size() < 2) { sock->disconnectFromHost(); return; }
             const QByteArray method = parts.at(0);
             const QString path = QString::fromUtf8(parts.at(1));
-            handleRequest(sock, method, path, body.left(contentLen));
+            handleRequest(sock, method, path, body.left(contentLen), headerMap);
         });
         connect(sock, &QTcpSocket::disconnected, sock, &QObject::deleteLater);
     }
@@ -70,45 +77,84 @@ static QByteArray httpResponse(int code, const QByteArray &json)
     return r;
 }
 
+// Helpers de introspección/errores (definidos más abajo; usados por handleRequest).
+static QJsonArray childTargets(QObject *obj);
+static QByteArray errorJson(const QString &msg, const QString &availKey, const QJsonArray &avail);
+
 void ControlApi::handleRequest(QTcpSocket *sock, const QByteArray &method,
-                               const QString &path, const QByteArray &body)
+                               const QString &path, const QByteArray &body,
+                               const QHash<QByteArray, QByteArray> &headers)
 {
     QByteArray resp;
     const QString p = path.section('?', 0, 0);
     const QUrlQuery query(path.section('?', 1));
+    const QString reqId = requestIdFor(path, body, headers);
     // target: query param (GET) o campo JSON (POST). Ruta de QObject* hijos.
     QString targetPath = query.queryItemValue(QStringLiteral("target"));
     if (method == "POST" && targetPath.isEmpty())
         targetPath = QJsonDocument::fromJson(body).object()
                          .value(QStringLiteral("target")).toString();
 
-    if (p == QLatin1String("/health")) {
-        resp = httpResponse(200, "{\"ok\":true}");
+    // Error de target desconocido con la lista de targets válidos (descubrimiento).
+    auto unknownTarget = [this]() {
+        return errorJson(QStringLiteral("target desconocido"),
+                         QStringLiteral("available"),
+                         m_target ? childTargets(m_target) : QJsonArray{});
+    };
+
+    if (p == QLatin1String("/") || p == QLatin1String("/help")) {
+        resp = httpResponse(200, withRequestId(jsonHelp(), reqId));
+    } else if (p == QLatin1String("/health")) {
+        resp = httpResponse(200, withRequestId("{\"ok\":true}", reqId));
     } else if (p == QLatin1String("/methods")) {
-        resp = httpResponse(200, jsonMethods(targetPath));
+        resp = httpResponse(200, withRequestId(jsonMethods(targetPath), reqId));
     } else if (p == QLatin1String("/prop")) {
         QObject *t = resolveTarget(targetPath);
-        resp = t ? httpResponse(200, jsonProperty(t, query.queryItemValue(QStringLiteral("name"))))
-                 : httpResponse(400, "{\"error\":\"target desconocido\"}");
+        resp = t ? httpResponse(200, withRequestId(jsonProperty(t, query.queryItemValue(QStringLiteral("name"))), reqId))
+                 : httpResponse(400, withRequestId(unknownTarget(), reqId));
     } else if (p == QLatin1String("/setprop") && method == "POST") {
         bool ok = false;
         QObject *t = resolveTarget(targetPath);
-        const QByteArray out = t ? setProperty(t, body, &ok)
-                                 : QByteArray("{\"error\":\"target desconocido\"}");
-        resp = httpResponse(ok ? 200 : 400, out);
+        const QByteArray out = t ? setProperty(t, body, &ok) : unknownTarget();
+        resp = httpResponse(ok ? 200 : 400, withRequestId(out, reqId));
     } else if (p == QLatin1String("/invoke") && method == "POST") {
         bool ok = false;
         QObject *t = resolveTarget(targetPath);
-        const QByteArray out = t ? invokeMethod(t, body, &ok)
-                                 : QByteArray("{\"error\":\"target desconocido\"}");
-        resp = httpResponse(ok ? 200 : 400, out);
+        const QByteArray out = t ? invokeMethod(t, body, &ok) : unknownTarget();
+        resp = httpResponse(ok ? 200 : 400, withRequestId(out, reqId));
     } else {
-        resp = httpResponse(404, "{\"error\":\"unknown endpoint\"}");
+        resp = httpResponse(404, withRequestId("{\"error\":\"endpoint desconocido; probá GET /help\"}", reqId));
     }
 
     sock->write(resp);
     sock->flush();
     sock->disconnectFromHost();
+}
+
+QString ControlApi::requestIdFor(const QString &path, const QByteArray &body,
+                                 const QHash<QByteArray, QByteArray> &headers)
+{
+    const QUrlQuery query(path.section('?', 1));
+    QString reqId = query.queryItemValue(QStringLiteral("reqId")).trimmed();
+    if (reqId.isEmpty())
+        reqId = QString::fromUtf8(headers.value("x-req-id")).trimmed();
+    if (reqId.isEmpty())
+        reqId = QString::fromUtf8(headers.value("reqid")).trimmed();
+    if (reqId.isEmpty() && !body.isEmpty())
+        reqId = QJsonDocument::fromJson(body).object()
+                    .value(QStringLiteral("reqId")).toString().trimmed();
+    if (reqId.isEmpty())
+        reqId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return reqId;
+}
+
+QByteArray ControlApi::withRequestId(const QByteArray &json, const QString &reqId)
+{
+    QJsonObject o = QJsonDocument::fromJson(json).object();
+    o.insert(QStringLiteral("reqId"), reqId);
+    if (o.contains(QStringLiteral("error")) && !o.contains(QStringLiteral("ok")))
+        o.insert(QStringLiteral("ok"), false);
+    return QJsonDocument(o).toJson(QJsonDocument::Compact);
 }
 
 QObject *ControlApi::resolveTarget(const QString &path) const
@@ -140,6 +186,85 @@ static QJsonArray childTargets(QObject *obj)
     return out;
 }
 
+// Nombres de propiedades del objeto (para "did-you-mean" en errores).
+static QJsonArray propertyNames(QObject *obj)
+{
+    QJsonArray out;
+    const QMetaObject *mo = obj->metaObject();
+    for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i)
+        out.append(QString::fromUtf8(mo->property(i).name()));
+    return out;
+}
+
+// Nombres de métodos públicos invocables (con su aridad) para "did-you-mean".
+static QJsonArray methodNames(QObject *obj)
+{
+    QJsonArray out;
+    const QMetaObject *mo = obj->metaObject();
+    // Recorrer desde 0 mantiene el descubrimiento consistente incluso cuando
+    // el objeto expone métodos heredados o cuando moc reordena el offset de la
+    // clase durante builds incrementales. Los métodos QObject base se filtran
+    // abajo por su acceso/tipo y no afectan la invocación.
+    for (int i = 0; i < mo->methodCount(); ++i) {
+        const QMetaMethod m = mo->method(i);
+        if (m.access() != QMetaMethod::Public) continue;
+        if (m.methodType() != QMetaMethod::Method && m.methodType() != QMetaMethod::Slot)
+            continue;
+        out.append(QString::fromUtf8(m.name()) + QStringLiteral("/")
+                   + QString::number(m.parameterCount()));
+    }
+    return out;
+}
+
+static QByteArray errorJson(const QString &msg, const QString &availKey, const QJsonArray &avail)
+{
+    QJsonObject o{{QStringLiteral("error"), msg}};
+    if (!avail.isEmpty()) o[availKey] = avail;
+    return QJsonDocument(o).toJson(QJsonDocument::Compact);
+}
+
+QByteArray ControlApi::jsonHelp() const
+{
+    // Índice autodescriptivo: qué endpoints hay, cómo se llaman y un ejemplo de
+    // flujo. Pensado para que un cliente (IA o persona) arranque sin leer el código.
+    QJsonObject endpoints{
+        {QStringLiteral("GET /"),        QStringLiteral("este índice de uso (== /help)")},
+        {QStringLiteral("GET /help"),    QStringLiteral("este índice de uso")},
+        {QStringLiteral("GET /health"),  QStringLiteral("{ok:true} si el server vive")},
+        {QStringLiteral("GET /methods"), QStringLiteral("{methods,properties,targets} del target (?target=...)")},
+        {QStringLiteral("GET /prop"),    QStringLiteral("?name=X[&target=...] → {name,value}")},
+        {QStringLiteral("POST /setprop"),QStringLiteral("body {name,value[,target]} → {ok:true}")},
+        {QStringLiteral("POST /invoke"), QStringLiteral("body {method,args[,target]} → {ok:true,result?}")},
+    };
+    QJsonObject notes{
+        {QStringLiteral("target"),
+         QStringLiteral("sub-objeto QObject* por ruta con puntos (query en GET, campo JSON en POST). "
+                        "Vacío = AppController raíz. Ver 'targets' en /methods.")},
+        {QStringLiteral("errores"),
+         QStringLiteral("nombre desconocido (prop/método/target) → el error trae 'available' con los válidos; "
+                        "aridad incorrecta → 'validArgCounts'.")},
+        {QStringLiteral("respuestas"),
+         QStringLiteral("/prop devuelve {name,value}; /invoke y /setprop devuelven {ok:true[,result]}; "
+                        "los errores, {error[,available]}.")},
+    };
+    QJsonArray example{
+        QStringLiteral("curl localhost:8765/methods                                  # descubrir métodos/props/targets"),
+        QStringLiteral("curl -XPOST localhost:8765/invoke -d '{\"method\":\"launchMenu\",\"args\":[]}'   # ids de perfiles"),
+        QStringLiteral("curl -XPOST localhost:8765/invoke -d '{\"method\":\"startServerAndAgent\",\"args\":[\"<launchId>\"]}'"),
+        QStringLiteral("curl 'localhost:8765/prop?name=serverState'                  # esperar 'running'"),
+        QStringLiteral("curl -XPOST localhost:8765/invoke -d '{\"method\":\"sendToAgent\",\"args\":[\"hola\"]}'"),
+        QStringLiteral("curl 'localhost:8765/prop?name=agentMessages'                # leer la conversación"),
+    };
+    return QJsonDocument(QJsonObject{
+        {QStringLiteral("service"), QStringLiteral("LlamaCode ControlApi (headless)")},
+        {QStringLiteral("bind"), QStringLiteral("localhost only; puerto = env LLAMACODE_CONTROL_PORT (default 8765, 0=off)")},
+        {QStringLiteral("endpoints"), endpoints},
+        {QStringLiteral("notes"), notes},
+        {QStringLiteral("exampleFlow"), example},
+        {QStringLiteral("docs"), QStringLiteral("docs/HEADLESS.md")}
+    }).toJson(QJsonDocument::Compact);
+}
+
 QByteArray ControlApi::jsonMethods(const QString &targetPath) const
 {
     QObject *target = resolveTarget(targetPath);
@@ -147,7 +272,7 @@ QByteArray ControlApi::jsonMethods(const QString &targetPath) const
         return "{\"error\":\"target desconocido\"}";
     const QMetaObject *mo = target->metaObject();
     QJsonArray methods;
-    for (int i = mo->methodOffset(); i < mo->methodCount(); ++i) {
+    for (int i = 0; i < mo->methodCount(); ++i) {
         const QMetaMethod m = mo->method(i);
         if (m.methodType() != QMetaMethod::Method && m.methodType() != QMetaMethod::Slot)
             continue;
@@ -180,9 +305,13 @@ QByteArray ControlApi::jsonMethods(const QString &targetPath) const
 
 QByteArray ControlApi::jsonProperty(QObject *target, const QString &name) const
 {
+    if (name.isEmpty())
+        return errorJson(QStringLiteral("falta el parámetro 'name'"),
+                         QStringLiteral("available"), propertyNames(target));
     const QVariant v = target->property(name.toUtf8().constData());
     if (!v.isValid())
-        return "{\"error\":\"propiedad desconocida: " + name.toUtf8() + "\"}";
+        return errorJson(QStringLiteral("propiedad desconocida: ") + name,
+                         QStringLiteral("available"), propertyNames(target));
     const QJsonValue jv = QJsonValue::fromVariant(v);
     return QJsonDocument(QJsonObject{
         {QStringLiteral("name"), name},
@@ -215,16 +344,24 @@ QByteArray ControlApi::invokeMethod(QObject *targetObj, const QByteArray &jsonBo
 
     const QMetaObject *mo = targetObj->metaObject();
     QMetaMethod target;
+    QJsonArray sameNameArities;   // aridades válidas para un nombre que sí existe
     for (int i = 0; i < mo->methodCount(); ++i) {
         const QMetaMethod m = mo->method(i);
         if (m.access() != QMetaMethod::Public) continue;
         if (QString::fromUtf8(m.name()) != name) continue;
+        sameNameArities.append(m.parameterCount());
         if (m.parameterCount() != args.size()) continue;
         target = m;
         break;
     }
-    if (!target.isValid())
-        return "{\"error\":\"método no encontrado o aridad incorrecta: " + name.toUtf8() + "\"}";
+    if (!target.isValid()) {
+        if (!sameNameArities.isEmpty())   // existe el método, pero otra aridad
+            return errorJson(QStringLiteral("aridad incorrecta para '%1': se pasaron %2 args")
+                                 .arg(name).arg(args.size()),
+                             QStringLiteral("validArgCounts"), sameNameArities);
+        return errorJson(QStringLiteral("método no encontrado: ") + name,
+                         QStringLiteral("available"), methodNames(targetObj));
+    }
 
     // Convertir args JSON al tipo de cada parámetro; mantener vivos los QVariant.
     QList<QVariant> store;

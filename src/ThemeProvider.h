@@ -1,11 +1,32 @@
 #pragma once
 #include <QObject>
 #include <QString>
+#include <QHash>
+#include <QVariantList>
+#include <QVariantMap>
 
+// ThemeProvider — paleta de colores + fuentes para la UI QML.
+//
+// Temas built-in: "dark", "light", "oled" (literales hardcodeados, vía lit()).
+// Temas custom: "custom:<id>". El usuario los crea/edita/borra desde Settings;
+// se persisten como JSON en QSettings ("customThemes"). Un tema custom se define
+// con 3 colores ancla (accent / background / foreground) + contraste + fuentes
+// + sidebar translúcida; el resto de la paleta (~50 roles) se DERIVA de esos
+// anclas en buildPalette() mezclando bg↔fg según el rol y el contraste. Los
+// roles de estado (error/success/warn) y el overlay se heredan del tema base.
 class ThemeProvider : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY themeChanged)
+    Q_PROPERTY(bool themeIsCustom READ themeIsCustom NOTIFY themeChanged)
+    Q_PROPERTY(QString currentCustomId READ currentCustomId NOTIFY themeChanged)
+    Q_PROPERTY(QVariantList customThemes READ customThemes NOTIFY customThemesChanged)
+
+    // Tipografía (parte del tema). uiFont se aplica global vía QGuiApplication;
+    // codeFont lo consumen los bloques monospace del QML.
+    Q_PROPERTY(QString uiFont   READ uiFont   NOTIFY themeChanged)
+    Q_PROPERTY(QString codeFont READ codeFont NOTIFY themeChanged)
+    Q_PROPERTY(bool sidebarTranslucent READ sidebarTranslucent NOTIFY themeChanged)
 
     // Backgrounds
     Q_PROPERTY(QString navBg          READ navBg          NOTIFY themeChanged)
@@ -83,75 +104,110 @@ public:
     QString theme() const { return m_theme; }
     void setTheme(const QString &t);
 
-    QString navBg()          const { return v("#181825","#dce0e8","#000000"); }
-    QString baseBg()         const { return v("#1e1e2e","#eff1f5","#000000"); }
-    QString surfaceBg()      const { return v("#181825","#e6e9ef","#0a0a0a"); }
-    QString inputBg()        const { return v("#11111b","#ccd0da","#050505"); }
-    QString titleBg()        const { return v("#11111b","#dce0e8","#000000"); }
-    QString windowBg()       const { return v("#0b0b10","#dce0e8","#000000"); }
-    QString logBg()          const { return v("#0f1020","#d0d4de","#000000"); }
-    QString popupBg()        const { return v("#1b1d31","#e6e9ef","#0a0a0a"); }
-    QString popupHeaderBg()  const { return v("#14162a","#dce0e8","#050505"); }
+    bool themeIsCustom() const { return m_theme.startsWith(QLatin1String("custom:")); }
+    QString currentCustomId() const;
 
-    QString divider()           const { return v("#313244","#bcc0cc","#1a1a1a"); }
-    QString borderColor()       const { return v("#313244","#bcc0cc","#1a1a1a"); }
-    QString inputBorderColor()  const { return v("#313244","#bcc0cc","#1a1a1a"); }
-    QString inputBorderFocus()  const { return v("#89b4fa","#1e66f5","#89b4fa"); }
-    QString popupBorderColor()  const { return v("#3a3f5c","#bcc0cc","#1a1a1a"); }
-    QString popupHeaderBorder() const { return v("#333754","#bcc0cc","#1a1a1a"); }
-    QString frameBorderActive() const { return v("#3f4360","#7c7f93","#2a2a2a"); }
-    QString frameBorderInact()  const { return v("#2a2d41","#9ca0b0","#1a1a1a"); }
+    QString uiFont()   const { return m_uiFont; }
+    QString codeFont() const { return m_codeFont.isEmpty() ? QStringLiteral("Consolas,monospace") : m_codeFont; }
+    bool sidebarTranslucent() const { return m_sidebarTranslucent; }
 
-    QString textPrimary()   const { return v("#cdd6f4","#4c4f69","#ffffff"); }
-    QString textSecondary() const { return v("#a6adc8","#5c5f77","#aaaaaa"); }
-    QString textMuted()     const { return v("#585b70","#9ca0b0","#555555"); }
-    QString textDim()       const { return v("#45475a","#acb0be","#333333"); }
-    QString dialogLabel()   const { return v("#bac2de","#5c5f77","#cccccc"); }
+    // CRUD de temas custom (llamados desde QML).
+    QVariantList customThemes() const;                       // [{id,name,base,accent,...}]
+    Q_INVOKABLE QVariantMap customTheme(const QString &id) const;
+    Q_INVOKABLE QString saveCustomTheme(const QVariantMap &def); // crea/actualiza → id
+    Q_INVOKABLE void deleteCustomTheme(const QString &id);
+    Q_INVOKABLE void applyCustomTheme(const QString &id) { setTheme(QStringLiteral("custom:") + id); }
+    // Plantilla de arranque (anclas del tema base) para el editor "Nuevo".
+    Q_INVOKABLE QVariantMap defaultCustomDef(const QString &base) const;
+    // Normaliza un hex escrito a mano ("f0a", "#F0A", "aarrggbb", con/sin '#')
+    // → "#rrggbb" / "#aarrggbb" en minúsculas. "" si no es un color válido.
+    // Lo usa el editor de tema (QML) para validar y saveCustomTheme() para
+    // sanear las 3 anclas antes de persistirlas.
+    Q_INVOKABLE QString normalizeHex(const QString &s) const;
 
-    QString successText() const { return v("#a6e3a1","#40a02b","#44ff88"); }
-    QString successBg()   const { return v("#1a3a1a","#d0f0d0","#001a00"); }
-    QString errorText()   const { return v("#f38ba8","#d20f39","#ff4444"); }
-    QString errorBg()     const { return v("#3a1a1a","#fce2da","#200000"); }
-    QString errorBorder() const { return v("#f38ba8","#d20f39","#ff4444"); }
+    QString navBg()          const { return colorFor(QStringLiteral("navBg")); }
+    QString baseBg()         const { return colorFor(QStringLiteral("baseBg")); }
+    QString surfaceBg()      const { return colorFor(QStringLiteral("surfaceBg")); }
+    QString inputBg()        const { return colorFor(QStringLiteral("inputBg")); }
+    QString titleBg()        const { return colorFor(QStringLiteral("titleBg")); }
+    QString windowBg()       const { return colorFor(QStringLiteral("windowBg")); }
+    QString logBg()          const { return colorFor(QStringLiteral("logBg")); }
+    QString popupBg()        const { return colorFor(QStringLiteral("popupBg")); }
+    QString popupHeaderBg()  const { return colorFor(QStringLiteral("popupHeaderBg")); }
 
-    QString accent()        const { return v("#89b4fa","#1e66f5","#89b4fa"); }
-    QString accentHover()   const { return v("#74c7ec","#4285f4","#74c7ec"); }
-    QString accentPressed() const { return v("#5e81ac","#1a56d5","#5e81ac"); }
+    QString divider()           const { return colorFor(QStringLiteral("divider")); }
+    QString borderColor()       const { return colorFor(QStringLiteral("borderColor")); }
+    QString inputBorderColor()  const { return colorFor(QStringLiteral("inputBorderColor")); }
+    QString inputBorderFocus()  const { return colorFor(QStringLiteral("inputBorderFocus")); }
+    QString popupBorderColor()  const { return colorFor(QStringLiteral("popupBorderColor")); }
+    QString popupHeaderBorder() const { return colorFor(QStringLiteral("popupHeaderBorder")); }
+    QString frameBorderActive() const { return colorFor(QStringLiteral("frameBorderActive")); }
+    QString frameBorderInact()  const { return colorFor(QStringLiteral("frameBorderInact")); }
 
-    QString btnPrimaryBg()     const { return v("#89b4fa","#1e66f5","#89b4fa"); }
-    QString btnPrimaryHover()  const { return v("#74c7ec","#4285f4","#74c7ec"); }
-    QString btnPrimaryPrs()    const { return v("#5e81ac","#1a56d5","#5e81ac"); }
-    QString btnPrimaryText()   const { return v("#1e1e2e","#ffffff","#000000"); }
-    QString btnSecondaryBg()   const { return v("#313244","#ccd0da","#151515"); }
-    QString btnSecondaryHov()  const { return v("#45475a","#bcc0cc","#252525"); }
-    QString btnSecondaryText() const { return v("#a6adc8","#4c4f69","#aaaaaa"); }
-    QString btnDangerBg()      const { return v("#f38ba8","#d20f39","#ff4444"); }
-    QString btnDangerHov()     const { return v("#e33054","#b90020","#ee3333"); }
-    QString btnDangerPrs()     const { return v("#a6192f","#8b0018","#cc2222"); }
-    QString btnDangerText()    const { return v("#1e1e2e","#ffffff","#000000"); }
+    QString textPrimary()   const { return colorFor(QStringLiteral("textPrimary")); }
+    QString textSecondary() const { return colorFor(QStringLiteral("textSecondary")); }
+    QString textMuted()     const { return colorFor(QStringLiteral("textMuted")); }
+    QString textDim()       const { return colorFor(QStringLiteral("textDim")); }
+    QString dialogLabel()   const { return colorFor(QStringLiteral("dialogLabel")); }
 
-    QString highlight() const { return v("#313244","#ccd0da","#151515"); }
-    QString hoverBg()   const { return v("#1e1e2e","#e6e9ef","#0d0d0d"); }
+    QString successText() const { return colorFor(QStringLiteral("successText")); }
+    QString successBg()   const { return colorFor(QStringLiteral("successBg")); }
+    QString errorText()   const { return colorFor(QStringLiteral("errorText")); }
+    QString errorBg()     const { return colorFor(QStringLiteral("errorBg")); }
+    QString errorBorder() const { return colorFor(QStringLiteral("errorBorder")); }
 
-    QString chatUserBubble() const { return v("#2a2d5e","#c0cfff","#0a0a35"); }
-    QString chatUserText()   const { return v("#b4c2ff","#1a3080","#b4c2ff"); }
-    QString chatAsstBubble() const { return v("#181825","#e6e9ef","#0a0a0a"); }
-    QString chatAsstText()   const { return v("#cdd6f4","#4c4f69","#ffffff"); }
+    QString accent()        const { return colorFor(QStringLiteral("accent")); }
+    QString accentHover()   const { return colorFor(QStringLiteral("accentHover")); }
+    QString accentPressed() const { return colorFor(QStringLiteral("accentPressed")); }
 
-    QString splitterNormal() const { return v("#2a2d41","#9ca0b0","#161616"); }
-    QString splitterHover()  const { return v("#3b3f63","#7c7f93","#252525"); }
-    QString closeHoverBg()   const { return v("#f38ba8","#d20f39","#ff4444"); }
-    QString overlayColor()   const { return v("#90090b14","#60000000","#90000000"); }
-    QString warnText()       const { return v("#f9e2af","#df8e1d","#ffcc44"); }
+    QString btnPrimaryBg()     const { return colorFor(QStringLiteral("btnPrimaryBg")); }
+    QString btnPrimaryHover()  const { return colorFor(QStringLiteral("btnPrimaryHover")); }
+    QString btnPrimaryPrs()    const { return colorFor(QStringLiteral("btnPrimaryPrs")); }
+    QString btnPrimaryText()   const { return colorFor(QStringLiteral("btnPrimaryText")); }
+    QString btnSecondaryBg()   const { return colorFor(QStringLiteral("btnSecondaryBg")); }
+    QString btnSecondaryHov()  const { return colorFor(QStringLiteral("btnSecondaryHov")); }
+    QString btnSecondaryText() const { return colorFor(QStringLiteral("btnSecondaryText")); }
+    QString btnDangerBg()      const { return colorFor(QStringLiteral("btnDangerBg")); }
+    QString btnDangerHov()     const { return colorFor(QStringLiteral("btnDangerHov")); }
+    QString btnDangerPrs()     const { return colorFor(QStringLiteral("btnDangerPrs")); }
+    QString btnDangerText()    const { return colorFor(QStringLiteral("btnDangerText")); }
+
+    QString highlight() const { return colorFor(QStringLiteral("highlight")); }
+    QString hoverBg()   const { return colorFor(QStringLiteral("hoverBg")); }
+
+    QString chatUserBubble() const { return colorFor(QStringLiteral("chatUserBubble")); }
+    QString chatUserText()   const { return colorFor(QStringLiteral("chatUserText")); }
+    QString chatAsstBubble() const { return colorFor(QStringLiteral("chatAsstBubble")); }
+    QString chatAsstText()   const { return colorFor(QStringLiteral("chatAsstText")); }
+
+    QString splitterNormal() const { return colorFor(QStringLiteral("splitterNormal")); }
+    QString splitterHover()  const { return colorFor(QStringLiteral("splitterHover")); }
+    QString closeHoverBg()   const { return colorFor(QStringLiteral("closeHoverBg")); }
+    QString overlayColor()   const { return colorFor(QStringLiteral("overlayColor")); }
+    QString warnText()       const { return colorFor(QStringLiteral("warnText")); }
 
 signals:
     void themeChanged();
+    void customThemesChanged();
 
 private:
     QString m_theme;
-    inline QString v(const char *dark, const char *light, const char *oled) const {
-        if (m_theme == QLatin1String("light")) return QLatin1String(light);
-        if (m_theme == QLatin1String("oled"))  return QLatin1String(oled);
-        return QLatin1String(dark);
-    }
+
+    // Estado del tema custom activo (vacío si built-in).
+    QHash<QString, QString> m_pal;   // roles derivados → color (vacío si built-in)
+    QString m_customBase;            // tema base para roles heredados (status/overlay)
+    QString m_uiFont;
+    QString m_codeFont;
+    bool    m_sidebarTranslucent = false;
+
+    // Devuelve el color de `role`: si hay tema custom activo y el rol fue derivado,
+    // usa la paleta custom; si no, el literal del tema base correspondiente.
+    QString colorFor(const QString &role) const;
+
+    // Literal hardcodeado de `role` para un tema built-in ("dark"/"light"/"oled").
+    static QString lit(const QString &role, const QString &theme);
+
+    // Recompone m_pal/m_customBase/fuentes según m_theme. Aplica la uiFont global.
+    void rebuild();
+    void applyUiFontGlobally();
 };

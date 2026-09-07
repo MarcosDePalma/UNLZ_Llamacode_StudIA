@@ -1,5 +1,10 @@
 # Plan de implementación — Multi-backend de agentes (Harness)
 
+> **DOCUMENTO HISTÓRICO.** Registra el plan por etapas y el porqué de las
+> decisiones (p.ej. descartar Goose). No refleja el estado actual: el
+> `CustomBackend` que se nombra acá hoy es `LlamaAgentBackend`, y el backend
+> nativo —no `opencode`— es el default. Referencia vigente: `docs/harness.md`.
+
 Arquitectura objetivo: LlamaCode (Qt/QML) habla con un **runtime de agente** intercambiable
 vía una interfaz común `IAgentBackend`. El runtime usa el `llama-server` local
 (OpenAI-compatible) y herramientas vía MCP.

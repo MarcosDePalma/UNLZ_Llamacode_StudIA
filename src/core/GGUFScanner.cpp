@@ -1,57 +1,131 @@
 #include "GGUFScanner.h"
+#include "OllamaImporter.h"
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QUuid>
 #include <QRegularExpression>
 #include <QStringList>
+#include <limits>
 
 GGUFScanner::GGUFScanner(QObject *parent) : QObject(parent) {}
 
+namespace {
+
+// Construye un CatalogModel para un GGUF. `filePath` es la ruta física del blob/
+// archivo; `displayName` es el nombre a mostrar/inferir (nombre de archivo para
+// roots de disco, "model:tag" para blobs de Ollama, que no tienen extensión).
+CatalogModel buildCatalogModel(const ModelRoot &root, const QString &filePath,
+                               const QString &displayName)
+{
+    const QFileInfo info(filePath);
+
+    CatalogModel m;
+    // Id DETERMINISTA por ruta absoluta (UUIDv5). Antes era QUuid::createUuid()
+    // (aleatorio por scan): cada rescan reasignaba ids y orfanaba los modelId
+    // guardados en los perfiles (→ "No model selected" en benchmark). El mismo
+    // namespace + ruta se replica en tools/relink_profiles.py para migrar perfiles.
+    static const QUuid kCatalogNs(QStringLiteral("a1b2c3d4-e5f6-4a5b-8c7d-0e1f2a3b4c5d"));
+    m.id = QUuid::createUuidV5(kCatalogNs, filePath.toUtf8()).toString(QUuid::WithoutBraces);
+    m.rootId = root.id;
+    m.absolutePath = filePath;
+    m.fileName = displayName;
+    m.sizeBytes = info.size();
+    m.mtime = info.lastModified();
+    m.familyHint = GGUFScanner::inferFamily(displayName);
+    m.quantHint = GGUFScanner::inferQuant(displayName);
+
+    // Composición real de tensores: el nombre de archivo miente (Google "Q4_0"
+    // trae Q6_K/F16; unsloth "Q4_K_XL" es casi todo Q4_0). Clasificamos por el
+    // contenido real y marcamos mismatch para avisar en UI.
+    const GGUFScanner::Composition comp =
+        GGUFScanner::readComposition(filePath, info.size());
+    if (comp.valid) {
+        m.quantReal = comp.dominantQuant;
+        m.tensorBreakdown = comp.breakdown();
+        m.bpw = comp.bpw;
+        m.quantMismatch =
+            !m.quantReal.isEmpty() && m.quantHint != "unknown"
+                && m.quantHint.compare(m.quantReal, Qt::CaseInsensitive) != 0;
+        m.architecture = comp.architecture;
+        m.parameterCount = comp.parameterCount;
+        m.trainedContext = comp.trainedContext;
+    }
+
+    m.isVisionCandidate = GGUFScanner::isVisionCandidate(displayName);
+    m.isDraftCandidate = GGUFScanner::isDraftCandidate(displayName, info.size());
+    m.isAvailable = true;
+    return m;
+}
+
+} // namespace
+
 QList<CatalogModel> GGUFScanner::scan(const ModelRoot &root)
+{
+    return scan(root, {});
+}
+
+QList<CatalogModel> GGUFScanner::scan(const ModelRoot &root,
+                                      const QList<CatalogModel> &cached)
 {
     QList<CatalogModel> results;
 
-    QDirIterator it(root.path, {"*.gguf", "*.GGUF"},
+    QMap<QString, CatalogModel> cacheByPath;
+    for (const CatalogModel &m : cached)
+        cacheByPath.insert(m.absolutePath, m);
+
+    auto appendCachedOrBuild = [&](const QString &path, const QString &name) {
+        const QFileInfo info(path);
+        const auto it = cacheByPath.constFind(path);
+        if (it != cacheByPath.constEnd()
+            && it->sizeBytes == info.size()
+            && it->mtime == info.lastModified()) {
+            CatalogModel cachedModel = it.value();
+            cachedModel.rootId = root.id;
+            cachedModel.isAvailable = true;
+            results.append(cachedModel);
+            return;
+        }
+        results.append(buildCatalogModel(root, path, name));
+    };
+
+    // Store de Ollama: los pesos son blobs sin extensión, resueltos vía manifests.
+    if (root.kind == QLatin1String("ollama")) {
+        const QList<OllamaImporter::Entry> entries = OllamaImporter::scan(root.path);
+        for (const OllamaImporter::Entry &e : entries) {
+            appendCachedOrBuild(e.blobPath, e.name);
+            emit progress(root.id, results.size());
+            // Modelo multimodal: el projector (mmproj) entra como entrada aparte,
+            // marcada como candidata de visión para poder emparejar --mmproj.
+            if (!e.mmprojPath.isEmpty()) {
+                const QString mmName = e.name + QStringLiteral(" (mmproj)");
+                const QFileInfo mmInfo(e.mmprojPath);
+                const auto cachedIt = cacheByPath.constFind(e.mmprojPath);
+                CatalogModel mm;
+                if (cachedIt != cacheByPath.constEnd()
+                    && cachedIt->sizeBytes == mmInfo.size()
+                    && cachedIt->mtime == mmInfo.lastModified()) {
+                    mm = cachedIt.value();
+                    mm.rootId = root.id;
+                    mm.isAvailable = true;
+                } else {
+                    mm = buildCatalogModel(root, e.mmprojPath, mmName);
+                }
+                mm.isVisionCandidate = true;
+                results.append(mm);
+                emit progress(root.id, results.size());
+            }
+        }
+        return results;
+    }
+
+    QDirIterator it(root.path, {"*.gguf", "*.GGUF", "*.ninfer", "*.NINFER"},
                     QDir::Files, QDirIterator::Subdirectories);
 
     while (it.hasNext()) {
         const QString filePath = it.next();
-        const QFileInfo info(filePath);
-
-        CatalogModel m;
-        // Id DETERMINISTA por ruta absoluta (UUIDv5). Antes era QUuid::createUuid()
-        // (aleatorio por scan): cada rescan reasignaba ids y orfanaba los modelId
-        // guardados en los perfiles (→ "No model selected" en benchmark). El mismo
-        // namespace + ruta se replica en tools/relink_profiles.py para migrar perfiles.
-        static const QUuid kCatalogNs(QStringLiteral("a1b2c3d4-e5f6-4a5b-8c7d-0e1f2a3b4c5d"));
-        m.id = QUuid::createUuidV5(kCatalogNs, filePath.toUtf8()).toString(QUuid::WithoutBraces);
-        m.rootId = root.id;
-        m.absolutePath = filePath;
-        m.fileName = info.fileName();
-        m.sizeBytes = info.size();
-        m.mtime = info.lastModified();
-        m.familyHint = inferFamily(info.fileName());
-        m.quantHint = inferQuant(info.fileName());
-
-        // Composición real de tensores: el nombre de archivo miente (Google "Q4_0"
-        // trae Q6_K/F16; unsloth "Q4_K_XL" es casi todo Q4_0). Clasificamos por el
-        // contenido real y marcamos mismatch para avisar en UI.
-        const Composition comp = readComposition(filePath, info.size());
-        if (comp.valid) {
-            m.quantReal = comp.dominantQuant;
-            m.tensorBreakdown = comp.breakdown();
-            m.bpw = comp.bpw;
-            m.quantMismatch =
-                !m.quantReal.isEmpty() && m.quantHint != "unknown"
-                && m.quantHint.compare(m.quantReal, Qt::CaseInsensitive) != 0;
-        }
-
-        m.isVisionCandidate = isVisionCandidate(info.fileName());
-        m.isDraftCandidate = isDraftCandidate(info.fileName(), info.size());
-        m.isAvailable = true;
-
-        results.append(m);
+        appendCachedOrBuild(filePath, QFileInfo(filePath).fileName());
         emit progress(root.id, results.size());
     }
 
@@ -176,7 +250,26 @@ struct LeReader {
     }
     void skip(qint64 k) { if (need(k)) i += k; }
     void skipStr() { quint64 len = u64(); skip(qint64(len)); }
+    QString str() {
+        const quint64 len = u64();
+        if (len > quint64(std::numeric_limits<qint64>::max()) || !need(qint64(len)))
+            return {};
+        const QString value = QString::fromUtf8(reinterpret_cast<const char *>(p + i),
+                                                qsizetype(len));
+        i += qint64(len);
+        return value;
+    }
 };
+
+bool readUnsignedMeta(LeReader &r, quint32 type, quint64 &value) {
+    switch (type) {
+    case 0: value = r.need(1) ? r.p[r.i++] : 0; return r.ok;
+    case 2: if (!r.need(2)) return false; value = quint64(r.p[r.i]) | (quint64(r.p[r.i+1]) << 8); r.i += 2; return true;
+    case 4: value = r.u32(); return r.ok;
+    case 10: value = r.u64(); return r.ok;
+    default: return false;
+    }
+}
 
 // Tamaño en bytes de un valor escalar de metadata GGUF por type-id.
 qint64 ggufScalarSize(quint32 t) {
@@ -219,6 +312,101 @@ QString GGUFScanner::Composition::breakdown() const
     return parts.join(", ");
 }
 
+bool GGUFScanner::isNgramArchitectureName(const QString &fileName)
+{
+    if (fileName.isEmpty())
+        return false;
+    const QString base = QFileInfo(fileName).fileName().toLower();
+    // Qwen3.8-Flash-Next y los Qwen4 que hereden la arquitectura qwen4exp.
+    static const QRegularExpression re(
+        QStringLiteral(R"((flash[-_.]?next)|(^|[-_.])qwen4)"),
+        QRegularExpression::CaseInsensitiveOption);
+    return re.match(base).hasMatch();
+}
+
+bool GGUFScanner::isNgramLookupTensor(const QString &tensorName)
+{
+    // Nombres tomados de llama-arch.cpp del soporte de qwen4exp (PR 27742):
+    //   blk.%d.ple_key / blk.%d.ple_value / per_layer_token_embd
+    // Los ple_norm_* y ple_conv1d comparten prefijo pero son compute, por eso el
+    // match es exacto por sufijo y no un "contains(ple)".
+    if (tensorName.isEmpty())
+        return false;
+    const QString base = tensorName.endsWith(QLatin1String(".weight"))
+        ? tensorName.left(tensorName.size() - 7)
+        : tensorName;
+    if (base == QLatin1String("per_layer_token_embd"))
+        return true;
+    static const QRegularExpression blockRe(
+        QStringLiteral(R"(^blk\.[0-9]+\.ple_(key|value)$)"));
+    return blockRe.match(base).hasMatch();
+}
+
+QStringList GGUFScanner::shardPaths(const QString &anyShardPath)
+{
+    const QFileInfo info(anyShardPath);
+    const QString name = info.fileName();
+    // Convencion de gguf-split: "<base>-00001-of-00004.gguf".
+    static const QRegularExpression re(
+        QStringLiteral(R"(^(.*)-([0-9]{5})-of-([0-9]{5})\.gguf$)"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch m = re.match(name);
+    if (!m.hasMatch())
+        return {anyShardPath};
+
+    const QString base = m.captured(1);
+    const int total = m.captured(3).toInt();
+    if (total <= 0 || total > 999)
+        return {anyShardPath};
+
+    const QDir dir = info.absoluteDir();
+    QStringList out;
+    for (int i = 1; i <= total; ++i) {
+        const QString shard = QStringLiteral("%1-%2-of-%3.gguf")
+            .arg(base,
+                 QString::number(i).rightJustified(5, QLatin1Char('0')),
+                 QString::number(total).rightJustified(5, QLatin1Char('0')));
+        const QString full = dir.absoluteFilePath(shard);
+        // Un shard faltante no invalida el resto: se suma lo que haya y el
+        // caller ve un total menor, en vez de perder el dato entero.
+        if (QFile::exists(full))
+            out << full;
+    }
+    return out.isEmpty() ? QStringList{anyShardPath} : out;
+}
+
+GGUFScanner::Composition GGUFScanner::readCompositionAllShards(const QString &firstShardPath)
+{
+    const QStringList shards = shardPaths(firstShardPath);
+    if (shards.size() == 1)
+        return readComposition(firstShardPath, QFileInfo(firstShardPath).size());
+
+    Composition agg;
+    for (const QString &shard : shards) {
+        const Composition c = readComposition(shard, QFileInfo(shard).size());
+        agg.totalElements += c.totalElements;
+        agg.ngramElements += c.ngramElements;
+        for (auto it = c.typeTensors.constBegin(); it != c.typeTensors.constEnd(); ++it)
+            agg.typeTensors[it.key()] += it.value();
+        for (auto it = c.typeElements.constBegin(); it != c.typeElements.constEnd(); ++it)
+            agg.typeElements[it.key()] += it.value();
+        // Los metadatos generales viven en el primer shard que los traiga.
+        if (agg.architecture.isEmpty())   agg.architecture = c.architecture;
+        if (agg.parameterCount == 0)      agg.parameterCount = c.parameterCount;
+        if (agg.trainedContext == 0)      agg.trainedContext = c.trainedContext;
+    }
+
+    // Recalcular el quant dominante sobre el agregado: hacerlo por shard daria
+    // el dominante de UN shard, que puede no ser el del modelo.
+    static const QStringList rawFloats = {"f32", "f16", "bf16", "f64"};
+    qint64 best = -1;
+    for (auto it = agg.typeElements.constBegin(); it != agg.typeElements.constEnd(); ++it) {
+        if (rawFloats.contains(it.key())) continue;
+        if (it.value() > best) { best = it.value(); agg.dominantQuant = it.key(); }
+    }
+    return agg;
+}
+
 GGUFScanner::Composition GGUFScanner::readComposition(const QString &filePath,
                                                       qint64 fileSizeBytes)
 {
@@ -245,17 +433,30 @@ GGUFScanner::Composition GGUFScanner::readComposition(const QString &filePath,
     const quint64 kvCount = r.u64();
     if (tensorCount == 0 || tensorCount > 100000) return c;
 
-    // Saltar metadata KV.
+    // Leer los metadatos útiles y saltar el resto. Las claves de contexto son
+    // específicas de arquitectura (llama.context_length, qwen*.context_length…).
     for (quint64 k = 0; k < kvCount && r.ok; ++k) {
-        r.skipStr();                 // key
+        const QString key = r.str();
         quint32 vt = r.u32();        // value type
-        skipMetaValue(r, vt);
+        if (key == QLatin1String("general.architecture") && vt == 8) {
+            c.architecture = r.str();
+        } else if (key == QLatin1String("general.parameter_count")) {
+            quint64 value = 0;
+            if (readUnsignedMeta(r, vt, value)) c.parameterCount = qint64(qMin(value, quint64(std::numeric_limits<qint64>::max())));
+            else skipMetaValue(r, vt);
+        } else if (key.endsWith(QLatin1String(".context_length"))) {
+            quint64 value = 0;
+            if (readUnsignedMeta(r, vt, value)) c.trainedContext = int(qMin(value, quint64(std::numeric_limits<int>::max())));
+            else skipMetaValue(r, vt);
+        } else {
+            skipMetaValue(r, vt);
+        }
     }
     if (!r.ok) return c;
 
     // Tensor infos: name(str), n_dims(u32), dims[n_dims](u64), type(u32), offset(u64).
     for (quint64 t = 0; t < tensorCount && r.ok; ++t) {
-        r.skipStr();
+        const QString tensorName = r.str();
         quint32 nDims = r.u32();
         if (nDims > 8) { r.ok = false; break; }
         qint64 elems = 1;
@@ -267,6 +468,8 @@ GGUFScanner::Composition GGUFScanner::readComposition(const QString &filePath,
         c.typeTensors[name] += 1;
         c.typeElements[name] += elems;
         c.totalElements += elems;
+        if (isNgramLookupTensor(tensorName))
+            c.ngramElements += elems;
     }
     if (!r.ok || c.totalElements <= 0) return c;
 

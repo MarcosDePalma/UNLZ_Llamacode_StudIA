@@ -1,0 +1,19 @@
+0.00.150.952 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.437.707 W srv  llama_server: -----------------
+0.00.437.972 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.437.975 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.437.976 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.437.976 W srv  llama_server: -----------------
+0.00.445.969 I srv    load_model: loading model 'D:\Models\llamacpp\DeepSeek-V4-Flash-0731-UD-IQ3_S\DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf'
+0.00.640.181 W llama_model_loader: tensor overrides to CPU are used with mmap enabled - consider using --no-mmap for better performance
+1.17.942.807 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 131072, kv_unified = 'true'
+1.17.991.597 I srv  llama_server: model loaded
+1.17.991.607 I srv  llama_server: listening on http://127.0.0.1:18131
+1.18.252.078 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1
+1.18.252.747 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0
+1.23.386.206 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =     11, progress = 0.73, t =   5.11 s / 2.15 tokens per second
+1.26.480.294 I slot print_timing: id  3 | task 0 | prompt eval time =    6631.64 ms /    15 tokens (  442.11 ms per token,     2.26 tokens per second)
+1.26.480.300 I slot print_timing: id  3 | task 0 |        eval time =    1575.16 ms /     6 tokens (  262.53 ms per token,     3.81 tokens per second)
+1.26.480.301 I slot print_timing: id  3 | task 0 |       total time =    8206.80 ms /    21 tokens
+1.26.480.301 I slot print_timing: id  3 | task 0 |    graphs reused =          4
+1.26.480.871 I slot      release: id  3 | task 0 | stop processing: n_tokens = 20, truncated = 0

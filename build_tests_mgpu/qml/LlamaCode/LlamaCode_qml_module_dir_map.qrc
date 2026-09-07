@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/LlamaCode">C:/Users/cristian/Documents/LlamaCode/build_tests_mgpu/qml/LlamaCode</file>
+
+  </qresource>
+</RCC>

@@ -19,10 +19,16 @@ public slots:
 
 signals:
     void trial(int index, int total, double throughput, double quality,
-               const QString &summary);
+               const QString &summary, double promptTps, double genTps,
+               double draftAcceptancePct);
     // bestArgs: flags afinados (sin host/port) para fusionar en extraArgs.
+    // promptTps/genTps: desglose de la mejor config (-1 = no medido).
+    // basePromptTps/baseGenTps: lo mismo para el perfil sin tunear, para poder
+    // reportar la mejora real (-1 = no se midió baseline).
     void finished(bool ok, const QStringList &bestArgs, double throughput,
-                  double quality);
+                  double quality, double promptTps, double genTps,
+                  double basePromptTps, double baseGenTps,
+                  double draftAcceptancePct, double baseDraftAcceptancePct);
 
 private:
     TunerJob m_job;

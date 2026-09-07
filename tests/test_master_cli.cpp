@@ -47,6 +47,8 @@ void MasterCliTests::status_hasExpectedKeys()
     QVERIFY(st.contains("label"));
     QVERIFY(st.contains("installCommand"));
     QVERIFY(st.contains("path"));
+    QVERIFY(st.contains("probeOk"));
+    QVERIFY(st.contains("capabilities"));
 }
 
 void MasterCliTests::status_cachedUntilInvalidate()

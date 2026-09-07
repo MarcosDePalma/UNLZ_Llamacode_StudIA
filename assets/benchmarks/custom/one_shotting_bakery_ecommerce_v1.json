@@ -1,0 +1,27 @@
+{
+  "id": "one_shotting_bakery_ecommerce_v1",
+  "bundledVersion": 1,
+  "name": "One-shotting · Ecommerce panadería",
+  "description": "Benchmark creativo de horizonte largo para construir un ecommerce premium completo con un único prompt inicial y sin intervención humana.",
+  "source": "bundled",
+  "protocolVersion": 1,
+  "recommendedPasses": 1,
+  "evaluation": {
+    "kind": "one-shotting",
+    "humanIntervention": false,
+    "gate": "No editar manualmente el workspace entre el prompt inicial y la evaluación final."
+  },
+  "prompts": [
+    {
+      "id": "bakery_ecommerce",
+      "category": "one-shotting/frontend-product",
+      "isSpeed": false,
+      "maxTokens": 16000,
+      "prompt": "Construye el frontend completo de un pequeño ecommerce premium para una panadería artesanal usando Next.js App Router (JavaScript). El proyecto debe ser frontend-only: no incluyas backend, base de datos, autenticación ni pasarelas de pago. El checkout debe finalizar redirigiendo a WhatsApp con un mensaje de pedido bien estructurado. Incluí home, catálogo, categorías, productos destacados, carrito, resumen de pedido y checkout. Usá mock data local para productos, categorías, precios, descripciones, disponibilidad e imágenes o placeholders visuales. La arquitectura debe quedar preparada para conectar posteriormente un backend real. El diseño debe sentirse extremadamente premium, artesanal, moderno y cuidado, con excelente experiencia desktop y mobile. Separá razonablemente datos mock, tipos o modelos de dominio, utilidades de checkout/WhatsApp, componentes de catálogo, carrito y vistas principales. No dependas de imágenes externas que no puedas inspeccionar: preferí SVG, CSS o gráficos programáticos controlables. Trabajá de forma autónoma, probá la aplicación y corregí los problemas que encuentres. No pidas aclaraciones ni esperes intervención humana. Dejá un README.md con instrucciones de ejecución y una explicación breve de las decisiones principales.",
+      "acceptance": {
+        "files": ["package.json", "README.md"],
+        "expectSubstrings": ["whatsapp", "checkout", "cart", "svg", "next"]
+      }
+    }
+  ]
+}

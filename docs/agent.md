@@ -1,8 +1,17 @@
 # Modo Agente — Documentación
 
+> Nota: este documento usa el nombre viejo `CustomBackend`; la clase hoy se llama
+> `LlamaAgentBackend` (adapter `llamaagent`) y es el backend por defecto. La
+> referencia completa y al día del harness es `docs/harness.md`.
+
 Cómo funciona el agente de LlamaCode: arquitectura, ciclo de vida, loop ReAct,
 tools (nativas + MCP), aprobación human-in-the-loop, diffs/revert, memoria/contexto,
 robustez y persistencia. Complementa `plan_harness.md` (estado/etapas).
+
+Compatibilidad: el comportamiento histórico se identifica como engine legacy.
+El perfil agent-intermedio-next usa el mismo loop durante la etapa experimental,
+pero recrea el backend y aísla sesiones, eventos y efectos bajo
+agent_harness_next. Cambiar de perfil permite volver a legacy sin migración.
 
 ---
 
@@ -44,7 +53,7 @@ filesystem / shell / grep / servers MCP
   `n_ctx` del server vía `/props`.
 - `stop()`: aborta el reply en curso, persiste la sesión + índice, baja `m_running`.
 - `sendMessage(text)`: agrega el mensaje user a `m_messages` (UI) y `m_apiMessages` (API),
-  crea el bubble assistant (typing), resetea contadores de turno y arranca `runCompletion()`.
+  crea el bubble assistant (typing + `status` visible), resetea contadores de turno y arranca `runCompletion()`.
 
 ---
 
@@ -66,6 +75,9 @@ sendMessage
                        └─ runCompletion()  (vuelve a consultar al modelo con el resultado)
 ```
 
+- La burbuja activa mantiene un `status` visible mientras no hay tokens de texto:
+  `Pensando...`, `Revisando resultados...`, ejecución de tool, lectura/escritura o
+  aprobación pendiente. Así el usuario ve qué está pasando durante acciones largas.
 - **Streaming** (`stream:true`): el parser SSE (igual patrón que `RawChatBackend`) lee
   `data: {…}` por línea. Los `tool_calls` llegan en **fragmentos por `index`**: se mergean
   `id`, `function.name` y se concatena `function.arguments` hasta el `finished`, donde se
@@ -85,14 +97,18 @@ sendMessage
   estrategia compatible con el binario/modelo: `--reasoning on/off` cuando existe,
   `--reasoning-budget` como fallback, o `--chat-template-kwargs.enable_thinking`
   para templates Qwen/QwQ antiguos. El payload mantiene hints per-request
-  (`reasoning_budget`, `chat_template_kwargs`) sólo como compatibilidad.
+  (`reasoning_budget`, `chat_template_kwargs`) sólo como compatibilidad. El
+  esfuerzo se reenvía como `chat_template_kwargs.reasoning_effort` y acepta
+  `low`, `medium`, `high`, `xhigh` y el alias histórico `max`; los valores
+  desconocidos se omiten. El warmup usa los mismos kwargs que el turno real.
 - El `reasoning_content` del stream se acumula aparte y se muestra envuelto en
   `<think>…</think>` en el bubble.
 - **Al historial de API NO va el `<think>`**: `stripThinkForContext()` lo quita antes de
   guardar el mensaje assistant en `m_apiMessages` (si no, el modelo se "ceba" razonando y
   rompe el tool-calling).
-- Toggle: `setThinkingEnabled(bool)` (default on). `AppController` lo lee de
-  `agent/thinkingEnabled`.
+- Toggle: `setThinkingEnabled(bool)` (default off). `AppController` lo lee de
+  `agent/thinkingEnabled` y lo trata como fuente de verdad: los perfiles de agente
+  no fuerzan thinking si el checkbox está apagado.
 
 ---
 
@@ -157,6 +173,14 @@ sendMessage
 - **Project memory**: `buildSystemPrompt()` inyecta `.llamacode/memory.md` (fallback
   `AGENTS.md`) en el system prompt. Editable desde la UI
   (`readAgentMemory`/`writeAgentMemory`).
+- **Personal memory**: los hechos `scope=personal` se almacenan globalmente en
+  `AppLocalData/memory/personal.jsonl`, no dentro de un proyecto, y el prompt
+  recibe sólo una selección acotada. Esto permite continuidad entre repos sin
+  mezclar reglas privadas con la memoria del código.
+- **Adaptive tool surface**: los perfiles que lo habilitan reducen las tools del
+  primer turno por grupos semánticos; una intención ambigua conserva la
+  superficie completa y los turnos siguientes vuelven a exponerla. El router
+  usa categorías generales, no nombres de apps ni coordenadas.
 - **Persistencia de sesiones** (= memoria de conversación): cada sesión se guarda en
   `AppLocalData/agent_custom/`:
   - `index.json` — lista de sesiones (id, title, projectDir…).

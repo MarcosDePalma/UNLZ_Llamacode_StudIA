@@ -21,13 +21,13 @@ int main()
     std::vector<ParamSpec> space = {
         ParamSpec::intRange("ngl", 0, 40, 8),                       // capas en GPU
         ParamSpec::intRange("batch", 256, 1024, 256),               // -b
-        ParamSpec::categorical("cache-type-k", {"f16", "q8_0", "q4_0"},
+        ParamSpec::categorical("cache-type-k", {"q8_0", "q4_0"},
                                /*qualityRisk=*/true),               // quant KV
     };
 
-    // Mapas de efecto del quant KV: índice 0=f16, 1=q8_0, 2=q4_0.
-    const double quantSpeed[3]   = {0.0, 10.0, 25.0};  // q más bajo = más rápido
-    const double quantQuality[3] = {1.00, 0.97, 0.80}; // q4 degrada fuerte
+    // Mapas de efecto del quant KV: índice 0=q8_0, 1=q4_0.
+    const double quantSpeed[2]   = {10.0, 25.0};  // q más bajo = más rápido
+    const double quantQuality[2] = {0.97, 0.80};  // q4 degrada fuerte
 
     std::mt19937_64 noiseRng(1234);
     std::normal_distribution<double> noise(0.0, 0.8);

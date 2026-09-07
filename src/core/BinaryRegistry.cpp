@@ -37,6 +37,7 @@ QVariant BinaryRegistry::data(const QModelIndex &index, int role) const
     case PathValidRole:    return b.pathValid;
     case HasCapabilitiesRole: return !b.supportedFlags.isEmpty();
     case BinaryHashRole:   return b.binaryHash;
+    case KvTypesRole:      return b.kvTypes;
     case DisplayLabelRole: {
         // Si hay otro binario con el mismo nombre, agregar la carpeta padre del
         // exe para distinguirlos (ej. "bin (cpu) · llama-mtp-b9274").
@@ -70,6 +71,7 @@ QHash<int, QByteArray> BinaryRegistry::roleNames() const
         {PathValidRole,       "pathValid"},
         {HasCapabilitiesRole, "hasCapabilities"},
         {BinaryHashRole,      "binaryHash"},
+        {KvTypesRole,         "kvTypes"},
         {DisplayLabelRole,    "displayLabel"},
     };
 }
@@ -169,7 +171,10 @@ void BinaryRegistry::detectCapabilities(const QString &id)
 
             LlamaBinary &b = m_items[i];
             b.supportedFlags = caps.flags;
+            b.kvTypes = caps.kvTypes;
             b.flagAliases = caps.flagAliases;
+            if (!caps.version.isEmpty())
+                b.versionHint = caps.version;
             b.pathValid = QFileInfo::exists(b.path);
             // Auto-corregir backend mal etiquetado: si está en el default "cpu"
             // pero hay DLLs cuda/vulkan al lado, ascender. Nunca degradar.
@@ -206,7 +211,10 @@ bool BinaryRegistry::detectCapabilitiesSync(const QString &id)
 
     LlamaBinary &b = m_items[idx];
     b.supportedFlags = caps.flags;
+    b.kvTypes = caps.kvTypes;
     b.flagAliases = caps.flagAliases;
+    if (!caps.version.isEmpty())
+        b.versionHint = caps.version;
     b.pathValid = QFileInfo::exists(b.path);
     if (b.backend.isEmpty() || b.backend == QLatin1String("cpu")) {
         const QString det = detectBackend(b.path);
@@ -242,6 +250,7 @@ QVariantMap BinaryRegistry::get(const QString &id) const
     m["pathValid"] = b.pathValid;
     m["binaryHash"] = b.binaryHash;
     m["supportedFlags"] = b.supportedFlags;
+    m["kvTypes"] = b.kvTypes;
     m["hasCapabilities"] = !b.supportedFlags.isEmpty();
     return m;
 }
@@ -263,6 +272,13 @@ QStringList BinaryRegistry::supportedFlags(const QString &id) const
     const int idx = indexOfId(id);
     if (idx < 0) return {};
     return m_items.at(idx).supportedFlags;
+}
+
+QStringList BinaryRegistry::kvTypes(const QString &id) const
+{
+    const int idx = indexOfId(id);
+    if (idx < 0) return {};
+    return m_items.at(idx).kvTypes;
 }
 
 LlamaBinary BinaryRegistry::findById(const QString &id) const

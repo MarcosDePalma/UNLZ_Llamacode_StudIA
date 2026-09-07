@@ -19127,5 +19127,35 @@
    }
   ],
   "_discovered": true
+ },
+ {
+  "name": "Nanbeige/Nanbeige4.2-3B",
+  "provider": "Nanbeige",
+  "parameter_count": "4.0B (3.0B non-embedding)",
+  "parameters_raw": 4000000000,
+  "min_ram_gb": 3.0,
+  "recommended_ram_gb": 5.0,
+  "min_vram_gb": 2.6,
+  "quantization": "Q4_K_M",
+  "context_length": 262144,
+  "use_case": "Coding and agentic tool use (experimental Looped Transformer)",
+  "capabilities": [
+   "chat",
+   "reasoning",
+   "tool_use",
+   "code"
+  ],
+  "pipeline_tag": "text-generation",
+  "architecture": "nanbeige",
+  "release_date": "2026-07-22",
+  "required_engine": "nanbeige42",
+  "gguf_sources": [
+   {
+    "repo": "owao/Nanbeige4.2-3B-GGUF",
+    "provider": "owao",
+    "file": "nanbeige4.2-3b-Q4_K_M.gguf"
+   }
+  ],
+  "_curated": true
  }
 ]

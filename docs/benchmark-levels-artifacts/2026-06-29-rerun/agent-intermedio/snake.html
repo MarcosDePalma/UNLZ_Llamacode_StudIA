@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐍 SNAKE — Retro Edition</title>
+<style>
+  /* ===== RESET & BASE ===== */
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; }
+  body {
+    background:#0a0a0a;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:monospace;
+    color:#e0e0e0;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+
+  /* ===== CRT OVERLAY ===== */
+  body::after {
+    content:"";
+    position:fixed; inset:0;
+    background:repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0.12) 0px,
+      rgba(0,0,0,0.12) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    pointer-events:none;
+    z-index:9999;
+  }
+
+  /* ===== GAME WRAPPER ===== */
+  #game-wrapper {
+    position:relative;
+    display:flex; flex-direction:column; align-items:center;
+  }
+
+  /* ===== TITLE ===== */
+  #title {
+    font-size:28px;
+    letter-spacing:6px;
+    color:#39ff14;
+    text-shadow:0 0 8px #39ff14, 0 0 20px #39ff14;
+    margin-bottom:8px;
+    font-weight:bold;
+  }
+
+  /* ===== SCORE BAR ===== */
+  #scorebar {
+    display:flex; justify-content:space-between; width:100%;
+    max-width:480px;
+    font-size:14px;
+    margin-bottom:4px;
+    color:#aaa;
+  }
+  #scorebar span { color:#39ff14; font-weight:bold; }
+
+  /* ===== CANVAS ===== */
+  canvas {
+    border:3px solid #333;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    background:#111;
+    box-shadow:0 0 20px rgba(57,255,20,0.15), inset 0 0 60px rgba(0,0,0,0.5);
+  }
+
+  /* ===== CONTROLS INFO ===== */
+  #info {
+    margin-top:10px;
+    font-size:11px;
+    color:#666;
+    text-align:center;
+    line-height:1.6;
+  }
+  #info kbd {
+    background:#222;
+    border:1px solid #444;
+    border-radius:3px;
+    padding:1px 5px;
+    color:#ccc;
+    font-size:11px;
+  }
+
+  /* ===== OVERLAY (START / GAME OVER) ===== */
+  #overlay {
+    position:absolute;
+    top:0; left:0; right:0; bottom:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.75);
+    z-index:10;
+    transition:opacity 0.3s;
+  }
+  #overlay.hidden { opacity:0; pointer-events:none; }
+  #overlay h2 {
+    font-size:22px;
+    color:#ff3333;
+    text-shadow:0 0 10px #ff3333;
+    margin-bottom:10px;
+    letter-spacing:3px;
+  }
+  #overlay .sub {
+    font-size:13px;
+    color:#aaa;
+    margin-bottom:16px;
+  }
+  #overlay .blink {
+    animation:blink 1s step-end infinite;
+    color:#39ff14;
+    font-size:15px;
+  }
+  @keyframes blink {
+    0%,100%{opacity:1} 50%{opacity:0}
+  }
+
+  /* ===== MOBILE D-PAD ===== */
+  #dpad {
+    display:none;
+    margin-top:14px;
+    width:150px; height:150px;
+    position:relative;
+  }
+  #dpad button {
+    position:absolute;
+    width:48px; height:48px;
+    background:#222;
+    border:2px solid #444;
+    border-radius:6px;
+    color:#39ff14;
+    font-size:20px;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #dpad button:active { background:#444; }
+  #dpad .up    { top:0;   left:51px; }
+  #dpad .down  { bottom:0;left:51px; }
+  #dpad .left  { top:51px;left:0; }
+  #dpad .right { top:51px;right:0; }
+
+  @media (pointer:coarse) {
+    #dpad { display:block; }
+    #info { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="game-wrapper">
+  <div id="title">SNAKE</div>
+  <div id="scorebar">
+    <div>SCORE: <span id="score">0</span></div>
+    <div>BEST: <span id="best">0</span></div>
+    <div>LEVEL: <span id="level">1</span></div>
+  </div>
+  <canvas id="c" width="480" height="480"></canvas>
+  <div id="overlay">
+    <h2 id="ov-title">SNAKE</h2>
+    <div class="sub" id="ov-sub">Retro Edition</div>
+    <div class="blink" id="ov-action">PRESS ENTER / TAP TO START</div>
+  </div>
+  <div id="info">
+    <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move &nbsp;|&nbsp; <kbd>P</kbd> pause &nbsp;|&nbsp; <kbd>Enter</kbd> start
+  </div>
+  <div id="dpad">
+    <button class="up" data-dir="up">▲</button>
+    <button class="down" data-dir="down">▼</button>
+    <button class="left" data-dir="left">◀</button>
+    <button class="right" data-dir="right">▶</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  SNAKE — Retro NES-style, Single-file HTML
+// ============================================================
+(function() {
+  "use strict";
+
+  // --- CONSTANTS ---
+  const COLS      = 24;
+  const ROWS      = 24;
+  const CELL      = 20;          // px per cell
+  const W         = COLS * CELL; // 480
+  const H         = ROWS * CELL; // 480
+  const BASE_MS   = 130;         // ms per tick at level 1
+  const SPEED_INC = 8;           // ms faster per level
+  const PTS_PER_LEVEL = 5;       // apples to level up
+
+  // --- COLORS (NES palette) ---
+  const C_BG       = "#1a1a2e";
+  const C_GRID     = "#16213e";
+  const C_SNAKE_HEAD = "#39ff14";
+  const C_SNAKE_BODY = "#00cc44";
+  const C_SNAKE_TAIL = "#008833";
+  const C_APPLE    = "#ff1744";
+  const C_APPLE_STEM = "#4caf50";
+  const C_BONUS    = "#ffeb3b";
+  const C_WALL     = "#333355";
+
+  // --- CANVAS ---
+  const canvas = document.getElementById("c");
+  const ctx    = canvas.getContext("2d");
+  canvas.width = W;
+  canvas.height = H;
+
+  // --- STATE ---
+  let snake, dir, nextDir, apple, bonus, score, best, level;
+  let alive, paused, started, gameOver;
+  let tickTimer, lastTick, tickMs;
+  let particles = [];
+  let animFrame;
+  let bonusTimer = 0;
+  let bonusActive = false;
+  let shakeTimer = 0;
+  let flashTimer = 0;
+
+  // --- DOM refs ---
+  const elScore = document.getElementById("score");
+  const elBest  = document.getElementById("best");
+  const elLevel = document.getElementById("level");
+  const overlay = document.getElementById("overlay");
+  const ovTitle = document.getElementById("ov-title");
+  const ovSub   = document.getElementById("ov-sub");
+  const ovAction= document.getElementById("ov-action");
+
+  // --- AUDIO (inline Web Audio, no files) ---
+  let audioCtx;
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  function playTone(freq, dur, type, vol) {
+    try {
+      ensureAudio();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type || "square";
+      o.frequency.value = freq;
+      g.gain.value = vol || 0.08;
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + dur);
+    } catch(e){}
+  }
+  function sfxEat()     { playTone(600, 0.1, "square", 0.1); setTimeout(()=>playTone(900,0.08,"square",0.08),60); }
+  function sfxBonus()   { playTone(800,0.08,"square",0.1); setTimeout(()=>playTone(1000,0.08,"square",0.1),70); setTimeout(()=>playTone(1200,0.12,"square",0.1),140); }
+  function sfxDie()     { playTone(200,0.3,"sawtooth",0.12); setTimeout(()=>playTone(100,0.4,"sawtooth",0.1),150); }
+  function sfxMove()    { playTone(120, 0.03, "square", 0.02); }
+  function sfxLevelUp() { [0,80,160,240].forEach((d,i)=>setTimeout(()=>playTone(500+i*200,0.12,"square",0.1),d)); }
+
+  // --- LOAD BEST ---
+  best = parseInt(localStorage.getItem("snake_best") || "0", 10);
+  elBest.textContent = best;
+
+  // --- INIT / RESET ---
+  function init() {
+    const cx = Math.floor(COLS/2);
+    const cy = Math.floor(ROWS/2);
+    snake = [
+      {x:cx, y:cy},
+      {x:cx-1, y:cy},
+      {x:cx-2, y:cy},
+    ];
+    dir = {x:1, y:0};
+    nextDir = {x:1, y:0};
+    score = 0;
+    level = 1;
+    alive = true;
+    paused = false;
+    gameOver = false;
+    particles = [];
+    bonusActive = false;
+    bonusTimer = 0;
+    shakeTimer = 0;
+    flashTimer = 0;
+    tickMs = BASE_MS;
+    updateUI();
+    spawnApple();
+  }
+
+  // --- SPAWN APPLE ---
+  function occupied(x, y) {
+    for (let i = 0; i < snake.length; i++) {
+      if (snake[i].x === x && snake[i].y === y) return true;
+    }
+    if (bonusActive && bonus && bonus.x === x && bonus.y === y) return true;
+    return false;
+  }
+
+  function spawnApple() {
+    let x, y;
+    do { x = Math.floor(Math.random()*COLS); y = Math.floor(Math.random()*ROWS); }
+    while(occupied(x,y));
+    apple = {x, y};
+  }
+
+  function spawnBonus() {
+    let x, y;
+    do { x = Math.floor(Math.random()*COLS); y = Math.floor(Math.random()*ROWS); }
+    while(occupied(x,y));
+    bonus = {x, y};
+    bonusActive = true;
+    bonusTimer = 200; // ticks to disappear
+  }
+
+  // --- PARTICLES ---
+  function emitParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: x * CELL + CELL/2,
+        y: y * CELL + CELL/2,
+        vx: (Math.random()-0.5)*6,
+        vy: (Math.random()-0.5)*6,
+        life: 20 + Math.random()*20,
+        maxLife: 40,
+        color: color,
+        size: 2 + Math.random()*3,
+      });
+    }
+  }
+
+  // --- UPDATE UI ---
+  function updateUI() {
+    elScore.textContent = score;
+    elLevel.textContent = level;
+    if (score > best) {
+      best = score;
+      localStorage.setItem("snake_best", best);
+    }
+    elBest.textContent = best;
+  }
+
+  // --- GAME TICK ---
+  function tick() {
+    if (!alive || paused || gameOver) return;
+
+    dir = nextDir;
+    const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
+
+    // Wall collision
+    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
+      die(); return;
+    }
+    // Self collision
+    for (let i = 0; i < snake.length; i++) {
+      if (snake[i].x === head.x && snake[i].y === head.y) { die(); return; }
+    }
+
+    snake.unshift(head);
+
+    let ate = false;
+
+    // Apple?
+    if (head.x === apple.x && head.y === apple.y) {
+      score++;
+      ate = true;
+      sfxEat();
+      emitParticles(apple.x, apple.y, C_APPLE, 12);
+      flashTimer = 4;
+      spawnApple();
+      // Maybe spawn bonus
+      if (Math.random() < 0.2 && !bonusActive) spawnBonus();
+    } else if (bonusActive && bonus && head.x === bonus.x && head.y === bonus.y) {
+      score += 3;
+      ate = true;
+      sfxBonus();
+      emitParticles(bonus.x, bonus.y, C_BONUS, 20);
+      flashTimer = 6;
+      bonusActive = false;
+      bonus = null;
+    } else {
+      snake.pop();
+    }
+
+    if (ate) {
+      const newLevel = Math.floor(score / PTS_PER_LEVEL) + 1;
+      if (newLevel > level) {
+        level = newLevel;
+        tickMs = Math.max(50, BASE_MS - (level - 1) * SPEED_INC);
+        sfxLevelUp();
+      }
+      updateUI();
+    }
+
+    // Bonus timer
+    if (bonusActive) {
+      bonusTimer--;
+      if (bonusTimer <= 0) { bonusActive = false; bonus = null; }
+    }
+
+    lastTick = performance.now();
+  }
+
+  function die() {
+    alive = false;
+    gameOver = true;
+    sfxDie();
+    shakeTimer = 15;
+    emitParticles(snake[0].x, snake[0].y, "#ff0000", 30);
+    updateUI();
+    showOverlay("GAME OVER", "Score: " + score, "PRESS ENTER / TAP TO RETRY");
+  }
+
+  // --- OVERLAY ---
+  function showOverlay(title, sub, action) {
+    ovTitle.textContent = title;
+    ovSub.textContent = sub;
+    ovAction.textContent = action;
+    overlay.classList.remove("hidden");
+  }
+  function hideOverlay() {
+    overlay.classList.add("hidden");
+  }
+
+  // --- DRAW ---
+  function draw() {
+    ctx.save();
+
+    // Shake effect
+    if (shakeTimer > 0) {
+      const sx = (Math.random()-0.5) * shakeTimer * 0.8;
+      const sy = (Math.random()-0.5) * shakeTimer * 0.8;
+      ctx.translate(sx, sy);
+      shakeTimer--;
+    }
+
+    // Background
+    ctx.fillStyle = C_BG;
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid (subtle)
+    ctx.fillStyle = C_GRID;
+    for (let gx = 0; gx < COLS; gx++) {
+      for (let gy = 0; gy < ROWS; gy++) {
+        if ((gx + gy) % 2 === 0) {
+          ctx.fillRect(gx*CELL, gy*CELL, CELL, CELL);
+        }
+      }
+    }
+
+    // Border walls (NES-style block border)
+    drawBorder();
+
+    // Apple (8-bit style)
+    drawApple(apple.x, apple.y);
+
+    // Bonus
+    if (bonusActive && bonus) {
+      drawBonus(bonus.x, bonus.y);
+    }
+
+    // Snake
+    drawSnake();
+
+    // Particles
+    drawParticles();
+
+    // Flash effect
+    if (flashTimer > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${flashTimer * 0.05})`;
+      ctx.fillRect(0, 0, W, H);
+      flashTimer--;
+    }
+
+    // Pause text
+    if (paused) {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#39ff14";
+      ctx.font = "bold 28px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("PAUSED", W/2, H/2);
+      ctx.font = "14px monospace";
+      ctx.fillStyle = "#aaa";
+      ctx.fillText("Press P to resume", W/2, H/2 + 28);
+    }
+
+    ctx.restore();
+  }
+
+  function drawBorder() {
+    ctx.fillStyle = C_WALL;
+    // Top
+    ctx.fillRect(0, 0, W, 2);
+    // Bottom
+    ctx.fillRect(0, H-2, W, 2);
+    // Left
+    ctx.fillRect(0, 0, 2, H);
+    // Right
+    ctx.fillRect(W-2, 0, 2, H);
+  }
+
+  function drawApple(ax, ay) {
+    const px = ax * CELL;
+    const py = ay * CELL;
+    const c = CELL;
+
+    // Apple body (pixel art style)
+    ctx.fillStyle = C_APPLE;
+    // Main body: 4x4 pixel block centered
+    const s = 3; // pixel size
+    ctx.fillRect(px+c/2-5, py+c/2-5, 10, 10);
+    ctx.fillRect(px+c/2-8, py+c/2-2, 16, 8);
+    ctx.fillRect(px+c/2-2, py+c/2-8, 4, 4);
+
+    // Highlight
+    ctx.fillStyle = "#ff6666";
+    ctx.fillRect(px+c/2-5, py+c/2-5, 3, 3);
+
+    // Stem
+    ctx.fillStyle = C_APPLE_STEM;
+    ctx.fillRect(px+c/2-1, py+c/2-8, 2, 4);
+
+    // Leaf
+    ctx.fillStyle = "#66bb6a";
+    ctx.fillRect(px+c/2+1, py+c/2-8, 4, 3);
+  }
+
+  function drawBonus(bx, by) {
+    const px = bx * CELL;
+    const py = by * CELL;
+    const c = CELL;
+    const pulse = Math.sin(performance.now() * 0.01) * 0.3 + 0.7;
+
+    ctx.save();
+    ctx.globalAlpha = pulse;
+
+    // Star shape (simplified)
+    ctx.fillStyle = C_BONUS;
+    ctx.fillRect(px+c/2-2, py+c/2-8, 4, 16);
+    ctx.fillRect(px+c/2-8, py+c/2-2, 16, 4);
+    ctx.fillRect(px+c/2-5, py+c/2-5, 10, 10);
+
+    ctx.restore();
+  }
+
+  function drawSnake() {
+    const len = snake.length;
+    for (let i = len - 1; i >= 0; i--) {
+      const s = snake[i];
+      const px = s.x * CELL;
+      const py = s.y * CELL;
+      const pad = 1;
+
+      if (i === 0) {
+        // Head
+        ctx.fillStyle = C_SNAKE_HEAD;
+        ctx.fillRect(px+pad, py+pad, CELL-pad*2, CELL-pad*2);
+
+        // Eyes (NES style)
+        ctx.fillStyle = "#000";
+        let ex1, ey1, ex2, ey2;
+        if (dir.x === 1) { ex1=px+13; ey1=py+4; ex2=px+13; ey2=py+12; }
+        else if (dir.x === -1) { ex1=px+4; ey1=py+4; ex2=px+4; ey2=py+12; }
+        else if (dir.y === -1) { ex1=px+4; ey1=py+4; ex2=px+12; ey2=py+4; }
+        else { ex1=px+4; ey1=py+13; ex2=px+12; ey2=py+13; }
+        ctx.fillRect(ex1, ey1, 3, 3);
+        ctx.fillRect(ex2, ey2, 3, 3);
+
+        // Eye shine
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(ex1, ey1, 1, 1);
+        ctx.fillRect(ex2, ey2, 1, 1);
+      } else {
+        // Body — gradient from green to darker
+        const t = i / len;
+        const r = Math.round(0 + t * 0);
+        const g = Math.round(204 - t * 100);
+        const b = Math.round(68 + t * 20);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(px+pad, py+pad, CELL-pad*2, CELL-pad*2);
+
+        // Pixel pattern on body (checkerboard every few segments)
+        if (i % 3 === 0) {
+          ctx.fillStyle = `rgba(255,255,255,0.08)`;
+          ctx.fillRect(px+pad+2, py+pad+2, 4, 4);
+        }
+      }
+    }
+  }
+
+  function drawParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.94;
+      p.vy *= 0.94;
+      p.life--;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      const alpha = p.life / p.maxLife;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // --- GAME LOOP ---
+  function loop(now) {
+    animFrame = requestAnimationFrame(loop);
+
+    // Tick at fixed interval
+    if (started && !gameOver && alive && !paused) {
+      if (now - lastTick >= tickMs) {
+        tick();
+        lastTick = now;
+      }
+    }
+
+    draw();
+  }
+
+  // --- INPUT ---
+  function setDir(dx, dy) {
+    // Prevent 180° turn
+    if (dir.x === -dx && dir.y === -dy) return;
+    if (dx !== 0 && dir.x === dx) return; // same axis
+    if (dy !== 0 && dir.y === dy) return;
+    nextDir = {x:dx, y:dy};
+  }
+
+  document.addEventListener("keydown", function(e) {
+    const k = e.key;
+
+    if (!started) {
+      if (k === "Enter" || k === " ") { startGame(); e.preventDefault(); }
+      return;
+    }
+
+    if (gameOver) {
+      if (k === "Enter" || k === " ") { startGame(); e.preventDefault(); }
+      return;
+    }
+
+    if (k === "p" || k === "P") {
+      paused = !paused;
+      e.preventDefault();
+      return;
+    }
+
+    if (paused) return;
+
+    switch(k) {
+      case "ArrowUp":    case "w": case "W": setDir(0,-1); e.preventDefault(); break;
+      case "ArrowDown":  case "s": case "S": setDir(0, 1); e.preventDefault(); break;
+      case "ArrowLeft":  case "a": case "A": setDir(-1,0); e.preventDefault(); break;
+      case "ArrowRight": case "d": case "D": setDir(1, 0); e.preventDefault(); break;
+    }
+  });
+
+  // Mobile D-pad
+  document.querySelectorAll("#dpad button").forEach(function(btn) {
+    const handler = function(e) {
+      e.preventDefault();
+      if (!started || gameOver) { startGame(); return; }
+      if (paused) return;
+      const d = btn.getAttribute("data-dir");
+      switch(d) {
+        case "up":    setDir(0,-1); break;
+        case "down":  setDir(0, 1); break;
+        case "left":  setDir(-1,0); break;
+        case "right": setDir(1, 0); break;
+      }
+    };
+    btn.addEventListener("touchstart", handler, {passive:false});
+    btn.addEventListener("mousedown", handler);
+  });
+
+  // Tap overlay to start
+  overlay.addEventListener("click", function() {
+    if (!started || gameOver) startGame();
+  });
+  overlay.addEventListener("touchstart", function(e) {
+    e.preventDefault();
+    if (!started || gameOver) startGame();
+  });
+
+  // --- SWIPE SUPPORT ---
+  let touchStartX = 0, touchStartY = 0;
+  canvas.addEventListener("touchstart", function(e) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, {passive:true});
+  canvas.addEventListener("touchend", function(e) {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    if (Math.max(absDx, absDy) < 20) return; // too small
+    if (absDx > absDy) {
+      setDir(dx > 0 ? 1 : -1, 0);
+    } else {
+      setDir(0, dy > 0 ? 1 : -1);
+    }
+  }, {passive:true});
+
+  // --- START ---
+  function startGame() {
+    ensureAudio();
+    init();
+    started = true;
+    hideOverlay();
+    lastTick = performance.now();
+  }
+
+  // --- INIT ---
+  init();
+  showOverlay("SNAKE", "Retro Edition", "PRESS ENTER / TAP TO START");
+  started = false;
+  lastTick = performance.now();
+  animFrame = requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>

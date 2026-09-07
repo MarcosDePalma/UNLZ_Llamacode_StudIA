@@ -77,13 +77,13 @@ folder, builds and launches. No manual clone or environment prep required.
 **Windows** (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/guideahon/UNLZ_Llamacode/main/scripts/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/cristianlukas/UNLZ_Llamacode/main/scripts/bootstrap.ps1 | iex
 ```
 
 **Linux** (bash):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/guideahon/UNLZ_Llamacode/main/scripts/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/cristianlukas/UNLZ_Llamacode/main/scripts/bootstrap.sh | bash
 ```
 
 It automatically installs:
@@ -109,7 +109,7 @@ Optional variables (set before running):
 |---|---|---|
 | `LC_DIR` | `~/LlamaCode` | isolated install folder |
 | `LC_BRANCH` | `main` | branch to clone |
-| `LC_CONFIG` | `Release` | `Release` or `Debug` |
+| `LC_CONFIG` | `Debug` | `Debug` (release candidate) or `Release` (stable) |
 | `LC_QTVER` | `6.8.3` | Qt version (Linux only) |
 | `LC_QTROOT` | `~/Qt` | Qt install root (Linux only) |
 | `LC_NORUN` | (empty) | `1` = don't launch when done |
@@ -118,7 +118,7 @@ Example with overrides (Linux):
 
 ```bash
 LC_DIR=/opt/llamacode LC_CONFIG=Debug LC_NORUN=1 \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/guideahon/UNLZ_Llamacode/main/scripts/bootstrap.sh)"
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/cristianlukas/UNLZ_Llamacode/main/scripts/bootstrap.sh)"
 ```
 
 Minimum prerequisites: **Windows** needs `winget` (App Installer from the Microsoft
@@ -194,8 +194,8 @@ depends on the model, quant, context, batch, backend and machine thermals.
 | CPU + 32 GB RAM | `cpu_only` | 7B–14B `Q4_K_M` | 8k–16k | Better quality, lower speed |
 | 6–8 GB VRAM GPU + 16 GB RAM | `gpu` or `partial_offload` | 7B–9B `Q4_K_M`, compact coder models | 8k–16k | Good entry point for a local agent |
 | 12 GB VRAM GPU + 32 GB RAM | `gpu` | 9B–14B `Q4_K_M` / `Q5_K_M` | 16k–32k | Recommended for daily use |
-| 16 GB VRAM GPU + 32–64 GB RAM | `gpu` | Quantized 14B–32B, small MoE models | 16k–32k | More stable agent and RAG workflows |
-| 24 GB+ VRAM GPU + 64 GB RAM | `gpu` | Quantized 32B+ or higher quants | 32k+ | Best margin for long context and multitasking |
+| 16 GB VRAM GPU + 32–64 GB RAM | `partial_offload` | KAT Coder 2.5 35B-A3B `Q4_K_M` (`--n-cpu-moe 18`) | 32k | E2E validated: 11/11 ×3, 3/3 without repairs and 4.70× faster than Qwen3.6 IQ4_XS |
+| 24 GB+ VRAM GPU + 64 GB RAM | `partial_offload` | KAT Coder 2.5 35B-A3B `Q4_K_M` (coding default) | 32k | E2E validated: same final quality as base Qwen at about 4× lower median time |
 
 `partial_offload` combines VRAM and RAM when the full model does not fit on the GPU,
 at the cost of speed. On notebooks or low-memory machines, start with 8k context,
@@ -401,10 +401,14 @@ chat/agent hit the `cloudBaseUrl` directly with the configured model.
   Service / WinCred / macOS Keychain) with a **DPAPI** fallback on Windows.
 - Applies equally to HTTP masters, mail accounts and voice providers.
 
-## Talk mode (voice-to-voice)
+## Ingi Talk mode (voice-to-voice + agent)
 
-Speak to the AI and hear the answer, hands-free. A **🎙 Talk** section in the NavBar
-(reuses the chat backend: sessions and history included).
+Ingi, your assistant engineer: speak and it drives your computer for you. A
+**🎙 Ingi Talk** section in the NavBar. If an **agent is running** (with screen
+vision and computer-use), the voice turn goes to the agent, which operates the PC
+—click, keyboard, install programs, etc.— and answers back by voice. Otherwise it
+falls back to plain voice-to-voice over the chat backend (sessions and history
+included).
 
 - **STT and TTS** go through **OpenAI-compat** endpoints (`/v1/audio/transcriptions`,
   `/v1/audio/speech`). A single code path: **local** (whisper.cpp server,
@@ -413,8 +417,17 @@ Speak to the AI and hear the answer, hands-free. A **🎙 Talk** section in the 
 - **Capture** PCM16 mono 16 kHz (`QAudioSource`) with **energy-RMS VAD** (configurable
   end-of-turn by silence), **microphone selection** and a live **level meter**. A
   *Test microphone* button validates input with no server.
-- **Barge-in**: interrupt TTS when new speech is detected. State machine
-  `listening → transcribing → thinking → speaking` with optional auto-listen.
+- **Configurable turn-taking**: `Hands-free (VAD)` keeps automatic listening;
+  `Push to talk` keeps the microphone closed while Talk mode is idle and captures
+  only while the button is held. In this mode pauses do not end the turn: releasing
+  the button submits the accumulated audio to STT.
+- **Barge-in**: interrupt TTS when new speech is detected or when PTT is pressed
+  during a reply, also cancelling chat/agent generation so discarded replies do not
+  keep consuming tokens. State machine
+  `ready → listening → transcribing → thinking → speaking` with optional auto-listen.
+- **Prefill + streaming**: the PTT `ready` state warms the backend's stable prefix
+  before speech starts; partial transcription and sentence-level TTS continue in
+  parallel with model generation.
 
 ## Memory, RAG and verification
 
@@ -445,11 +458,33 @@ for the agent. Per-provider presets (Gmail/Outlook/custom). The password goes to
 SecretStore (`mail/<name>`), never to JSON. `email_send` requires approval unless
 *auto-send* is enabled (sending mail is an irreversible external action).
 
+## Teach automations: desktop and browser
+
+The **Automations** section now provides two Teach targets:
+
+- **Foreground desktop (Windows):** the user selects a screen or window, demonstrates
+  the workflow and adds text notes. Events, normalized coordinates, screenshots and
+  checks are stored as a semantic recipe. A vision-capable agent observes, performs
+  one mouse/keyboard action and observes again instead of blindly replaying input.
+- **Background browser:** Playwright records the demonstration and preserves the
+  script and evidence. The Task uses browser tools to adapt selectors and verify
+  the intended result, normally headless with a hidden-browser fallback.
+
+Teach creation and management live in **Automations**; Settings only keeps the
+technical Playwright MCP toggle and command. Legacy Playwright skills remain
+available and can be imported without modification.
+
+Versioned artifacts are stored under
+`AppLocalData/LlamaCode/automations/<id>/`. Desktop Tasks require a vision profile
+and an interactive Windows session. Locked sessions wait; UAC, the lock screen and
+secure desktop are never controlled. Notes and logs redact password/token/API-key
+patterns. Each Task has an approval policy and bounded timeout/action/retry limits.
+
 ## Browser automation (Playwright)
 
 A global toggle + per-profile override (`browserAutomation` inherit/on/off) that
-injects the **Playwright MCP** into the agent's tool set. **Teach mode**: the user
-records actions with Playwright codegen and they're saved as **replayable skills**
+injects the **Playwright MCP** into the agent's tool set. Browser Teach is managed
+from Automations and stores **replayable semantic recipes**
 that Tasks can re-run.
 
 ## Attachments (documents + vision)
@@ -490,6 +525,17 @@ With a vision model (server launched with `--mmproj`) it also accepts **images**
 - **Start server only** — just `llama-server`, no agent.
 - **OpenAI endpoint** — with the server running it shows `http://<host>:<port>/v1` (read-only, selectable) + a *Copy* button, to point external agents (opencode, aider, etc.) at the local backend.
 
+## Local gateway for OpenCode, Claude Code and Claude Desktop
+
+Settings → Gateway · API exposes an Anthropic/OpenAI-compatible local gateway.
+The **Configure Claude Desktop** action writes Claude Desktop's local
+Third-Party Inference profile, publishes stable `claude-llamacode-*` aliases for
+the launch profiles, and keeps a backup under
+`AppLocalData/LlamaCode/claude-desktop/backups/`. Fully quit and relaunch Claude
+Desktop after applying it; the first setup may require Developer Mode → Configure
+Third-Party Inference. Cloud-only Anthropic features may not be available in 3P
+mode.
+
 ## Process Lifecycle
 
 - **Windows Job Object**: all subprocesses (llama-server + harness) are assigned to the main process's Job Object. When UNLZ_Llamacode closes (normally or on crash), children die automatically.
@@ -514,7 +560,7 @@ With a vision model (server launched with `--mmproj`) it also accepts **images**
 `build.bat` kills hung processes, configures, builds, deploys the Qt runtime (`windeployqt`) and regenerates the shortcuts. Accepts a config:
 
 ```bat
-build.bat            REM Debug + Release (default)
+build.bat            REM Debug only (default; release candidate)
 build.bat Debug      REM Debug only
 build.bat Release    REM Release only
 ```
@@ -523,10 +569,17 @@ Outputs:
 
 | Config | Binary | Shortcut | Icon |
 |--------|--------|----------|------|
-| Release | `build\Release\LlamaCode.exe` (optimized, `NDEBUG`) | `LlamaCode.lnk` | `assets\app_icon.ico` (normal llama) |
-| Debug | `build\Debug\LlamaCode.exe` (symbols + asserts) | `LlamaCode-Debug.lnk` | `assets\debug_icon.ico` (**red** llama) |
+| Debug | `build\Debug\LlamaCode.exe` (release candidate; symbols + asserts) | `LlamaCode-Debug.lnk` | `assets\debug_icon.ico` (**red** llama) |
+| Release | `build\Release\LlamaCode.exe` (stable, optimized, `NDEBUG`) | `LlamaCode.lnk` | `assets\app_icon.ico` (normal llama) |
+
+Use Debug to accumulate and validate several candidate versions. Promote to
+Release explicitly only after that validation; `build.bat Both` remains available
+when both artifacts are needed.
 
 The Debug red icon is embedded in the `.exe` (taskbar/explorer) via `app_icon.rc` + `#ifdef LC_DEBUG_ICON` (CMake defines `/dLC_DEBUG_ICON` only in Debug config), and also in the `.lnk`.
+
+The notification area uses `assets/tray_icon.png` only in Release. Debug keeps
+using `assets/debug_icon.ico` in the tray as well.
 
 > After touching code, always rebuild — the QML is embedded in the binary via `qt_add_qml_module`.
 
@@ -553,7 +606,7 @@ LlamaCode/
 ├── src/                    ← C++ (AppController, agent backends, core)
 ├── qml/                    ← UI (Main.qml, pages/, components/)
 ├── assets/
-│   ├── app_icon.ico / debug_icon.ico / app_icon.png
+│   ├── app_icon.ico / debug_icon.ico / app_icon.png / tray_icon.png
 │   ├── hwfit/hf_models.json          ← model catalog (cookbook)
 │   └── benchmarks/aa_intelligence.json ← quality scores (offline)
 ├── docs/                   ← documentation (agent.md, TODO.md, plan_harness.md, tuner.md, ...)
@@ -622,10 +675,14 @@ A module to compare quants and profiles systematically: measures RAM, VRAM, spee
 
 ### Workflow
 
-1. Select one or more `LaunchProfile`s to compare.
-2. Pick a test mode: **Short** (~30 s) or **Full** (1–5 min).
-3. Run: UNLZ_Llamacode launches each profile in sequence, runs the prompts, records metrics.
-4. View results in a comparison table; export or save for future comparisons.
+1. In **Profiles**, mark each `LaunchProfile` you want to leave **For benchmark**;
+   the mark persists as a queue of pending candidates.
+   Candidates from the profile matrix are pre-marked and can be cleared individually.
+2. In **Benchmark**, click **Select 🏆 benchmark (N)** to load all marked profiles
+   at once, or select profiles manually.
+3. Pick a test mode: **Short** (~30 s) or **Full** (1–5 min).
+4. Run: UNLZ_Llamacode launches each profile in sequence, runs the prompts, records metrics.
+5. View results in a comparison table; export or save for future comparisons.
 
 ### Test modes
 
@@ -703,6 +760,16 @@ Automatic search for the `llama-server` flags (`ngl`, `batch`, `ubatch`, `flash-
 
 - Runs `N` trials on a scratch port (launches/measures/kills the server per candidate, in a separate `QThread` so the UI doesn't freeze).
 - Measures `timings.predicted_per_second` throughput (`/completion`) and grades the output with EvalSuite-style substrings.
+- MTP/DFlash profiles can opt into **adaptive speculation**: the editor preserves
+  `spec-draft-n-min` and the tuner searches `spec-draft-n-max` from that minimum
+  through 9. It is emitted only when the selected binary declares
+  `--spec-draft-adaptive`; register a compatible build as `mtp-fork` and run
+  **Detect capabilities** in the Binaries page.
+- The historical Qwen3.8 system profiles store MTP in `extraArgs`; the profile
+  editor hydrates those flags and migrates them to the structured model settings
+  when a copy is saved. For a real fixed/adaptive A/B run, use
+  `tools/benchmark_adaptive_speculation.ps1` with an explicit patched server and
+  GGUF model; it writes per-task metrics to JSON.
 - When done it **clones** the profile into a new `-tuned` one with the best config in `extraArgs`; the original stays intact.
 - UI: `ProfilesPage` → **Auto-tune** / **Cancel tune** + live status.
 
@@ -734,3 +801,11 @@ Code, data and design taken from other projects:
 | **archex** | Code-context pipeline ideas in `hybrid_search`: token-budget packing + dep-graph expansion (neighbors via imports/includes). Review: [`docs/archex_context_review.md`](docs/archex_context_review.md) | https://github.com/Mathews-Tom/archex |
 
 > When adding code/data from another repo, add the corresponding row here.
+The native agent uses **dynamic working memory**: every session persists an
+immutable full `transcript` separately from the `workingContext` sent to the
+model. Before inference it deterministically prunes duplicate tool results and
+large arguments from stale failures while protecting writes, tests, memory,
+skills, and subagents. Structured phase checkpoints compact only when their
+estimated savings amortize prompt-cache invalidation or prevent context overflow.
+The Agent context meter reports active context, saved tokens, and full transcript
+size. Legacy v1 snapshots are migrated on load and forks preserve both forms.

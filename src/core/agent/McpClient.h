@@ -18,6 +18,7 @@ public:
         QString name;            // nombre crudo del server
         QString description;
         QJsonObject inputSchema; // JSON Schema de parámetros
+        QJsonObject annotations; // hints MCP + extensión opcional "llamacode"
     };
 
     explicit McpClient(const QString &serverName, QObject *parent = nullptr);
@@ -32,7 +33,10 @@ public:
     const QList<ToolDef> &tools() const { return m_tools; }
 
     // Ejecuta una tool del server. Devuelve el texto del resultado; *ok = !isError.
-    QString callTool(const QString &toolName, const QJsonObject &args, bool *ok);
+    QString callTool(const QString &toolName, const QJsonObject &args, bool *ok,
+                     QJsonObject *rawResult = nullptr,
+                     const QString &idempotencyKey = {},
+                     const QString &correlationId = {});
 
 signals:
     void logAppended(const QString &chunk);

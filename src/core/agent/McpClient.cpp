@@ -57,6 +57,7 @@ bool McpClient::start(const QString &command, const QString &cwd)
         d.name        = t.value(QStringLiteral("name")).toString();
         d.description = t.value(QStringLiteral("description")).toString();
         d.inputSchema = t.value(QStringLiteral("inputSchema")).toObject();
+        d.annotations = t.value(QStringLiteral("annotations")).toObject();
         if (!d.name.isEmpty()) m_tools.append(d);
     }
     m_ready = true;
@@ -120,15 +121,24 @@ QJsonObject McpClient::request(const QString &method, const QJsonObject &params,
     return {};
 }
 
-QString McpClient::callTool(const QString &toolName, const QJsonObject &args, bool *ok)
+QString McpClient::callTool(const QString &toolName, const QJsonObject &args, bool *ok,
+                            QJsonObject *rawResult, const QString &idempotencyKey,
+                            const QString &correlationId)
 {
     if (ok) *ok = false;
     if (!m_ready) return QStringLiteral("[mcp:%1] server no disponible]").arg(m_serverName);
 
-    const QJsonObject resp = request(QStringLiteral("tools/call"), QJsonObject{
+    QJsonObject params{
         {QStringLiteral("name"), toolName},
         {QStringLiteral("arguments"), args}
-    }, 120000);
+    };
+    QJsonObject meta;
+    if (!idempotencyKey.isEmpty())
+        meta[QStringLiteral("io.llamacode/idempotencyKey")] = idempotencyKey;
+    if (!correlationId.isEmpty())
+        meta[QStringLiteral("io.llamacode/correlationId")] = correlationId;
+    if (!meta.isEmpty()) params[QStringLiteral("_meta")] = meta;
+    const QJsonObject resp = request(QStringLiteral("tools/call"), params, 120000);
 
     if (resp.isEmpty())
         return QStringLiteral("[mcp:%1] sin respuesta de %2]").arg(m_serverName, toolName);
@@ -138,6 +148,7 @@ QString McpClient::callTool(const QString &toolName, const QJsonObject &args, bo
     }
 
     const QJsonObject result = resp.value(QStringLiteral("result")).toObject();
+    if (rawResult) *rawResult = result;
     const bool isError = result.value(QStringLiteral("isError")).toBool(false);
     QString text;
     for (const QJsonValue &cv : result.value(QStringLiteral("content")).toArray()) {

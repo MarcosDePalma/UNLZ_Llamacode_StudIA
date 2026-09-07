@@ -1,0 +1,3943 @@
+[
+  {
+    "id": "sys-ninfer3090-qwen27",
+    "tier": "24GB-NInfer",
+    "order": 170,
+    "extra": true,
+    "benchmark": false,
+    "favorite": false,
+    "autoCompanion": false,
+    "displayName": "[experimental 24GB] NInfer-3090 · Qwen3.6-27B · texto",
+    "minVramGb": 24,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "NInfer-Qwen3.6-27B",
+    "agentProfileId": "agent-intermedio",
+    "model": {
+      "repo": "neroued/Qwen3.6-27B-NInfer",
+      "file": "qwen3_6_27b.ninfer",
+      "quant": "groupwise-int"
+    },
+    "runtime": {
+      "ctx": 4096,
+      "batch": 512,
+      "ubatch": 128,
+      "gpuLayers": 999,
+      "kv": "q8_0",
+      "flashAttn": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--model-id", "qwen3.6-27b",
+      "--mtp-draft-tokens", "2", "--lm-head-draft",
+      "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0",
+      "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--reasoning", "on"
+    ],
+    "binaryKind": "ninfer3090",
+    "hardwareAffinity": {
+      "gpuNamePatterns": ["RTX 3090"],
+      "requireGpuName": true,
+      "gpuScope": "single",
+      "label": "Nativa para RTX 3090 · 1 GPU"
+    },
+    "contextPresets": [4096, 8192, 16384],
+    "comment": "Backend experimental NInfer-3090. Requiere ninfer-serve registrado como flavor ninfer-3090 y qwen3_6_27b.ninfer en el root NInfer-Qwen3.6-27B. Sólo texto; el artefacto incorpora tokenizer, template y MTP."
+  },
+  {
+    "id": "sys-ninfer3090-qwen35",
+    "tier": "24GB-NInfer",
+    "order": 171,
+    "extra": true,
+    "benchmark": false,
+    "favorite": true,
+    "autoCompanion": false,
+    "displayName": "[experimental 24GB] NInfer-3090 · Qwen3.6-35B-A3B · coding",
+    "minVramGb": 24,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "NInfer-Qwen3.6-35B-A3B",
+    "agentProfileId": "agent-avanzado",
+    "model": {
+      "repo": "neroued/Qwen3.6-35B-A3B-NInfer",
+      "file": "qwen3_6_35b_a3b.ninfer",
+      "quant": "groupwise-int"
+    },
+    "runtime": {
+      "ctx": 4096,
+      "batch": 512,
+      "ubatch": 128,
+      "gpuLayers": 999,
+      "kv": "q8_0",
+      "flashAttn": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--model-id", "qwen3.6-35b-a3b",
+      "--mtp-draft-tokens", "2", "--lm-head-draft",
+      "--prompt-lookup-tokens", "15", "--prompt-lookup-min-match", "4", "--prompt-lookup-auto",
+      "--prompt-lookup-min-context", "1000",
+      "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0",
+      "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--reasoning", "on"
+    ],
+    "binaryKind": "ninfer3090",
+    "hardwareAffinity": {
+      "gpuNamePatterns": ["RTX 3090"],
+      "requireGpuName": true,
+      "gpuScope": "single",
+      "label": "Nativa para RTX 3090 · 1 GPU"
+    },
+    "contextPresets": [4096, 8192, 16384],
+    "comment": "Backend experimental NInfer-3090 para coding. Requiere ninfer-serve registrado como flavor ninfer-3090 y qwen3_6_35b_a3b.ninfer en el root NInfer-Qwen3.6-35B-A3B. Usa MTP y prompt-lookup adaptativo; comparar HumanEval/0 y luego HumanEval/20 contra llama.cpp."
+  },
+  {
+    "id": "sys-ninfer3090-qwen38",
+    "tier": "24GB-NInfer",
+    "order": 172,
+    "extra": true,
+    "benchmark": false,
+    "favorite": false,
+    "autoCompanion": false,
+    "displayName": "[experimental 24GB] NInfer-3090 · Qwen3.8-27B · coding",
+    "minVramGb": 24,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "NInfer-Qwen3.8-27B",
+    "agentProfileId": "agent-avanzado",
+    "model": {
+      "repo": "neroued/Qwen3.8-27B-NInfer",
+      "file": "qwen3_8_27b.ninfer",
+      "quant": "groupwise-int"
+    },
+    "runtime": {
+      "ctx": 4096,
+      "batch": 512,
+      "ubatch": 128,
+      "gpuLayers": 999,
+      "kv": "q8_0",
+      "flashAttn": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--model-id", "qwen3.8-27b",
+      "--spec", "mtp", "--draft-tokens", "3", "--lm-head-draft",
+      "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0",
+      "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--reasoning", "on"
+    ],
+    "binaryKind": "ninfer3090",
+    "hardwareAffinity": {
+      "gpuNamePatterns": ["RTX 3090"],
+      "requireGpuName": true,
+      "gpuScope": "single",
+      "label": "Nativa para RTX 3090 · 1 GPU"
+    },
+    "contextPresets": [4096, 8192, 16384],
+    "comment": "Candidato HE0 → HE20 → BCB. Requiere qwen3_8_27b.ninfer de neroued/Qwen3.8-27B-NInfer y ninfer-serve revision 5232055+ registrado como flavor ninfer-3090. El artefacto incorpora visión/MTP, pero la app arranca NInfer en text-only y el model card declara que no ejecuta tool calls generadas: validar BCB como transporte antes de interpretar un score. La publicación upstream documenta RTX 5090; sólo usarlo en 3090 si el binario local fue adaptado y pasa smoke-test."
+  },
+  {
+    "id": "sys-ultraq-dsv4-0731-iq3s",
+    "tier": "24GB-DeepSeek-V4-Ultra",
+    "order": 90,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[experimental ultra] ULTRA-Q · DeepSeek V4 Flash 0731 IQ3_S 131k",
+    "minVramGb": 24,
+    "minRamGb": 120,
+    "cpuOk": false,
+    "folder": "DeepSeek-V4-Flash-0731-UD-IQ3_S",
+    "agentProfileId": "agent-maximo",
+    "reasoningEffort": "high",
+    "reasoningBudget": 8192,
+    "model": {
+      "repo": "unsloth/DeepSeek-V4-Flash-0731-GGUF",
+      "file": "DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+      "files": [
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00002-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00003-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00004-of-00004.gguf"
+      ],
+      "quant": "UD-IQ3_S"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 44,
+      "batch": 1024,
+      "ubatch": 512,
+      "threads": 0,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--n-cpu-moe",
+      "39",
+      "--fit-target",
+      "512",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "0",
+      "--predict",
+      "16384",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "off"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10228,
+    "contextPresets": [
+      65536,
+      131072,
+      196608,
+      262144,
+      393216
+    ],
+    "benchmarkVariants": [
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5",
+        "benchmark": false,
+        "order": 98,
+        "displayName": "[retirado] ULTRA-Q stress B8192 · U2048 · DSpark 5",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "comment": "Retirado: DSpark no es una ruta confiable para este llama.cpp en Windows. Se conserva sólo como histórico; usar los controles sin speculative."
+      },
+      {
+        "id": "sys-bench-ultraq-b4096-u1024-nospec",
+        "benchmark": true,
+        "order": 101,
+        "displayName": "[bench ULTRA-Q] B4096 · U1024 · sin DSpark",
+        "runtime": {
+          "batch": 4096,
+          "ubatch": 1024
+        },
+        "extraArgOverrides": {
+          "--spec-type": null,
+          "--spec-draft-n-max": null
+        },
+        "comment": "Control sin speculative decoding ya medido (278 s / 286 s): la referencia de que DSpark no mejoraba el wall-time."
+      },
+      {
+        "id": "sys-bench-ultraq-b4096-u1024-moe43",
+        "order": 103,
+        "displayName": "[bench ULTRA-Q] B4096 · U1024 · CPU-MoE 43",
+        "runtime": {
+          "batch": 4096,
+          "ubatch": 1024
+        },
+        "extraArgOverrides": {
+          "--n-cpu-moe": 43
+        },
+        "comment": "Más expertos en RAM; sacrifica decode para liberar VRAM al prefill."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-nospec",
+        "benchmark": true,
+        "order": 110,
+        "displayName": "[bench ULTRA-Q] B8192 · U2048 · sin DSpark",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--spec-type": null,
+          "--spec-draft-n-max": null
+        },
+        "comment": "CONTROL CLAVE: el batch ganador sin speculative. Si iguala los 223 s, la ganancia era del batch y DSpark no aporta."
+      },
+      {
+        "id": "sys-bench-ultraq-b4096-u1024-moe43-nospec",
+        "benchmark": true,
+        "order": 111,
+        "displayName": "[bench ULTRA-Q] B4096 · U1024 · MoE 43 · sin DSpark",
+        "runtime": {
+          "batch": 4096,
+          "ubatch": 1024
+        },
+        "extraArgOverrides": {
+          "--n-cpu-moe": 43,
+          "--spec-type": null,
+          "--spec-draft-n-max": null
+        },
+        "comment": "Control del candidato bajo-VRAM: aísla si la ventaja de CPU-MoE 43 es independiente de DSpark."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-pmin05",
+        "benchmark": false,
+        "order": 112,
+        "displayName": "[retirado] ULTRA-Q · DSpark 5 · p-min 0.5",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--spec-draft-p-min": 0.5
+        },
+        "comment": "p-min default es 0.00: nunca descarta un draft malo. Los logs muestran acceptance bimodal (0.34 a 1.00); cortar los drafts flojos debería recuperar el overhead."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-pmin08",
+        "benchmark": false,
+        "order": 113,
+        "displayName": "[retirado] ULTRA-Q · DSpark 5 · p-min 0.8",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--spec-draft-p-min": 0.8
+        },
+        "comment": "Corte agresivo: sólo especula cuando el draft está muy seguro. Menos intentos, menos desperdicio."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-draftgpu",
+        "benchmark": false,
+        "order": 114,
+        "displayName": "[retirado] ULTRA-Q · DSpark 5 · draft full GPU",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--spec-draft-n-cpu-moe": 0
+        },
+        "comment": "Expertos del draft en GPU mientras el target mantiene su offload. Si el draft sufre el ancho de banda de RAM, la diferencia salta acá."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-draftkv4",
+        "benchmark": false,
+        "order": 115,
+        "displayName": "[retirado] ULTRA-Q · DSpark 5 · KV draft q4_0",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--spec-draft-type-k": "q4_0",
+          "--spec-draft-type-v": "q4_0"
+        },
+        "comment": "KV del draft en q4_0; la política del catálogo no permite superar q8_0. Libera VRAM del draft para el target y el compute graph."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds8",
+        "benchmark": false,
+        "order": 117,
+        "displayName": "[retirado] ULTRA-Q · DSpark 8",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--spec-draft-n-max": 8
+        },
+        "comment": "Draft más largo: gana más por acierto y desperdicia más por fallo. Con la acceptance ~0.9 observada debería pagar."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds10",
+        "benchmark": false,
+        "order": 118,
+        "displayName": "[retirado] ULTRA-Q · DSpark 10",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--spec-draft-n-max": 10
+        },
+        "comment": "Límite superior del barrido; si empeora, confirma que el costo de generar el draft domina sobre la ganancia."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds8-pmin05",
+        "benchmark": false,
+        "order": 119,
+        "displayName": "[retirado] ULTRA-Q · DSpark 8 · p-min 0.5",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--spec-draft-n-max": 8,
+          "--spec-draft-p-min": 0.5
+        },
+        "comment": "Cruce de los dos ejes: draft largo cuando el modelo está seguro, corte temprano cuando no."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-moe43-ds5",
+        "benchmark": false,
+        "order": 121,
+        "displayName": "[retirado] ULTRA-Q · MoE 43 · DSpark 5",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--n-cpu-moe": 43
+        },
+        "comment": "Cruza el batch ganador con el CPU-MoE del candidato bajo-VRAM: mide si las dos ventajas se suman o se pisan."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-temp0",
+        "benchmark": false,
+        "order": 130,
+        "displayName": "[retirado] ULTRA-Q · DSpark 5 · temp 0 (greedy)",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--temp": 0,
+          "--top-k": 0,
+          "--top-p": 0,
+          "--min-p": 0
+        },
+        "comment": "HIPÓTESIS PRINCIPAL: con temp > 0 el sampling estocástico rechaza drafts que el greedy aceptaría, y se paga el draft igual. Explicaría la acceptance bimodal (0.34 a 1.00) de los logs. Cambia el sampling, así que hay que mirar el score de calidad además del tiempo."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-mlock",
+        "benchmark": false,
+        "order": 131,
+        "displayName": "[retirado · REQUIERE PAGEFILE] ULTRA-Q · DSpark 5 · mmap+mlock",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--load-mode": "mmap+mlock"
+        },
+        "comment": "NO CORRER SIN ARCHIVO DE PAGINACIÓN: sin pagefile el commit limit de Windows es igual a la RAM física (127 GB), y VirtualLock compite contra el commit de todo lo demás. Medido: fija 45 GB, el siguiente lock falla con ERROR_COMMITMENT_LIMIT y el server muere con GGML_ASSERT(ctx->mem_buffer != NULL). Con un pagefile de 32-64 GB debería entrar. La promesa: pinear el modelo evita que Windows recorte el working set del mmap durante el decode (~10 tok/s reportados en un 3090 Ti con este modelo), y podría explicar el spread grande entre pasadas de la misma config."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-temp0-mlock",
+        "benchmark": false,
+        "order": 132,
+        "displayName": "[retirado · REQUIERE PAGEFILE] ULTRA-Q · DSpark 5 · temp 0 + mmap+mlock",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--temp": 0,
+          "--top-k": 0,
+          "--top-p": 0,
+          "--min-p": 0,
+          "--load-mode": "mmap+mlock"
+        },
+        "comment": "NO CORRER SIN ARCHIVO DE PAGINACIÓN (ver la variante de arriba). Combina el pineo en RAM con el greedy: si ambas pagan, es el candidato a perfil de producción."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ngrammod",
+        "order": 133,
+        "displayName": "[bench ULTRA-Q] B8192 · U2048 · ngram-mod 32/48/64",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048
+        },
+        "extraArgOverrides": {
+          "--spec-type": "ngram-mod",
+          "--spec-draft-n-max": null,
+          "--spec-ngram-mod-n-match": 32,
+          "--spec-ngram-mod-n-min": 48,
+          "--spec-ngram-mod-n-max": 64,
+          "--temp": 0,
+          "--top-k": 0,
+          "--top-p": 0,
+          "--min-p": 0
+        },
+        "comment": "ngram-mod en vez de DSpark, sin modelo draft. Si gana, DSpark no justifica su costo acá. SIN --load-mode mmap+mlock: en esta máquina el modelo (~116 GB) no entra pineado en 128 GB de RAM y llama.cpp muere con GGML_ASSERT(ctx->mem_buffer != NULL). La receta original era para un quant de 90.9 GB."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-kv8",
+        "benchmark": false,
+        "order": 134,
+        "displayName": "[retirado] ULTRA-Q · DSpark 5 · KV q8_0",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048,
+          "kv": "q8_0"
+        },
+        "extraArgOverrides": {
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q8_0"
+        },
+        "comment": "CALIDAD + ACCEPTANCE: el KV de V4 ya viene comprimido de fábrica, así que el q4_0 del perfil comprime encima de algo comprimido. El propio builder advierte que el KV cuantizado mata la acceptance del draft, pero la salvaguarda no aplica acá porque el spec-type viene por extraArgs. Cuesta VRAM; mirar score de calidad Y acceptance en el log."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-kv8-nospec",
+        "benchmark": true,
+        "order": 140,
+        "displayName": "[bench ULTRA-Q] B8192 · U2048 · KV q8_0 · sin DSpark",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048,
+          "kv": "q8_0"
+        },
+        "extraArgOverrides": {
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q8_0",
+          "--spec-type": null,
+          "--spec-draft-n-max": null
+        },
+        "comment": "CONTROL DEL HALLAZGO: KV q8_0 midió 212 s, el mejor tiempo de la tanda. Falta saber por qué. Si sin DSpark también baja, la mejora era del KV y no de la acceptance del draft; si sube, el q4_0 estaba hundiendo a DSpark. Sin este control el resultado no se puede atribuir."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-kv8-temp0",
+        "order": 141,
+        "displayName": "[bench ULTRA-Q] B8192 · U2048 · KV q8_0 · temp 0",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048,
+          "kv": "q8_0"
+        },
+        "extraArgOverrides": {
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q8_0",
+          "--temp": 0,
+          "--top-k": 0,
+          "--top-p": 0,
+          "--min-p": 0
+        },
+        "comment": "Las dos únicas variables que completaron y midieron bien, juntas y sin nada más. Ambas apuntan a lo mismo: que el draft se acepte más seguido."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-kv8-ds8",
+        "benchmark": false,
+        "order": 142,
+        "displayName": "[retirado] ULTRA-Q · KV q8_0 · DSpark 8",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048,
+          "kv": "q8_0"
+        },
+        "extraArgOverrides": {
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q8_0",
+          "--spec-draft-n-max": 8
+        },
+        "comment": "El barrido de n-max anterior corrió sobre KV q4_0, que ahora se sospecha degradaba la acceptance. Con mejor KV, un draft más largo debería pagar más — y si no, el techo no está en el largo."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-kv8-moe43",
+        "order": 143,
+        "displayName": "[bench ULTRA-Q] B8192 · U2048 · KV q8_0 · MoE 43",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048,
+          "kv": "q8_0"
+        },
+        "extraArgOverrides": {
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q8_0",
+          "--n-cpu-moe": 43
+        },
+        "comment": "El KV q8_0 cuesta VRAM (21 GB de 24) y MoE 43 la libera (11.5 GB). Juntos dicen si se puede tener el mejor tiempo sin quedar al borde de la VRAM."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-kv-k8v4",
+        "benchmark": true,
+        "order": 144,
+        "displayName": "[bench ULTRA-Q] B8192 · U2048 · KV K q8_0 / V q4_0",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048,
+          "kv": "q8_0"
+        },
+        "extraArgOverrides": {
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q4_0"
+        },
+        "comment": "Asimétrico: la atención es más sensible a la precisión de K que a la de V. Si casi todo el beneficio del q8_0 viene del K, esto lo conserva a mitad del costo de VRAM."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-tb16",
+        "benchmark": false,
+        "order": 136,
+        "displayName": "[retirado] ULTRA-Q · DSpark 5 · prefill 16 hilos",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048,
+          "threads": 8
+        },
+        "extraArgOverrides": {
+          "--threads-batch": 16
+        },
+        "comment": "Ryzen 7 7700 = 8 núcleos físicos / 16 hilos. Hoy corre 8 y 8. El decode con MoE en RAM está limitado por ancho de banda y no gana con SMT, pero el prefill es compute-bound y sí puede: deja el decode en 8 físicos y le da los 16 lógicos al batch."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-ds5-t6",
+        "benchmark": false,
+        "order": 137,
+        "displayName": "[retirado] ULTRA-Q · DSpark 5 · 6 hilos",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048,
+          "threads": 6
+        },
+        "extraArgOverrides": {
+          "--threads-batch": 8
+        },
+        "comment": "Con sólo 8 núcleos, los hilos de decode compiten con el driver y las transferencias PCIe de los expertos. Dejar dos libres a veces sube el decode; si baja, el cuello es memoria y no scheduling."
+      },
+      {
+        "id": "sys-bench-ultraq-b8192-u2048-best",
+        "order": 138,
+        "displayName": "[bench ULTRA-Q] B8192 · U2048 · combo (temp 0 + KV q8_0 + prefill 16)",
+        "runtime": {
+          "batch": 8192,
+          "ubatch": 2048,
+          "threads": 8,
+          "kv": "q8_0"
+        },
+        "extraArgOverrides": {
+          "--temp": 0,
+          "--top-k": 0,
+          "--top-p": 0,
+          "--min-p": 0,
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q8_0",
+          "--threads-batch": 16
+        },
+        "comment": "Techo: junta lo que midió bien en la primera tanda (KV q8_0 dio 212 s, el mejor tiempo; temp 0 completó) más el prefill con SMT. Sin mlock, que crashea acá. Si esto no le gana al baseline, ninguna pieza suelta lo hará."
+      },
+      {
+        "id": "sys-bench-ultraq-64k-nospec",
+        "benchmark": true,
+        "order": 145,
+        "displayName": "[bench ULTRA-Q] 64k · B2048/U512 · sin DSpark",
+        "runtime": { "ctx": 65536, "batch": 2048, "ubatch": 512 },
+        "extraArgOverrides": { "--spec-type": null, "--spec-draft-n-max": null },
+        "comment": "Control de contexto: misma receta sin speculative, pero con 64k para separar el costo del KV largo del costo del prefill."
+      },
+      {
+        "id": "sys-bench-ultraq-64k-kv8-nospec",
+        "benchmark": true,
+        "order": 146,
+        "displayName": "[bench ULTRA-Q] 64k · B2048/U512 · KV q8 · sin DSpark",
+        "runtime": { "ctx": 65536, "batch": 2048, "ubatch": 512, "kv": "q8_0" },
+        "extraArgOverrides": {
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q8_0",
+          "--spec-type": null,
+          "--spec-draft-n-max": null
+        },
+        "comment": "A/B de contexto y precisión KV en la receta Windows compatible; no presupone que la atención cuantizada o el q8 quepan igual en todas las GPU."
+      },
+      {
+        "id": "sys-bench-ultraq-reasoning-low",
+        "benchmark": true,
+        "order": 147,
+        "displayName": "[bench ULTRA-Q] 131k · reasoning low · sin DSpark",
+        "extraArgOverrides": { "--reasoning": "low", "--spec-type": null, "--spec-draft-n-max": null },
+        "comment": "A/B de thinking: sólo cambia el nivel de reasoning y mantiene GGUF, contexto, KV y offload."
+      },
+      {
+        "id": "sys-bench-ultraq-reasoning-medium",
+        "benchmark": true,
+        "order": 148,
+        "displayName": "[bench ULTRA-Q] 131k · reasoning medium · sin DSpark",
+        "extraArgOverrides": { "--reasoning": "medium", "--spec-type": null, "--spec-draft-n-max": null },
+        "comment": "A/B de thinking medio contra low/high; el score BCB y el tiempo deben interpretarse junto con los tokens de reasoning."
+      },
+      {
+        "id": "sys-bench-ultraq-reasoning-high",
+        "benchmark": true,
+        "order": 149,
+        "displayName": "[bench ULTRA-Q] 131k · reasoning high · sin DSpark",
+        "extraArgOverrides": { "--reasoning": "high", "--spec-type": null, "--spec-draft-n-max": null },
+        "comment": "A/B de thinking alto; no se promociona por velocidad si el presupuesto de reasoning domina el tiempo total."
+      }
+    ],
+    "comment": "Experimental y opt-in. DeepSeek V4 Flash 0731 UD-IQ3_S en cuatro shards (~116 GB), para RTX 3090 24 GB + 128 GB RAM. DSpark queda retirado de la receta llama.cpp en Windows; usar los controles sin speculative, con n-cpu-moe y KV como variables separadas. Reasoning effort high explícito evita el low implícito (prefijo vacío) y el budget 8192 corta colas patológicas sin impedir tareas largas. Sampling conservador: temp 0.60, top-p 0.95, top-k 20. 131k es el preset equilibrado. En Windows mmap es necesario: no-mmap intenta reservar ~99 GB de CUDA Host y falla."
+  },
+  {
+    "id": "sys-ultraq-dsv4-0731-lid-cuda",
+    "tier": "24GB-DeepSeek-V4-LID",
+    "order": 91,
+    "extra": true,
+    "benchmark": true,
+    "favorite": false,
+    "autoCompanion": false,
+    "displayName": "[experimental] DeepSeek V4 Flash · LID CUDA · f16 KV · 131k",
+    "minVramGb": 24,
+    "minRamGb": 120,
+    "cpuOk": false,
+    "folder": "DeepSeek-V4-Flash-0731-UD-IQ3_S",
+    "agentProfileId": "agent-maximo",
+    "reasoningEffort": "high",
+    "reasoningBudget": 8192,
+    "model": {
+      "repo": "unsloth/DeepSeek-V4-Flash-0731-GGUF",
+      "file": "DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+      "files": [
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00002-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00003-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00004-of-00004.gguf"
+      ],
+      "quant": "UD-IQ3_S"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 44,
+      "batch": 1024,
+      "ubatch": 512,
+      "threads": 0,
+      "kv": "f16",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--n-cpu-moe", "39",
+      "--fit-target", "512",
+      "--fit-ctx", "131072",
+      "--split-mode", "layer",
+      "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0",
+      "--repeat-penalty", "1.0", "--presence-penalty", "0.0",
+      "--no-context-shift", "--metrics", "--no-warmup", "--jinja",
+      "--threads-batch", "0", "--predict", "16384", "--parallel", "1",
+      "--reasoning", "off"
+    ],
+    "env": {
+      "GGML_CUDA_NO_PINNED": "1"
+    },
+    "binaryKind": "llama.cpp-deepseek-lid-cuda",
+    "contextPresets": [131072, 262144, 524288, 1048576],
+    "comment": "Opt-in para la rama spencer-zaid/llama.cpp deepseek-lid-cuda. La prueba local cargó los cuatro shards y recuperó exactamente a 131072 y 262144 de contexto en 2x RTX 3090 + 128 GB RAM, usando KV f16 y GGML_CUDA_NO_PINNED=1; el decode reportado fue 4,733/4,877 t/s. 524k terminó con conexión rechazada y 1M no llegó a health (la variante q4 de 1M agotó el timeout), por lo que 262k es el máximo verificado. No cambiar el perfil oficial q4_0: esta rama requiere KV f16."
+  },
+  {
+    "id": "sys-ultraq-dsv4-0731-iq3s-48gb",
+    "benchmark": true,
+    "tier": "48GB-DeepSeek-V4-Ultra",
+    "order": 89,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[48GB] ULTRA-Q · DeepSeek V4 Flash IQ3_S 131k · sin DSpark",
+    "minVramGb": 48,
+    "minRamGb": 120,
+    "cpuOk": false,
+    "folder": "DeepSeek-V4-Flash-0731-UD-IQ3_S",
+    "agentProfileId": "agent-maximo",
+    "reasoningEffort": "high",
+    "reasoningBudget": 8192,
+    "model": {
+      "repo": "unsloth/DeepSeek-V4-Flash-0731-GGUF",
+      "file": "DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+      "files": [
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00002-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00003-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00004-of-00004.gguf"
+      ],
+      "quant": "UD-IQ3_S"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 4096,
+      "ubatch": 1024,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "16384",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--cache-prompt",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,0",
+      "-ot",
+      "blk\\.(29|30|31|32|33|34|35|36)\\.ffn_(gate|up|down)_exps\\.weight=CUDA1,blk\\.[0-9]+\\.ffn_(gate|up|down)_exps\\.weight=CPU"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10228,
+    "contextPresets": [
+      65536,
+      131072,
+      196608,
+      262144,
+      393216
+    ],
+    "benchmarkVariants": [
+      { "id": "sys-bench-ultraq-48gb-64k-nospec", "benchmark": true, "order": 150, "displayName": "[bench 48GB ULTRA-Q] 64k · sin DSpark", "runtime": { "ctx": 65536 }, "extraArgOverrides": { "--spec-type": null, "--spec-draft-n-max": null }, "comment": "Control dual-GPU de contexto medio con el reparto de expertos validado." },
+      { "id": "sys-bench-ultraq-48gb-64k-kv8", "benchmark": true, "order": 151, "displayName": "[bench 48GB ULTRA-Q] 64k · KV q8 · sin DSpark", "runtime": { "ctx": 65536, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0", "--spec-type": null, "--spec-draft-n-max": null }, "comment": "A/B de precisión KV en el mismo reparto layer/tensor-split." },
+      { "id": "sys-bench-ultraq-48gb-reasoning-off", "benchmark": true, "order": 152, "displayName": "[bench 48GB ULTRA-Q] 131k · reasoning off · sin DSpark", "extraArgOverrides": { "--reasoning": "off", "--spec-type": null, "--spec-draft-n-max": null }, "comment": "Control de thinking off contra el presupuesto high del perfil base." },
+      { "id": "sys-bench-ultraq-48gb-reasoning-medium", "benchmark": true, "order": 153, "displayName": "[bench 48GB ULTRA-Q] 131k · reasoning medium · sin DSpark", "extraArgOverrides": { "--reasoning": "medium", "--spec-type": null, "--spec-draft-n-max": null }, "comment": "Control intermedio de thinking en la misma receta dual." },
+      { "id": "sys-bench-ultraq-48gb-reasoning-high", "benchmark": true, "order": 154, "displayName": "[bench 48GB ULTRA-Q] 131k · reasoning high · sin DSpark", "extraArgOverrides": { "--reasoning": "high", "--spec-type": null, "--spec-draft-n-max": null }, "comment": "Control de thinking alto; comparar por tiempo total y BCB." }
+    ],
+    "comment": "ULTRA-Q para 48 GB (2x RTX 3090, sin NVLink) + 128 GB RAM. Mismos shards IQ3_S que el tier de 24 GB. Todo MEDIDO contra el server real (b10228) con un prompt de 12.405 tokens, porque los prompts cortos dan falso verde: la config crasheaba recien en el primer prefill grande. LA REGLA QUE MANDA: los expertos residentes tienen que estar en la MISMA placa que su capa base. Con -sm layer -ts 1,1 llama.cpp parte las 44 capas base 0-21 en CUDA0 y 22-43 en CUDA1, asi que un -ot que mande los expertos de blk 27 a CUDA0 obliga a cruzar PCIe de ida y vuelta por token. Desalineado el decode BAJA al sumar residencia (5,16 t/s con 12 capas); alineado sube (9,55 t/s con las mismas 12). Contra una sola placa (--n-cpu-moe 39): prefill 160,5 t/s y decode 9,50 t/s. Este perfil, alineado y con DSpark: prefill 207,0 t/s (+29%). Sin DSpark: 194,9 t/s de prefill y 9,55 t/s de decode (ver sys-48-dsv4-nospec; el decode con spec no es medible con un prompt sintetico repetitivo porque la aceptacion del draft sale artificialmente mala, por eso conviven las dos variantes). VRAM 22,3 y 22,2 GB. Otras dos trampas del mismo path, las dos se ven como 'CUDA error: an illegal memory access' en el primer prefill: el regex del -ot tiene que nombrar ffn_(gate|up|down)_exps.weight (con ffn_.*_exps arrastra tensores que no deben moverse), y va --fit off, no --fit-target N. -ot es first-match-wins: las reglas por device van ANTES del catch-all =CPU. Limites medidos: 14 capas residentes (7+7) empeora (166 t/s / 8,76) porque deja la VRAM al borde; --no-mmap da OOM (IQ3_S son 116 GB y hay 128 de RAM); mlock crashea; --split-mode row ni carga ('device CUDA0 does not support split buffers'). La receta base salio de github.com/noonghunna/club-3090 (models/deepseek-v4-flash-0731/llama-cpp/compose/dual). OJO: los -ot nombran CUDA0/CUDA1, asi que este perfil asume exactamente dos placas. HALLAZGO HISTORICO: con b10228 y --tensor-split 1,1 (repartir tambien las capas base) se registro TEXTO CORRUPTO — con el prompt 'cual es la capital de Francia' contestaba '.#/!)'. En la campaña 2026-08-30, b10331 cargo el mismo reparto y devolvio exactamente 'Paris' en el smoke corto, aunque quedo mas lento que tensor-split 1,0; por eso no se cambia el default sin repetir HE0/HE20/BCB. Por eso las capas base van enteras en CUDA0 (--tensor-split 1,0) y CUDA1 recibe SOLO expertos. ThinkingCap y KAT no tienen el problema (entran enteros en VRAM, sin offload a CPU): es especifico de este modelo con expertos en RAM mas reparto de capas base. CONSECUENCIA HONESTA: asi configurado el dual no reemplaza automaticamente al tier de 24 GB; la nueva matriz nativa encontro 5,764 t/s con 8 capas y 6,171 t/s con 12 capas residentes, pero no es un decode con 128k poblados. La rama IQ3_S queda como referencia de calidad/escala; para recomendacion DeepSeek, usar sys-48-dsv4-nospec."
+  },
+  {
+    "id": "sys-48-dsv4-nospec",
+    "best": true,
+    "favorite": true,
+    "benchmark": true,
+    "tier": "48GB-DeepSeek-V4-Ultra",
+    "order": 88,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "SUPERIOR - DeepSeek V4-7-8-26",
+    "minVramGb": 48,
+    "minRamGb": 120,
+    "cpuOk": false,
+    "folder": "DeepSeek-V4-Flash-0731-UD-IQ3_S",
+    "agentProfileId": "agent-maximo",
+    "reasoningEffort": "high",
+    "reasoningBudget": 8192,
+    "model": {
+      "repo": "unsloth/DeepSeek-V4-Flash-0731-GGUF",
+      "file": "DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+      "files": [
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00002-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00003-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00004-of-00004.gguf"
+      ],
+      "quant": "UD-IQ3_S"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 4096,
+      "ubatch": 1024,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "16384",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--cache-prompt",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,0",
+      "-ot",
+      "blk\\.(29|30|31|32|33|34|35|36)\\.ffn_(gate|up|down)_exps\\.weight=CUDA1,blk\\.[0-9]+\\.ffn_(gate|up|down)_exps\\.weight=CPU",
+      "--repeat-last-n",
+      "64"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10228,
+    "contextPresets": [
+      65536,
+      131072,
+      196608,
+      262144
+    ],
+    "benchmarkVariants": [
+      {
+        "id": "sys-48-dsv4-nospec-more-experts-gpu0",
+        "order": 89,
+        "benchmark": false,
+        "displayName": "[experimental DeepSeek] más expertos GPU0 · 1,0 · KV q4",
+        "extraArgOverrides": {
+          "-ot": "blk\\.(0|1|2|3|4|5|6|7|8)\\.ffn_(gate|up|down)_exps\\.weight=CUDA0,blk\\.(29|30|31|32|33|34|35|36)\\.ffn_(gate|up|down)_exps\\.weight=CUDA1,blk\\.[0-9]+\\.ffn_(gate|up|down)_exps\\.weight=CPU"
+        },
+        "comment": "Variante experimental: residentes en CUDA0 los expertos de las capas 0–8 y en CUDA1 los expertos 29–36. Se compara contra la configuración base 1,0; puede desbordar CUDA0 o cruzar el equilibrio de capas."
+      },
+      {
+        "id": "sys-48-dsv4-nospec-split11-kv4",
+        "order": 90,
+        "benchmark": false,
+        "displayName": "[experimental DeepSeek] reparto 1,1 · KV q4",
+        "extraArgOverrides": {
+          "--tensor-split": "1,1"
+        },
+        "comment": "Variante experimental de reparto alternativo: divide capas base entre CUDA0/CUDA1 y conserva KV q4_0. La salida puede ser inválida según la alineación expertos/capa; se incluye precisamente para medirlo y excluirla por calidad si falla."
+      }
+    ],
+    "comment": "Control de sys-ultraq-dsv4-0731-iq3s-48gb: identico pero SIN speculative decoding. Existe porque el decode con DSpark no se puede medir con un prompt sintetico (la aceptacion del draft sale artificialmente mala) y aca si: prefill 194,9 t/s y decode 9,55 t/s contra los 160,5 / 9,50 de una sola placa. Con DSpark el prefill sube a 207,0 pero el decode hay que medirlo con trabajo real. Corre este y el otro en el mismo benchmark y compara: si tu carga es de contexto largo gana el de DSpark, si es de generacion larga puede ganar este. Rige la misma regla de alineacion expertos/capa base descrita en el perfil hermano. HALLAZGO HISTORICO: con b10228 y --tensor-split 1,1 (repartir tambien las capas base) se registro TEXTO CORRUPTO — con el prompt 'cual es la capital de Francia' contestaba '.#/!)'. En la campaña 2026-08-30, b10331 cargo el mismo reparto y devolvio exactamente 'Paris' en el smoke corto, aunque quedo mas lento que tensor-split 1,0; por eso no se cambia el default sin repetir HE0/HE20/BCB. Por eso las capas base van enteras en CUDA0 (--tensor-split 1,0) y CUDA1 recibe SOLO expertos. ThinkingCap y KAT no tienen el problema (entran enteros en VRAM, sin offload a CPU): es especifico de este modelo con expertos en RAM mas reparto de capas base. CONSECUENCIA HONESTA: asi configurado el dual NO le gana al tier de 24 GB en la medicion historica; la nueva matriz nativa encontro 5,764 t/s con 8 capas y 6,171 t/s con 12 capas residentes, pero no es un decode con 128k poblados. Este perfil queda BEST dentro de DeepSeek por calidad historica BCB 8/8 frente a 2–4/8 de Fusion; antirez conserva el mejor TPS BCB historico."
+  },
+  {
+    "id": "sys-48-thinkingcap-131k",
+    "tier": "48GB-Qwen-Vision",
+    "order": 80,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[48GB] MAX-Q · ThinkingCap Qwen3.6-27B 131k · visión",
+    "minVramGb": 48,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "ThinkingCap-Qwen3.6-27B-GGUF",
+    "agentProfileId": "agent-maximo",
+    "model": {
+      "repo": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF",
+      "file": "ThinkingCap-Qwen3.6-27B-Q4_K_M.gguf",
+      "mmprojFile": "mmproj-ThinkingCap-Qwen3.6-27B-f16.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 2048,
+      "ubatch": 512,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q8_0",
+      "--cache-type-v",
+      "q8_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--cache-prompt",
+      "--cache-reuse",
+      "512",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1"
+    ],
+    "binaryKind": "official",
+    "contextPresets": [
+      32768,
+      65536,
+      131072,
+      196608
+    ],
+    "comment": "ThinkingCap 27B repartido entre las dos placas. Entra ENTERO en VRAM, asi que no hay offload de expertos a RAM y no aplica ninguna de las trampas del perfil de DeepSeek: alcanza con -sm layer -ts 1,1. Lo que compran los 48 GB aca no es velocidad de pesos sino KV: q8_0 en vez del q4_0 que exige el tier de 24 GB, mas contexto, y batch 2048/512 en vez de 512/64. Medido con un prompt de 12.010 tokens: prefill 1.818,9 t/s y decode 34,9 t/s, con 12,6 y 11,9 GB usados (sobra la mitad de la VRAM). mmproj cargado, o sea vision disponible. Comparar contra sys-maxq (24 GB, KV q4_0) para ver cuanto aporta el KV mas fino. CONTROL contra una sola placa (mismo prompt, mismo ctx, mismo KV): single da 952,3 de prefill y 29,5 de decode contra los 1.818,9 / 34,9 de aca, o sea el reparto gana +91% de prefill. El motivo es que el modelo NO entra comodo en 24 GB: en single quedan 22,3 GB usados de 24 y el KV pelea contra los pesos. Vale aclararlo porque la guia dual de club-3090 recomienda lo contrario (quedarse en una placa y bajar el KV antes que repartir), y esa regla vale cuando el modelo entra holgado, no aca. Declara minimumBinaryBuild 10228 a proposito: sin eso el selector eligio una build vieja (b9045) que arranca pero avisa 'no usable GPU found ... compiled without GPU support' y el perfil entero falla con server-load. Ese es ademas el binario con el que se midio todo lo de este comment.",
+    "minimumBinaryBuild": 10228,
+    "vision": true
+  },
+  {
+    "id": "sys-48-thinkingcap-196k",
+    "tier": "48GB-Qwen-Vision",
+    "order": 81,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[48GB] MAX-Q · ThinkingCap Qwen3.6-27B 196k · visión",
+    "minVramGb": 48,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "ThinkingCap-Qwen3.6-27B-GGUF",
+    "agentProfileId": "agent-maximo",
+    "model": {
+      "repo": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF",
+      "file": "ThinkingCap-Qwen3.6-27B-Q4_K_M.gguf",
+      "mmprojFile": "mmproj-ThinkingCap-Qwen3.6-27B-f16.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 196608,
+      "gpuLayers": 999,
+      "batch": 2048,
+      "ubatch": 512,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q8_0",
+      "--cache-type-v",
+      "q8_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--cache-prompt",
+      "--cache-reuse",
+      "512",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1"
+    ],
+    "binaryKind": "official",
+    "contextPresets": [
+      32768,
+      65536,
+      131072,
+      196608
+    ],
+    "comment": "Igual que sys-48-thinkingcap-131k pero con 196k de contexto: prefill 1.774,8 t/s y decode 36,7 t/s con el mismo prompt, 14,2 y 13,5 GB. El contexto sale casi gratis, asi que este es el que conviene salvo que el benchmark diga lo contrario. 196k es el TECHO MEDIDO: a 262144 el server muere con 'illegal memory access' pese a sobrar VRAM, asi que no subirlo sin volver a medir. Declara minimumBinaryBuild 10228 a proposito: sin eso el selector eligio una build vieja (b9045) que arranca pero avisa 'no usable GPU found ... compiled without GPU support' y el perfil entero falla con server-load. Ese es ademas el binario con el que se midio todo lo de este comment.",
+    "benchmarkVariants": [
+      {
+        "id": "sys-bench-48-tc-mtp",
+        "benchmark": true,
+        "order": 84,
+        "displayName": "[bench 48GB MAX-Q] MTP 4 · 196k · visión",
+        "extraArgOverrides": {
+          "--spec-type": "draft-mtp",
+          "--spec-draft-n-max": 4
+        },
+        "comment": "MEDIDO y es el HALLAZGO de la familia: MTP casi DUPLICA el decode, 67,9 t/s contra los 36,7 del base, con el prefill practicamente igual (1.616,8 vs 1.774,8). Si el benchmark confirma la calidad, este reemplaza al base."
+      },
+      {
+        "id": "sys-bench-48-tc-mtp-131k",
+        "order": 85,
+        "benchmark": true,
+        "displayName": "[bench 48GB MAX-Q] MTP 4 · 131k · visión",
+        "runtime": {
+          "ctx": 131072
+        },
+        "extraArgOverrides": {
+          "--spec-type": "draft-mtp",
+          "--spec-draft-n-max": 4
+        },
+        "comment": "MEDIDO: 1.603,9 t/s de prefill y 67,1 t/s de decode. Es el de MTP con la mitad de contexto: empata dentro del ruido, asi que sirve para confirmar que el contexto extra no cuesta nada."
+      },
+      {
+        "id": "sys-bench-48-tc-kv4",
+        "benchmark": true,
+        "order": 86,
+        "displayName": "[bench 48GB MAX-Q] KV q4_0 · 196k · visión",
+        "runtime": {
+          "kv": "q4_0"
+        },
+        "extraArgOverrides": {
+          "--cache-type-k": "q4_0",
+          "--cache-type-v": "q4_0"
+        },
+        "comment": "El KV grueso que usa el tier de 24 GB por obligacion. Aca es opcional, asi que mide exactamente cuanta calidad compra el q8_0 del base: si el 8-pack empata, el q4_0 libera VRAM para contexto."
+      },
+      {
+        "id": "sys-bench-48-tc-b4096",
+        "benchmark": true,
+        "order": 87,
+        "displayName": "[bench 48GB MAX-Q] B4096 · U1024 · 196k · visión",
+        "runtime": {
+          "batch": 4096,
+          "ubatch": 1024
+        },
+        "comment": "Batch grande contra los 2048/512 del base. Con el modelo entero en VRAM y la mitad libre, el prefill deberia subir; es la palanca mas barata que queda."
+      }
+    ],
+    "minimumBinaryBuild": 10228,
+    "vision": true
+  },
+  {
+    "id": "sys-48-katcoder-262k",
+    "best": true,
+    "favorite": true,
+    "benchmark": false,
+    "tier": "48GB-KAT",
+    "order": 82,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "FAST - KAT2-Coder-7-8-26",
+    "minVramGb": 48,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "KAT-Coder-V2.5-Dev-Q4_K_M-GGUF",
+    "agentProfileId": "agent-maximo",
+    "chatTemplate": "kat-coder-tools.jinja",
+    "model": {
+      "repo": "bartowski/Kwaipilot_KAT-Coder-V2.5-Dev-GGUF",
+      "file": "Kwaipilot_KAT-Coder-V2.5-Dev-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 262144,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 64,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q8_0",
+      "--cache-type-v",
+      "q8_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "off",
+      "--cache-prompt",
+      "--cache-reuse",
+      "512",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1",
+      "--skip-chat-parsing"
+    ],
+    "binaryKind": "official",
+    "contextPresets": [
+      32768,
+      65536,
+      131072,
+      262144
+    ],
+    "comment": "KAT-Coder V2.5-Dev (35B-A3B, ~3 B activos) entero en las dos placas, sin offload a RAM. Thinking queda apagado por defecto para uso diario y benchmarks reproducibles; se puede activar con la variante explícita de reasoning. Es de lejos el mas rapido de los tres modelos del tier: prefill 4.134,7 t/s y decode 113,5 t/s con el mismo prompt de 12.010 tokens, usando 14,3 y 13,5 GB. Mantiene 262k de contexto, pero usa batch 512/ubatch 64: la combinación 262k/B2048/U512 provocó un acceso ilegal CUDA reproducible en flash attention durante HE20. El tier de 24 GB (sys-vram-20) lo corre con 30 capas y 262k de contexto. Declara minimumBinaryBuild 10228 a proposito.",
+    "benchmarkVariants": [
+      {
+        "id": "sys-bench-48-kat-f16",
+        "order": 88,
+        "benchmark": false,
+        "displayName": "[bench 48GB KAT] KV q8_0 · 262k (cap de política)",
+        "runtime": {
+          "kv": "q8_0"
+        },
+        "extraArgOverrides": {
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q8_0"
+        },
+        "comment": "Retirada el 2026-08-21: la corrida BCB quedó en timeout/infraestructura y el control KAT de usuario ya cubre el GGUF con resultado parcial válido. Se conserva el ID e historial; no volver a encolar sin una huella nueva."
+      },
+      {
+        "id": "sys-bench-48-kat-kv4",
+        "order": 89,
+        "displayName": "[bench 48GB KAT] KV q4_0 · 262k",
+        "runtime": {
+          "kv": "q4_0"
+        },
+        "extraArgOverrides": {
+          "--cache-type-k": "q4_0",
+          "--cache-type-v": "q4_0"
+        },
+        "comment": "El extremo cuantizado. Con q4_0 y q8_0 se compara el costo del KV sin usar precisiones superiores a la política del catálogo."
+      },
+      {
+        "id": "sys-bench-48-kat-b4096",
+        "order": 95,
+        "displayName": "[bench 48GB KAT] B4096 · U1024 · 262k",
+        "runtime": {
+          "batch": 4096,
+          "ubatch": 1024
+        },
+        "comment": "Batch grande contra los 2048/512 del base, con VRAM de sobra para el compute buffer."
+      },
+      {
+        "id": "sys-bench-48-kat-noreason",
+        "order": 96,
+        "displayName": "[bench 48GB KAT] sin reasoning · 262k",
+        "extraArgOverrides": {
+          "--reasoning": "off"
+        },
+        "comment": "KAT corre con --reasoning on: piensa antes de responder. Apagarlo cambia el wall-time mucho mas que cualquier flag de VRAM, a costa de las tareas que necesitan razonar. Es LA comparacion que decide si conviene para trabajo diario."
+      },
+      {
+        "id": "sys-bench-48-kat-ngram",
+        "order": 97,
+        "displayName": "[bench 48GB KAT] ngram · 262k",
+        "extraArgOverrides": {
+          "--spec-type": "ngram-mod",
+          "--spec-ngram-mod-n-match": "24",
+          "--spec-ngram-mod-n-min": "16",
+          "--spec-ngram-mod-n-max": "64"
+        },
+        "comment": "Copia ngram-only para comparar repetición de código contra el KAT base, que no incluye drafter MTP."
+      }
+    ],
+    "minimumBinaryBuild": 10228
+  },
+  {
+    "id": "sys-48-katcoder-131k",
+    "tier": "48GB-KAT",
+    "order": 83,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[48GB] KAT Coder 2.5 35B-A3B Q4_K_M · 131k",
+    "minVramGb": 48,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "KAT-Coder-V2.5-Dev-Q4_K_M-GGUF",
+    "agentProfileId": "agent-maximo",
+    "model": {
+      "repo": "bartowski/Kwaipilot_KAT-Coder-V2.5-Dev-GGUF",
+      "file": "Kwaipilot_KAT-Coder-V2.5-Dev-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 2048,
+      "ubatch": 512,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q8_0",
+      "--cache-type-v",
+      "q8_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "on",
+      "--cache-prompt",
+      "--cache-reuse",
+      "512",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1"
+    ],
+    "binaryKind": "official",
+    "contextPresets": [
+      32768,
+      65536,
+      131072,
+      262144
+    ],
+    "comment": "Igual que sys-48-katcoder-262k con la mitad de contexto: prefill 4.164,8 t/s y decode 115,4 t/s, 12,9 y 12,1 GB. La diferencia contra el de 262k esta dentro del ruido (~1%), asi que este existe solo para confirmarlo en tu benchmark: si empatan, quedate con el de 262k que te da el doble de contexto gratis. CONTROL contra una sola placa (mismo prompt, ctx y KV): single da 2.605,6 de prefill y 106,7 de decode contra los 4.164,8 / 115,4 de aca (+60% de prefill). En single la VRAM queda en 23,0 GB de 24, asi que 262k directamente no entra: el reparto es lo que habilita los contextos grandes de este tier. Declara minimumBinaryBuild 10228 a proposito: sin eso el selector eligio una build vieja (b9045) que arranca pero avisa 'no usable GPU found ... compiled without GPU support' y el perfil entero falla con server-load. Ese es ademas el binario con el que se midio todo lo de este comment.",
+    "minimumBinaryBuild": 10228
+  },
+  {
+    "id": "sys-kat3-mtp-262k",
+    "tier": "48GB-KAT",
+    "order": 98,
+    "extra": true,
+    "benchmark": false,
+    "autoCompanion": false,
+    "displayName": "EXPERIMENTAL - KAT3-Coder-7-8-26 · APEX-MTP · 262k",
+    "minVramGb": 24,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "KAT-Coder-V2.5-Dev-APEX-MTP-GGUF",
+    "agentProfileId": "agent-maximo",
+    "model": {
+      "repo": "gbuzhf/KAT-Coder-V2.5-Dev-APEX-MTP-GGUF",
+      "file": "Kwaipilot_KAT-Coder-V2.5-Dev-APEX-MTP-I-Compact.gguf",
+      "quant": "APEX I-Compact"
+    },
+    "mmproj": null,
+    "chatTemplate": "kat-coder-tools.jinja",
+    "runtime": {
+      "ctx": 262144,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 64,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k", "q8_0",
+      "--cache-type-v", "q8_0",
+      "--fit", "off",
+      "--temp", "0.60",
+      "--top-p", "0.95",
+      "--top-k", "20",
+      "--min-p", "0.0",
+      "--repeat-penalty", "1.0",
+      "--presence-penalty", "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch", "16",
+      "--predict", "8192",
+      "--parallel", "1",
+      "--reasoning", "off",
+      "--cache-prompt",
+      "--cache-reuse", "512",
+      "--split-mode", "layer",
+      "--tensor-split", "1,1",
+      "--spec-type", "draft-mtp",
+      "--spec-draft-n-max", "4",
+      "--skip-chat-parsing"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10262,
+    "contextPresets": [32768, 65536, 131072, 262144],
+    "comment": "KAT3 experimental derived from KAT2: APEX I-Compact with embedded MTP, q8_0 KV and the same 262k/512/64 dual-GPU runtime. Text-only: no mmproj is attached because the upstream KAT APEX-MTP GGUF does not provide working vision support through llama.cpp. Requires downloading the GGUF before HE0; validate HE0 first, then HE20 and BCB."
+  },
+  {
+    "id": "sys-48-katcoder-mtp-vision",
+    "tier": "48GB-KAT-Vision",
+    "order": 100,
+    "extra": true,
+    "benchmark": false,
+    "autoCompanion": false,
+    "displayName": "[experimental 48GB] KAT APEX-MTP + Qwen mmproj · 32k",
+    "minVramGb": 48,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "KAT-Coder-V2.5-Dev-MTP-APEX-GGUF",
+    "agentProfileId": "agent-maximo",
+    "chatTemplate": "kat-coder-tools.jinja",
+    "model": {
+      "repo": "ursb01/KAT-Coder-V2.5-Dev-MTP-APEX-GGUF",
+      "file": "KAT-Coder-V2.5-Dev-MTP-APEX-i-quality-v2.gguf",
+      "mmprojRepo": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF",
+      "mmprojFile": "mmproj-F16.gguf",
+      "quant": "APEX I-Quality-v2"
+    },
+    "runtime": {
+      "ctx": 32768,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 64,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k", "q8_0",
+      "--cache-type-v", "q8_0",
+      "--fit", "off",
+      "--temp", "0.60",
+      "--top-p", "0.95",
+      "--top-k", "20",
+      "--min-p", "0.0",
+      "--repeat-penalty", "1.0",
+      "--presence-penalty", "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch", "16",
+      "--predict", "8192",
+      "--parallel", "1",
+      "--reasoning", "off",
+      "--cache-prompt",
+      "--cache-reuse", "512",
+      "--split-mode", "layer",
+      "--tensor-split", "1,1",
+      "--skip-chat-parsing"
+    ],
+    "spec": {
+      "type": "draft-mtp",
+      "draftNMax": 2
+    },
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10331,
+    "contextPresets": [32768],
+    "benchmarkVariants": [
+      {
+        "id": "sys-bench-48-kat-mtp-vision-mtp3",
+        "order": 101,
+        "benchmark": true,
+        "displayName": "[bench 48GB] KAT APEX-MTP + visión · MTP3 · 32k",
+        "spec": {
+          "type": "draft-mtp",
+          "draftNMax": 3
+        },
+        "comment": "Misma huella que el perfil base con MTP3; comparar aceptación y decode contra MTP2."
+      },
+      {
+        "id": "sys-bench-48-kat-mtp-vision-nospec",
+        "order": 102,
+        "benchmark": true,
+        "displayName": "[bench 48GB] KAT APEX-MTP + visión · sin MTP · 32k",
+        "spec": null,
+        "comment": "Control de visión sin speculative decoding. El GGUF conserva el cabezal MTP, pero no se activa."
+      }
+    ],
+    "comment": "Opt-in: injerto comunitario MTP sobre KAT y mmproj-F16 de Qwen3.6-35B-A3B. El KAT oficial es text-only; la visión puede degradarse tras el fine-tune y la aceptación MTP puede ser baja porque el cabezal proviene del trunk base. La verificación target mantiene la corrección: una mala aceptación sólo reduce velocidad. Descargar ambos archivos en esta carpeta y validar primero texto, luego imagen sin MTP y finalmente imagen + MTP2/MTP3.",
+    "vision": true
+  },
+  {
+    "id": "sys-48-katcoder-393k-nographs",
+    "tier": "48GB-KAT",
+    "order": 99,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[48GB] KAT Coder 2.5 35B-A3B Q4_K_M · 393k · sin CUDA graphs",
+    "minVramGb": 48,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "KAT-Coder-V2.5-Dev-Q4_K_M-GGUF",
+    "agentProfileId": "agent-maximo",
+    "model": {
+      "repo": "bartowski/Kwaipilot_KAT-Coder-V2.5-Dev-GGUF",
+      "file": "Kwaipilot_KAT-Coder-V2.5-Dev-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 393216,
+      "gpuLayers": 999,
+      "batch": 2048,
+      "ubatch": 512,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q8_0",
+      "--cache-type-v",
+      "q8_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "on",
+      "--cache-prompt",
+      "--cache-reuse",
+      "512",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1"
+    ],
+    "binaryKind": "official",
+    "contextPresets": [
+      131072,
+      262144,
+      393216
+    ],
+    "comment": "Contexto maximo de KAT: 393216. A ese contexto el server crashea con 'CUDA error: invalid program counter' apenas entra el primer prompt, y lo que lo destraba es apagar los CUDA graphs por env (GGML_CUDA_DISABLE_GRAPHS=1). No sale gratis y por eso es un perfil aparte y no el default: medido sobre KAT 262k con KV f16, apagar los graphs baja el decode de 123,9 a 97,7 t/s (-21%) aunque sube un poco el prefill (4.303,1 a 4.479,1). A 393k queda en 4.058,5 de prefill y 77,7 de decode. O sea: usalo cuando de verdad necesites la ventana de 393k, y quedate en el de 262k para trabajo normal. El KV va en q8_0 y no f16 porque a 393k el f16 no entra. Declara minimumBinaryBuild 10228 a proposito: sin eso el selector eligio una build vieja (b9045) que arranca pero avisa 'no usable GPU found ... compiled without GPU support' y el perfil entero falla con server-load. Ese es ademas el binario con el que se midio todo lo de este comment.",
+    "env": {
+      "GGML_CUDA_DISABLE_GRAPHS": "1"
+    },
+    "minimumBinaryBuild": 10228
+  },
+  {
+    "id": "sys-48-dsv4-iq2m",
+    "tier": "48GB-DeepSeek-V4-Ultra",
+    "order": 87,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[48GB] [descartado calidad] DeepSeek V4 Flash UD-IQ2_M 131k",
+    "minVramGb": 48,
+    "minRamGb": 96,
+    "cpuOk": false,
+    "folder": "DeepSeek-V4-Flash-0731-UD-IQ2_M",
+    "agentProfileId": "agent-maximo",
+    "reasoningEffort": "high",
+    "reasoningBudget": 8192,
+    "model": {
+      "repo": "unsloth/DeepSeek-V4-Flash-0731-GGUF",
+      "file": "DeepSeek-V4-Flash-0731-UD-IQ2_M-00001-of-00003.gguf",
+      "files": [
+        "UD-IQ2_M/DeepSeek-V4-Flash-0731-UD-IQ2_M-00001-of-00003.gguf",
+        "UD-IQ2_M/DeepSeek-V4-Flash-0731-UD-IQ2_M-00002-of-00003.gguf",
+        "UD-IQ2_M/DeepSeek-V4-Flash-0731-UD-IQ2_M-00003-of-00003.gguf"
+      ],
+      "quant": "UD-IQ2_M"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 4096,
+      "ubatch": 1024,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "16384",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--cache-prompt",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,0",
+      "-ot",
+      "blk\\.(25|26|27|28|29|30|31|32|33|34|35|36)\\.ffn_(gate|up|down)_exps\\.weight=CUDA1,blk\\.[0-9]+\\.ffn_(gate|up|down)_exps\\.weight=CPU"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10228,
+    "contextPresets": [
+      65536,
+      131072,
+      196608,
+      262144,
+      393216
+    ],
+    "comment": "MISMO modelo que el perfil base pero en UD-IQ2_M (90,9 GB contra los 116 del IQ3_S). SIN MEDIR: hay que descargar ~91 GB y correr el benchmark. Existe porque es la UNICA palanca que puede mover el decode de verdad. El decode de ~9,5 t/s del IQ3_S no lo limita la GPU: 32 de las 44 capas tienen sus expertos en RAM y el cuello es el ancho de banda DDR5, por eso no lo movieron ni mlock, ni el batch, ni el reparto. Lo unico que lo mueve es sacar expertos de la RAM, y para eso hay que achicar el modelo. La cuenta: con IQ3_S entran 12 capas de expertos en los 48 GB; con IQ2_M el experto por capa pasa de ~2,2 a ~1,7 GB y entran ~16, y ademas cada token lee 22% menos bytes de RAM. Por eso este perfil reside 12 capas de expertos en CUDA1 (blk 25-36) contra las 8 del IQ3_S: el experto mas chico deja entrar mas en la misma placa. EL COSTO ES CALIDAD y es real: DeepSeek V4 ya viene en 4-bit de fabrica, asi que IQ2 es cuantizar sobre cuantizado. Las opiniones publicas estan divididas — quien publico el setup de 25,8 t/s en una sola 3090 Ti dice no haber visto perdida en prosa, y varios sostienen que IQ2 arruina el trabajo agentico largo (loops en generacion larga). Correlo contra el perfil IQ3_S en el mismo benchmark y decidilo con datos. Si aparecen loops, antes de culpar al quant probar una build cuda13.3: hay reportes de que el bug de looping es de CUDA 13.2 y nuestro binario es cuda12.4. SALIDA VERIFICADA: con --tensor-split 1,1 (repartir tambien las capas base) este modelo devuelve TEXTO CORRUPTO — con el prompt 'cual es la capital de Francia' contesta '.#/!)'. No crashea ni avisa: responde basura con metricas de velocidad perfectas, que es la peor forma de fallar. Por eso las capas base van enteras en CUDA0 (--tensor-split 1,0) y CUDA1 recibe SOLO expertos. ThinkingCap y KAT no tienen el problema (entran enteros en VRAM, sin offload a CPU): es especifico de este modelo con expertos en RAM mas reparto de capas base. CONSECUENCIA HONESTA: asi configurado el dual NO le gana al tier de 24 GB (113,9 t/s de prefill y 7,58 de decode contra 160,5 / 9,50 en una sola placa). Existe para poder medir IQ2_M y para el dia que llama.cpp arregle el reparto; si buscas velocidad hoy, usa el perfil de 24 GB."
+  },
+  {
+    "id": "sys-48-thinkingcap-mtp",
+    "best": true,
+    "favorite": true,
+    "benchmark": false,
+    "tier": "48GB-Qwen-Vision",
+    "order": 79,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "BALANCE - ThinkingCap+MTP-7-8-26",
+    "minVramGb": 48,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "ThinkingCap-Qwen3.6-27B-GGUF",
+    "agentProfileId": "agent-maximo",
+    "model": {
+      "repo": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF",
+      "file": "ThinkingCap-Qwen3.6-27B-Q4_K_M.gguf",
+      "mmprojFile": "mmproj-ThinkingCap-Qwen3.6-27B-f16.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 64,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q8_0",
+      "--cache-type-v",
+      "q8_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--cache-prompt",
+      "--cache-reuse",
+      "512",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1",
+      "--spec-type",
+      "draft-mtp",
+      "--spec-draft-n-max",
+      "4"
+    ],
+    "binaryKind": "official",
+    "contextPresets": [
+      32768,
+      65536,
+      131072,
+      196608
+    ],
+    "comment": "El ganador del barrido del 2026-08-07: 10/10 en el set de 4 ejes (conocimiento de nicho, contexto largo 8k/24k, entidades cruzadas, instrucciones anidadas), la unica tarea que separo a alguien —reescritura con 4 restricciones que interactuan— la gano solo el. KAT y DeepSeek sacaron 9/10. MTP da +68% de decode sin costo de calidad. En este perfil se conserva MTP4, KV q8_0 y vision, pero se limita a 131k/B512/U64: la combinacion 196k/B2048/U512 produjo illegal memory access durante la carga en CUDA. El contexto 196k queda archivado hasta validar otra build.",
+    "minimumBinaryBuild": 10228,
+    "vision": true
+  },
+  {
+    "id": "sys-48-fablefusion-q6-mtp",
+    "favorite": true,
+    "tier": "48GB-Qwen-Vision",
+    "order": 78,
+    "extra": true,
+    "autoCompanion": false,
+    "benchmark": false,
+    "displayName": "[experimental 48GB] Fable Fusion Qwen3.6-27B Q6 · MTP · visión",
+    "minVramGb": 48,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "Qwen3.6-27B-Fable-Fusion-Q6",
+    "agentProfileId": "agent-maximo",
+    "model": {
+      "repo": "DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF",
+      "file": "Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q6_K.gguf",
+      "mmprojRepo": "DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF",
+      "mmprojFile": "mmproj-F16.gguf",
+      "quant": "Q6_K"
+    },
+    "runtime": {
+      "ctx": 32768,
+      "gpuLayers": 999,
+      "batch": 2048,
+      "ubatch": 512,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q8_0",
+      "--cache-type-v",
+      "q8_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1",
+      "--spec-type",
+      "draft-mtp",
+      "--spec-draft-n-max",
+      "3"
+    ],
+    "binaryKind": "official",
+    "contextPresets": [
+      32768,
+      65536,
+      120000
+    ],
+    "benchmarkVariants": [
+      {
+        "id": "sys-bench-48-fable-mtp1",
+        "order": 77,
+        "displayName": "[bench 48GB Fable Q6] MTP 1 · 120k",
+        "extraArgOverrides": {
+          "--spec-draft-n-max": "1"
+        }
+      },
+      {
+        "id": "sys-bench-48-fable-mtp3",
+        "order": 76,
+        "displayName": "[bench 48GB Fable Q6] MTP 3 · 120k",
+        "extraArgOverrides": {
+          "--spec-draft-n-max": "3"
+        }
+      },
+      {
+        "id": "sys-bench-48-fable-kv-q8",
+        "order": 75,
+        "displayName": "[bench 48GB Fable Q6] KV q8/q8 · MTP 3 · 120k",
+        "extraArgOverrides": {
+          "--cache-type-k": "q8_0",
+          "--cache-type-v": "q8_0"
+        }
+      },
+      {
+        "id": "sys-bench-48-fable-nospec",
+        "order": 74,
+        "displayName": "[bench 48GB Fable Q6] sin MTP · 120k",
+        "extraArgOverrides": {
+          "--spec-type": null,
+          "--spec-draft-n-max": null
+        }
+      }
+    ],
+    "comment": "Perfil opt-in para el Q6_K MTP del post de LocalLLM. Descarga tambien mmproj-F16. En 2x RTX 3090, b10228 dio salida corrupta incluso sin speculator; b10331 corrigio la compatibilidad. El benchmark instruct de 10 tareas x3 dio 26/30 contra 12/30 de ThinkingCap Q4 MTP3. El barrido corto favorecio MTP4, pero BigCodeBench-Hard sostenido expuso CUDA illegal memory access a 120k con MTP4 y MTP3. La configuracion estable 32k/MTP3 completo dos pasadas identicas de 3/8 (6/16, 37,5%) a ~50,3 t/s y queda como base. La política limita ambos lados del KV a q8_0 o menor; mmproj-F16 se conserva porque es el proyector auxiliar de visión. split-mode tensor crashea b10228, por eso usa layer.",
+    "minimumBinaryBuild": 10331,
+    "vision": true
+  },
+  {
+    "id": "sys-48-hybrid-tc-kat",
+    "tier": "48GB-Hybrid",
+    "order": 78,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[hybrid 48GB] ThinkingCap+MTP planifica → KAT-Coder ejecuta",
+    "minVramGb": 48,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "KAT-Coder-V2.5-Dev-Q4_K_M-GGUF",
+    "agentProfileId": "agent-maximo",
+    "model": {
+      "repo": "bartowski/Kwaipilot_KAT-Coder-V2.5-Dev-GGUF",
+      "file": "Kwaipilot_KAT-Coder-V2.5-Dev-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 262144,
+      "gpuLayers": 999,
+      "batch": 2048,
+      "ubatch": 512,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q8_0",
+      "--cache-type-v",
+      "q8_0",
+      "--fit",
+      "off",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "on",
+      "--cache-prompt",
+      "--cache-reuse",
+      "512",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1"
+    ],
+    "binaryKind": "official",
+    "contextPresets": [
+      32768,
+      65536,
+      131072,
+      262144
+    ],
+    "comment": "Junta los dos ganadores del barrido: ThinkingCap+MTP planifica (10/10, la unica tarea que separo a alguien fue suya) y KAT-Coder ejecuta (9/10 pero a 110 t/s contra 60). La idea es pagar el modelo mas capaz solo en la parte que decide, y el rapido en la parte que escribe codigo, que es donde se van los tokens. Secuencial y no paralelo: los dos entran comodos en 48 GB pero no a la vez con 262k de contexto cada uno, asi que se turnan. DeepSeek quedo afuera del hibrido a proposito: empato con KAT en las 10 tareas y va 15x mas lento.",
+    "minimumBinaryBuild": 10228,
+    "plannerProfileId": "sys-48-thinkingcap-mtp",
+    "hybridMode": "sequential"
+  },
+  {
+    "id": "sys-ultraq-dsv4-0731-iq3s-dspark-external",
+    "benchmark": false,
+    "tier": "24GB-DeepSeek-V4-Ultra",
+    "order": 104,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[experimental ultra] ULTRA-Q · DSpark externo · IQ3_S 131k",
+    "minVramGb": 24,
+    "minRamGb": 120,
+    "cpuOk": false,
+    "folder": "DeepSeek-V4-Flash-0731-UD-IQ3_S",
+    "agentProfileId": "agent-maximo",
+    "reasoningEffort": "high",
+    "reasoningBudget": 8192,
+    "model": {
+      "repo": "unsloth/DeepSeek-V4-Flash-0731-GGUF",
+      "file": "DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+      "files": [
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00002-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00003-of-00004.gguf",
+        "UD-IQ3_S/DeepSeek-V4-Flash-0731-UD-IQ3_S-00004-of-00004.gguf"
+      ],
+      "quant": "UD-IQ3_S"
+    },
+    "draftModel": {
+      "repo": "am17an/DeepseekV4-Flash-20260731-DSpark",
+      "file": "DeepseekV4-Flash-20260731-DSpark.gguf",
+      "folder": "DeepSeek-V4-Flash-0731-DSpark"
+    },
+    "spec": {
+      "type": "draft-dspark",
+      "draftNgl": "auto",
+      "draftNMax": 5
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 44,
+      "batch": 1024,
+      "ubatch": 512,
+      "threads": 0,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--n-cpu-moe",
+      "39",
+      "--fit-target",
+      "512",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "0",
+      "--predict",
+      "16384",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--spec-type",
+      "draft-dspark"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10228,
+    "contextPresets": [
+      65536,
+      131072,
+      196608,
+      262144,
+      393216
+    ],
+    "comment": "Experimental paralelo: conserva intacto ULTRA-Q y reutiliza sus cuatro shards IQ3_S, pero descarga y exige el drafter DSpark GGUF separado publicado por el autor del soporte upstream. Emite --spec-draft-model, --spec-type draft-dspark y n-max 5 con llama.cpp b10228+. El draft agrega ~10,9 GB y puede no acelerar una RTX 3090 con offload híbrido; comparar contra ULTRA-Q y [bench ULTRA-Q] nospec antes de promover."
+  },
+  {
+    "id": "sys-hybrid-ultraq-maxq",
+    "tier": "24GB-Hybrid-Ultra-MaxQ",
+    "order": 91,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[experimental hybrid] ULTRA-Q planner → MAX-Q executor",
+    "minVramGb": 24,
+    "minRamGb": 120,
+    "cpuOk": false,
+    "folder": "ThinkingCap-Qwen3.6-27B-GGUF",
+    "agentProfileId": "agent-maximo",
+    "plannerProfileId": "sys-ultraq-dsv4-0731-iq3s",
+    "hybridMode": "sequential",
+    "model": {
+      "repo": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF",
+      "file": "ThinkingCap-Qwen3.6-27B-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 131000,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 64,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": true,
+      "mmap": false
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--cache-ram",
+      "32768",
+      "--cache-reuse",
+      "512",
+      "--jinja",
+      "--threads-batch",
+      "8",
+      "--predict",
+      "4096",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "off",
+      "--spec-type",
+      "draft-mtp",
+      "--spec-draft-n-max",
+      "4"
+    ],
+    "binaryKind": "official",
+    "comment": "DeepSeek ULTRA-Q planifica sin tools; MAX-Q implementa con el agente nativo. Secuencial porque ambos comparten la RTX 3090."
+  },
+  {
+    "id": "sys-maxq",
+    "tier": "24GB-Qwen",
+    "order": 1,
+    "extra": true,
+    "displayName": "[coding] MAX-Q · ThinkingCap Qwen3.6-27B 131k (visión)",
+    "showcaseGroup": "top24",
+    "showcaseLabel": "Coding",
+    "minVramGb": 24,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "requiresMtpBinary": true,
+    "folder": "ThinkingCap-Qwen3.6-27B-GGUF",
+    "model": {
+      "repo": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF",
+      "file": "ThinkingCap-Qwen3.6-27B-Q4_K_M.gguf",
+      "mmprojFile": "mmproj-ThinkingCap-Qwen3.6-27B-f16.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 131000,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 64,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": true,
+      "mmap": false
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--cache-ram",
+      "32768",
+      "--cache-reuse",
+      "512",
+      "--jinja",
+      "--threads-batch",
+      "8",
+      "--predict",
+      "4096",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "off"
+    ],
+    "mtp": {
+      "enabled": true,
+      "args": [
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-n-max",
+        "4"
+      ]
+    },
+    "binaryKind": "official",
+    "benchmarkVariants": [
+      { "id": "sys-bench-maxq-ngram", "order": 2, "displayName": "[bench MAX-Q] MTP4 + ngram · 131k · visión", "extraArgOverrides": { "--spec-type": "draft-mtp,ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia del MAX-Q vigente para comparar MTP4 con ngram en coding repetitivo." }
+    ],
+    "comment": "MAX-Q promovido tras benchmark E2E dense-vs-dense: ThinkingCap logró 15/15 sin reparación en 219,5 s y 232,9 s. Mantiene 131k para entrar de forma estable en 24 GB.",
+    "vision": true
+  },
+  {
+    "id": "sys-maxctx",
+    "tier": "24GB-Qwen-MAX-CTX",
+    "order": 3,
+    "extra": true,
+    "autoCompanion": false,
+    "displayName": "[coding] MAX-CTX · Qwen3.6-27B 262k",
+    "minVramGb": 24,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "requiresMtpBinary": true,
+    "folder": "Qwen3.6-27B-MTP",
+    "model": {
+      "repo": "unsloth/Qwen3.6-27B-MTP-GGUF",
+      "file": "Qwen3.6-27B-IQ4_XS.gguf",
+      "quant": "IQ4_XS"
+    },
+    "runtime": {
+      "ctx": 262000,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 64,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": true,
+      "mmap": false
+    },
+    "extraArgs": [
+      "--cache-type-v",
+      "q4_0",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--cache-ram",
+      "32768",
+      "--cache-reuse",
+      "512",
+      "--jinja",
+      "--threads-batch",
+      "8",
+      "--predict",
+      "4096",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "off"
+    ],
+    "mtp": {
+      "enabled": true,
+      "args": [
+        "--spec-type",
+        "mtp",
+        "--spec-draft-n-max",
+        "3",
+        "--spec-ngram-mod-n-match",
+        "24",
+        "--spec-ngram-mod-n-min",
+        "16",
+        "--spec-ngram-mod-n-max",
+        "32"
+      ]
+    },
+    "binaryKind": "beellama",
+    "comment": "Anterior MAX-Q renombrado MAX-CTX: conserva Qwen base IQ4_XS, contexto 262k y MTP+NGRAM. Opt-in para tareas donde prima la ventana máxima."
+  },
+  {
+    "id": "sys-fastgemma",
+    "tier": "24GB-Gemma",
+    "extra": true,
+    "order": 2,
+    "displayName": "[general] 24GB · Gemma4-31B QAT (MTP)",
+    "showcaseGroup": "top24",
+    "showcaseLabel": "General",
+    "minVramGb": 24,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "requiresMtpBinary": true,
+    "folder": "gemma-4-31B-it-qat",
+    "chatTemplate": "gemma4-tools-fixed.jinja",
+    "model": {
+      "repo": "unsloth/gemma-4-31B-it-qat-GGUF",
+      "file": "gemma-4-31B-it-qat-UD-Q4_K_XL.gguf",
+      "quant": "UD-Q4_K_XL"
+    },
+    "draftModel": {
+      "repo": "Simplepotat/gemma-4-31b-it-qat-q4_0-assistant-gguf",
+      "file": "gemma-4-31b-it-qat-q4_0-assistant.gguf",
+      "folder": "gemma-4-31b-it-qat-assistant-MTP"
+    },
+    "spec": {
+      "type": "draft-mtp",
+      "draftNgl": "all",
+      "draftNMax": 2
+    },
+    "runtime": {
+      "ctx": 32768,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 64,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": true,
+      "mmap": false
+    },
+    "extraArgs": [
+      "--temp",
+      "1.0",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "64",
+      "--min-p",
+      "0.0",
+      "--context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--cache-type-v",
+      "q8_0",
+      "--threads-batch",
+      "8",
+      "--cache-reuse",
+      "512",
+      "--predict",
+      "4096",
+      "--spec-draft-n-min",
+      "0.75",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "off"
+    ],
+    "comment": "= FAST-GEMMA calibrado: gemma-4-31B QAT (UD-Q4_K_XL) + draft qat-q4_0-assistant (Simplepotat) via draft-mtp + jinja tools-fixed. Requiere beellama.",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "gemma4"
+  },
+  {
+    "id": "sys-laguna-s-2-1-q2",
+    "tier": "24GB-Laguna-Experimental",
+    "extra": true,
+    "autoCompanion": false,
+    "order": 3,
+    "displayName": "[experimental] 24GB + 128GB RAM · Laguna S 2.1 118B-A8B Q2",
+    "chatTemplate": "laguna-tools-v24.jinja",
+    "minVramGb": 24,
+    "minRamGb": 120,
+    "cpuOk": false,
+    "folder": "Laguna-S-2.1-UD-Q2_K_XL",
+    "model": {
+      "repo": "unsloth/Laguna-S-2.1-GGUF",
+      "file": "Laguna-S-2.1-UD-Q2_K_XL.gguf",
+      "quant": "UD-Q2_K_XL"
+    },
+    "runtime": {
+      "ctx": 100000,
+      "gpuLayers": 999,
+      "batch": 2048,
+      "ubatch": 768,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": false
+    },
+    "extraArgs": [
+      "--cache-type-v",
+      "q4_0",
+      "--n-cpu-moe",
+      "32",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "8",
+      "--predict",
+      "4096",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--reasoning-preserve"
+    ],
+    "comment": "EXPERIMENTAL, single-node GPU+RAM (sin RPC): Laguna S 2.1 118B-A8B UD-Q2_K_XL (~39.7GB). Requiere llama.cpp b10087+ para arquitectura laguna. Punto inicial para RTX 3090 24GB + 128GB RAM: 100k ctx, KV q4_0, ubatch 768 y 32 capas MoE en CPU para reservar VRAM al KV/compute. Medir 28/32/36 con benchmark antes de promover; no reemplaza MAX-Q y autoCompanion=false evita descargar ~40GB al instalar otros perfiles premium.",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "benchmarkVariants": [
+      {
+        "id": "sys-bench-laguna-s-2-1-q2-24gb-32k-official",
+        "order": 192,
+        "displayName": "[bench Laguna 24GB] 32k · template oficial · thinking OFF",
+        "chatTemplate": "poolside-Laguna-S-2.1.jinja",
+        "benchmark": false,
+        "runtime": {
+          "ctx": 32768,
+          "batch": 512,
+          "ubatch": 128
+        },
+        "extraArgOverrides": {
+          "--reasoning-format": null,
+          "--reasoning-preserve": null
+        },
+        "comment": "Retirada el 2026-08-21: HE0 quedó sin carga evaluable y el intento se agotó por timeout. Se conserva como control histórico; no volver a encolar sin corregir la ruta de carga."
+      },
+      {
+        "id": "sys-bench-laguna-s-2-1-q2-24gb-32k-v24",
+        "order": 193,
+        "displayName": "[bench Laguna 24GB] 32k · template v24 · thinking OFF",
+        "benchmark": false,
+        "runtime": {
+          "ctx": 32768,
+          "batch": 512,
+          "ubatch": 128
+        },
+        "extraArgOverrides": {
+          "--reasoning-format": null,
+          "--reasoning-preserve": null
+        },
+        "comment": "Retirada el 2026-08-21: no produjo una etapa evaluable dentro del límite operativo. Se conserva para comparar templates sólo si se repara el backend."
+      }
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10087
+  },
+  {
+    "id": "sys-laguna-s-2-1-q2-48gb",
+    "tier": "48GB-Laguna-Experimental",
+    "extra": true,
+    "autoCompanion": false,
+    "best": true,
+    "favorite": true,
+    "benchmark": false,
+    "order": 4,
+    "displayName": "BALANCE - Laguna S 2.1 118B-A8B Q2",
+    "chatTemplate": "laguna-tools-v24.jinja",
+    "minVramGb": 48,
+    "minRamGb": 64,
+    "cpuOk": false,
+    "folder": "Laguna-S-2.1-UD-Q2_K_XL",
+    "model": {
+      "repo": "unsloth/Laguna-S-2.1-GGUF",
+      "file": "Laguna-S-2.1-UD-Q2_K_XL.gguf",
+      "quant": "UD-Q2_K_XL"
+    },
+    "runtime": {
+      "ctx": 100000,
+      "gpuLayers": 999,
+      "batch": 2048,
+      "ubatch": 768,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--fit",
+      "on",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "16",
+      "--predict",
+      "4096",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--reasoning-preserve"
+    ],
+    "comment": "MEDIDO en 2x RTX 3090 24 GB + 128 GB RAM con llama.cpp oficial b10228 y UD-Q2_K_XL (39.684.584.480 bytes). El modelo completo entra repartido con split-mode layer/tensor-split 1,1, mmap, fit on, KV q4_0 y contexto 100k: carga 16,5 s, VRAM 22.168/20.609 MiB, tool-call OpenAI valida, 67.660 tokens de prefill a 1.673,4 t/s y decode 37,5 t/s; a 32k dio 1.954,2 t/s de prefill y 55-69 t/s de decode. --reasoning-preserve es obligatorio para el uso agentico recomendado por Poolside. El perfil conservador --n-cpu-moe 32 cargo pero no termino una tool-call minima en mas de dos minutos sobre esta configuracion dual. Sigue opt-in: Q2 necesita benchmark de calidad contra ThinkingCap/KAT antes de promover.",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "official",
+    "benchmarkVariants": [
+      {
+        "id": "sys-bench-laguna-s-2-1-q2-48gb-64k-b1024",
+        "order": 190,
+        "benchmark": true,
+        "displayName": "[bench Laguna] Q2 · 64k · B1024 · U256",
+        "runtime": {
+          "ctx": 65536,
+          "batch": 1024,
+          "ubatch": 256
+        },
+        "comment": "Candidato conservador para reducir presión de KV y batch después de un fallo de infraestructura: conserva split 1,1, KV q4_0 y reasoning-preserve. Ejecutar HE0 antes de HE20/BCB."
+      },
+      {
+        "id": "sys-bench-laguna-s-2-1-q2-48gb-100k-b1024",
+        "order": 191,
+        "benchmark": false,
+        "displayName": "[bench Laguna] Q2 · 100k · B1024 · U256",
+        "runtime": {
+          "batch": 1024,
+          "ubatch": 256
+        },
+        "comment": "Retirada el 2026-08-21: HE0/HE20 válidos pero BCB no cerró de forma evaluable; se prioriza la variante 64k que sí tiene score parcial. Se conserva el ID e historial."
+      },
+      {
+        "id": "sys-bench-laguna-s-2-1-q2-48gb-32k-official",
+        "order": 194,
+        "displayName": "[bench Laguna 48GB] 32k · template oficial · thinking OFF",
+        "chatTemplate": "poolside-Laguna-S-2.1.jinja",
+        "benchmark": true,
+        "runtime": {
+          "ctx": 32768,
+          "batch": 512,
+          "ubatch": 64
+        },
+        "extraArgOverrides": {
+          "--reasoning-format": null,
+          "--reasoning-preserve": null
+        },
+        "comment": "A/B principal en 2x RTX 3090: mismo GGUF, reparto 1,1 y KV q4 del perfil dual, pero ctx 32k y template oficial de llama.cpp. Iniciar con Pensamiento del servidor OFF."
+      },
+      {
+        "id": "sys-bench-laguna-s-2-1-q2-48gb-32k-v24",
+        "order": 195,
+        "displayName": "[bench Laguna 48GB] 32k · template v24 · thinking OFF",
+        "benchmark": false,
+        "runtime": {
+          "ctx": 32768,
+          "batch": 512,
+          "ubatch": 64
+        },
+        "extraArgOverrides": {
+          "--reasoning-format": null,
+          "--reasoning-preserve": null
+        },
+        "comment": "Retirada el 2026-08-21: 1/8 en BCB y sin ventaja frente al control oficial. Se conserva como control histórico; no volver a encolar salvo una revisión explícita del template."
+      }
+    ],
+    "minimumBinaryBuild": 10087
+  },
+  {
+    "id": "sys-laguna-s-2-1-q2-48gb-safe",
+    "tier": "48GB-Laguna-Experimental",
+    "extra": true,
+    "autoCompanion": false,
+    "benchmark": true,
+    "order": 5,
+    "displayName": "BALANCE - Laguna S 2.1 · CUDA safe 64k",
+    "chatTemplate": "laguna-tools-v24.jinja",
+    "minVramGb": 48,
+    "minRamGb": 64,
+    "cpuOk": false,
+    "folder": "Laguna-S-2.1-UD-Q2_K_XL",
+    "model": {
+      "repo": "unsloth/Laguna-S-2.1-GGUF",
+      "file": "Laguna-S-2.1-UD-Q2_K_XL.gguf",
+      "quant": "UD-Q2_K_XL"
+    },
+    "runtime": {
+      "ctx": 65536,
+      "gpuLayers": 999,
+      "batch": 256,
+      "ubatch": 64,
+      "threads": 8,
+        "kv": "q4_0",
+        "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--fit",
+      "off",
+      "--flash-attn",
+      "on",
+      "--split-mode",
+      "layer",
+      "--tensor-split",
+      "1,1",
+      "--n-cpu-moe",
+      "32",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--threads-batch",
+      "8",
+      "--predict",
+      "4096",
+      "--parallel",
+      "1",
+      "--reasoning-format",
+      "auto",
+      "--reasoning-preserve"
+    ],
+    "benchmarkVariants": [
+      { "id": "sys-bench-laguna-s-2-1-q2-48gb-ngram", "order": 6, "displayName": "[bench Laguna] Q2 · ngram · 64k · B256/U64", "extraArgOverrides": { "--spec-type": "ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia ngram-only para comprobar si la repetición compensa en coding sin MTP." }
+    ],
+    "comment": "Variante conservadora de recuperación para CUDA: duplica Laguna sin tocar el perfil histórico y reduce ctx/batch/ubatch; mantiene Flash Attention porque la V-cache cuantizada lo requiere; fit off, tensor-split 1,1 y 32 expertos a CPU. Debe pasar HE0 antes de habilitar HE20/BCB.",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10087
+  },
+  {
+    "id": "sys-vram-20",
+    "tier": "20GB-KAT",
+    "order": 3,
+    "displayName": "[coding] 20GB · KAT Coder 2.5 35B-A3B Q4_K_M",
+    "minVramGb": 20,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "KAT-Coder-V2.5-Dev-Q4_K_M-GGUF",
+    "model": {
+      "repo": "bartowski/Kwaipilot_KAT-Coder-V2.5-Dev-GGUF",
+      "file": "Kwaipilot_KAT-Coder-V2.5-Dev-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 32768,
+      "gpuLayers": 30,
+      "batch": 2048,
+      "ubatch": 512,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-v",
+      "q4_0",
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--cache-reuse",
+      "512",
+      "--jinja",
+      "--threads-batch",
+      "8",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "on"
+    ],
+    "comment": "Default coding local para GPU de 20GB o más. KAT Coder 2.5 Q4_K_M, validado contra Qwen3.6-35B-A3B Q4_K_M con Agent efficiency E2E v1 x3: misma calidad final (11/11 x3), 3/3 al primer intento, cero reparaciones y mediana 74.9% menor. Configuración medida: ctx 32768, 30 capas GPU, KV q4_0 y sampling conservador. Sin mmproj ni MTP.",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "official",
+    "binaryPin": "b9763"
+  },
+  {
+    "id": "sys-vram-16",
+    "tier": "16GB-KAT",
+    "order": 3,
+    "displayName": "[coding] 16GB · KAT Coder 2.5 35B-A3B Q4_K_M",
+    "minVramGb": 16,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "KAT-Coder-V2.5-Dev-Q4_K_M-GGUF",
+    "model": {
+      "repo": "bartowski/Kwaipilot_KAT-Coder-V2.5-Dev-GGUF",
+      "file": "Kwaipilot_KAT-Coder-V2.5-Dev-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 32768,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 512,
+      "kv": "q4_0",
+      "flashAttn": true
+    },
+    "extraArgs": [
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--repeat-penalty",
+      "1.0",
+      "--presence-penalty",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--cache-reuse",
+      "512",
+      "--jinja",
+      "--threads-batch",
+      "8",
+      "--predict",
+      "8192",
+      "--parallel",
+      "1",
+      "--cache-type-k",
+      "q4_0",
+      "--cache-type-v",
+      "q4_0",
+      "--n-cpu-moe",
+      "18",
+      "--reasoning",
+      "on"
+    ],
+    "comment": "Default coding local para GPU de 16GB o más, con 18 capas MoE en CPU. KAT Coder 2.5 Q4_K_M, validado contra Qwen3.6-35B-A3B IQ4_XS con Agent efficiency E2E v1 x3: misma calidad final (11/11 x3), 3/3 al primer intento contra 1/3, cero reparaciones contra cuatro y mediana 78.7% menor (260.5s contra 1225.5s). Mediana medida: 14870MB VRAM y 23147MB RAM. Configuración: ctx 32768, KV q4_0 y sampling conservador. Sin mmproj ni MTP.",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "official",
+    "binaryPin": "b9763"
+  },
+  {
+    "id": "sys-vram-12-moe",
+    "tier": "12GB-MoE",
+    "order": 4,
+    "displayName": "[coding] 12GB · Qwen3.6-35B-A3B Q4",
+    "minVramGb": 12,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "Qwen3.6-35B-A3B",
+    "model": {
+      "repo": "unsloth/Qwen3.6-35B-A3B-GGUF",
+      "file": "Qwen3.6-35B-A3B-UD-IQ4_XS.gguf",
+      "quant": "IQ4_XS"
+    },
+    "runtime": {
+      "ctx": 16384,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 512,
+      "kv": "q4_0",
+      "flashAttn": true
+    },
+    "extraArgs": [
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--parallel",
+      "1",
+      "--cache-type-v",
+      "q4_0",
+      "--n-cpu-moe",
+      "24",
+      "--reasoning",
+      "off"
+    ],
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "official",
+    "binaryPin": "b9842"
+  },
+  {
+    "id": "sys-vram-8-gemma",
+    "tier": "8GB-Gemma",
+    "order": 5,
+    "displayName": "[general] 8GB · Gemma 4 12B Q3 (visión, MTP)",
+    "showcaseGroup": "vram8",
+    "showcaseLabel": "Visión",
+    "minVramGb": 8,
+    "minRamGb": 16,
+    "cpuOk": false,
+    "folder": "gemma-4-12b",
+    "chatTemplate": "gemma4-tools-fixed.jinja",
+    "model": {
+      "repo": "unsloth/gemma-4-12b-it-GGUF",
+      "file": "gemma-4-12b-it-UD-Q3_K_XL.gguf",
+      "quant": "UD-Q3_K_XL",
+      "mmprojRepo": "unsloth/gemma-4-12b-it-GGUF",
+      "mmprojFile": "mmproj-F16.gguf"
+    },
+    "draftModel": {
+      "repo": "unsloth/gemma-4-12b-it-GGUF",
+      "file": "mtp-gemma-4-12b-it.gguf",
+      "folder": "gemma-4-12b"
+    },
+    "spec": {
+      "type": "draft-mtp",
+      "draftNgl": "all",
+      "draftNMax": 3
+    },
+    "runtime": {
+      "ctx": 8192,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 512,
+      "kv": "q4_0",
+      "flashAttn": true
+    },
+    "extraArgs": [
+      "--temp",
+      "1.0",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "64",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--parallel",
+      "1",
+      "--cache-type-v",
+      "q4_0",
+      "--no-mmproj-offload",
+      "--reasoning",
+      "off"
+    ],
+    "comment": "Gemma 4 12B dynamic Q3 (unsloth UD-Q3_K_XL, ~6.0GB) + vision (gemma4uv) + MTP self-draft (mtp-gemma-4-12b-it.gguf ~0.45GB, --spec-type draft-mtp). Q4_K_XL (~7.4GB) excedia 8GB; Q3_K_XL deja margen para draft MTP en GPU. mmproj en CPU (--no-mmproj-offload, 0 VRAM). Budget: ~6.0 main + ~0.45 draft + KV q4_0 + overhead ~= 7.5GB en 8GB. REQUIERE llama-server official latest (soporta gemma4uv vision + --spec-type/--spec-draft-model; builds viejos crashean con 'unknown projector type: gemma4uv').",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "official",
+    "binaryPin": "b9763",
+    "vision": true
+  },
+  {
+    "id": "sys-vram-8-qwen-agent",
+    "tier": "8GB-QwenAgent",
+    "order": 6,
+    "showcaseGroup": "vram8",
+    "showcaseLabel": "Agente",
+    "displayName": "[agente] 8GB · Qwen3.5 9B (agente, 32k ctx)",
+    "minVramGb": 8,
+    "minRamGb": 16,
+    "cpuOk": false,
+    "folder": "Qwen3.5-9B",
+    "model": {
+      "repo": "unsloth/Qwen3.5-9B-GGUF",
+      "file": "Qwen3.5-9B-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 32768,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 512,
+      "kv": "q4_0",
+      "flashAttn": true
+    },
+    "extraArgs": [
+      "--temp",
+      "0.2",
+      "--top-p",
+      "0.9",
+      "--top-k",
+      "40",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--parallel",
+      "1",
+      "--reasoning",
+      "off"
+    ],
+    "comment": "Qwen3.5 9B dense (unsloth Q4_K_M, ~5.4GB) 100% en GPU; sin visión (sin mmproj) a cambio de ctx 32k para loops de agente largos (tool outputs). Sampling agente: temp 0.2 / top-p 0.9 / top-k 40, reasoning off, jinja (tool-calling fiable; ver r/LocalLLM Qwen3.5-9B 8GB). kv q4_0 para caber en 8GB con 32k. REQUIERE llama-server con soporte arch Qwen3.5 (build reciente).",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "official"
+  },
+  {
+    "id": "sys-vram-4",
+    "tier": "4GB",
+    "order": 6,
+    "displayName": "[general] 4GB · Qwen3.5-4B Q4",
+    "minVramGb": 4,
+    "minRamGb": 8,
+    "cpuOk": false,
+    "folder": "Qwen3.5-4B",
+    "model": {
+      "repo": "unsloth/Qwen3.5-4B-MTP-GGUF",
+      "file": "Qwen3.5-4B-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "mmprojRepo": "",
+      "mmprojFile": ""
+    },
+    "runtime": {
+      "ctx": 8192,
+      "gpuLayers": 14,
+      "batch": 256,
+      "ubatch": 256,
+      "kv": "q4_0",
+      "flashAttn": true
+    },
+    "extraArgs": [
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--parallel",
+      "1",
+      "--cache-type-v",
+      "q4_0",
+      "--reasoning",
+      "off"
+    ],
+    "mtp": {
+      "enabled": true,
+      "args": [
+        "--spec-type",
+        "mtp",
+        "--spec-draft-n-max",
+        "3"
+      ]
+    },
+    "binaryKind": "beellama"
+  },
+  {
+    "id": "sys-vram-4-gemma",
+    "tier": "4GB-Gemma",
+    "displayName": "[general] 4GB · Gemma 4 E4B Heretic QAT",
+    "minVramGb": 4,
+    "minRamGb": 8,
+    "cpuOk": false,
+    "folder": "gemma-4-E4B-heretic-QAT",
+    "chatTemplate": "gemma4-tools-fixed.jinja",
+    "model": {
+      "repo": "SC117/gemma-4-E4B-it-heretic-QAT-GGUF",
+      "file": "gemma-4-E4B-it-heretic-QAT-UD-Q4_K_XL.gguf",
+      "quant": "UD-Q4_K_XL"
+    },
+    "runtime": {
+      "ctx": 8192,
+      "gpuLayers": 12,
+      "batch": 128,
+      "ubatch": 128,
+      "kv": "q4_0",
+      "flashAttn": true
+    },
+    "extraArgs": [
+      "--temp",
+      "1.0",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "64",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--parallel",
+      "1",
+      "--cache-type-v",
+      "q4_0",
+      "--reasoning",
+      "off"
+    ],
+    "comment": "Gemma 4 E4B Heretic QAT (~4GB), promovido como perfil general tras superar al E4B QAT base en Agent efficiency E2E v1 (5/11 vs 2/11 checks, mayor throughput y menor TTFT). Perfil conservador para 4GB: batch bajo, offload parcial y ctx 8k. La variante remueve alineación de seguridad; usar las aprobaciones de tools para acciones sensibles. Sin mmproj por defecto.",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "official"
+  },
+  {
+    "id": "sys-vram-2",
+    "tier": "2GB",
+    "order": 7,
+    "displayName": "[general] 2GB · Qwen3.5-2B Q4",
+    "minVramGb": 2,
+    "minRamGb": 8,
+    "cpuOk": false,
+    "folder": "Qwen3.5-2B",
+    "model": {
+      "repo": "unsloth/Qwen3.5-2B-MTP-GGUF",
+      "file": "Qwen3.5-2B-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "mmprojRepo": "",
+      "mmprojFile": ""
+    },
+    "runtime": {
+      "ctx": 8192,
+      "gpuLayers": 8,
+      "batch": 64,
+      "ubatch": 64,
+      "kv": "q4_0",
+      "flashAttn": true
+    },
+    "extraArgs": [
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--parallel",
+      "1",
+      "--cache-type-v",
+      "q4_0",
+      "--reasoning",
+      "off"
+    ],
+    "mtp": {
+      "enabled": true,
+      "args": [
+        "--spec-type",
+        "mtp",
+        "--spec-draft-n-max",
+        "3"
+      ]
+    },
+    "binaryKind": "beellama"
+  },
+  {
+    "id": "sys-vram-2-gemma",
+    "tier": "2GB-Gemma",
+    "displayName": "[general] 2GB · Gemma 4 E2B QAT",
+    "minVramGb": 2,
+    "minRamGb": 8,
+    "cpuOk": false,
+    "folder": "gemma-4-E2B",
+    "chatTemplate": "gemma4-tools-fixed.jinja",
+    "model": {
+      "repo": "unsloth/gemma-4-E2B-it-GGUF",
+      "file": "gemma-4-E2B-it-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 8192,
+      "gpuLayers": 8,
+      "batch": 64,
+      "ubatch": 64,
+      "kv": "q4_0",
+      "flashAttn": true
+    },
+    "extraArgs": [
+      "--temp",
+      "1.0",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "64",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--parallel",
+      "1",
+      "--cache-type-v",
+      "q4_0",
+      "--reasoning",
+      "off"
+    ],
+    "comment": "Gemma 4 E2B QAT (~2.9GB). Perfil conservador para GPUs chicas: offload parcial, batch bajo y ctx 8k para Automatizaciones. Sin mmproj por defecto.",
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "official"
+  },
+  {
+    "id": "sys-vram-0",
+    "tier": "0GB",
+    "order": 8,
+    "displayName": "[general] 0GB CPU · Qwen3.5-4B Q4",
+    "minVramGb": 0,
+    "minRamGb": 16,
+    "cpuOk": true,
+    "folder": "Qwen3.5-4B",
+    "model": {
+      "repo": "unsloth/Qwen3.5-4B-MTP-GGUF",
+      "file": "Qwen3.5-4B-Q4_K_M.gguf",
+      "quant": "Q4_K_M"
+    },
+    "runtime": {
+      "ctx": 8192,
+      "gpuLayers": 0,
+      "batch": 128,
+      "ubatch": 128,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": false
+    },
+    "extraArgs": [
+      "--temp",
+      "0.60",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--parallel",
+      "1",
+      "--cache-type-v",
+      "q4_0",
+      "--reasoning",
+      "off"
+    ],
+    "env": {
+      "CUDA_VISIBLE_DEVICES": "-1"
+    },
+    "mtp": {
+      "enabled": false,
+      "args": []
+    },
+    "binaryKind": "cpu",
+    "comment": "Fallback CPU para Automatizaciones: Qwen3.5 4B Q4 con ctx 8k y batch bajo. Evita el 35B/32k en CPU, que puede quedar minutos sin emitir la primera tool."
+  },
+  {
+    "id": "sys-48-antirez-dsv4-q2q4-0731",
+    "tier": "48GB-DeepSeek-V4-Antirez",
+    "order": 145,
+    "extra": true,
+    "benchmark": false,
+    "autoCompanion": false,
+    "displayName": "deepseek v4-antirez-10-8-26",
+    "minVramGb": 48,
+    "minRamGb": 120,
+    "cpuOk": false,
+    "folder": "DeepSeek-V4-antirez-Q2Q4-imatrix-0731",
+    "agentProfileId": "agent-maximo",
+    "reasoningEffort": "high",
+    "reasoningBudget": 8192,
+    "model": {
+      "repo": "antirez/deepseek-v4-gguf",
+      "file": "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed-0731.gguf",
+      "quant": "Q2/Q4 imatrix",
+      "sizeGb": 90.89
+    },
+    "runtime": {
+      "ctx": 32768,
+      "gpuLayers": 999,
+      "batch": 4096,
+      "ubatch": 512,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k", "q4_0", "--cache-type-v", "q4_0",
+      "--fit", "off", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0",
+      "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--jinja",
+      "--threads-batch", "16", "--predict", "16384", "--parallel", "1", "--reasoning-format", "auto", "--cache-prompt",
+      "--split-mode", "layer", "--tensor-split", "1,0",
+      "-ot", "blk\\.(37|38|39|40|41|42)\\.ffn_(gate|up|down)_exps\\.weight=CUDA1,blk\\.[0-9]+\\.ffn_(gate|up|down)_exps\\.weight=CPU",
+      "--repeat-last-n", "64"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10228,
+    "contextPresets": [32768, 65536, 131072],
+    "benchmarkVariants": [
+      { "id": "sys-48-antirez-dsv4-q2q4-0731-16k", "order": 146, "benchmark": true, "displayName": "[bench antirez] 16k · B2048 · U256 · KV q4_0", "runtime": { "ctx": 16384, "batch": 2048, "ubatch": 256 } },
+      { "id": "sys-48-antirez-dsv4-q2q4-0731-32k-b2048", "order": 147, "benchmark": false, "displayName": "[retirado 2026-08-21] antirez · 32k · B2048 · U256 · KV q4_0", "runtime": { "ctx": 32768, "batch": 2048, "ubatch": 256 }, "comment": "Retirado: BCB terminó 0/0 con timeout; el control KV q8 queda como referencia menos agresiva." },
+      { "id": "sys-48-antirez-dsv4-q2q4-0731-32k-b4096", "order": 148, "benchmark": true, "displayName": "[bench antirez] 32k · B4096 · U512 · KV q4_0", "runtime": { "ctx": 32768, "batch": 4096, "ubatch": 512 } },
+      { "id": "sys-48-antirez-dsv4-q2q4-0731-32k-b8192", "order": 149, "benchmark": true, "displayName": "[bench antirez stress] 32k · B8192 · U1024 · KV q4_0", "runtime": { "ctx": 32768, "batch": 8192, "ubatch": 1024 } },
+      { "id": "sys-48-antirez-dsv4-q2q4-64k", "order": 150, "benchmark": true, "displayName": "[bench antirez] 64k · B4096 · U512 · KV q4_0", "runtime": { "ctx": 65536, "batch": 4096, "ubatch": 512 } },
+      { "id": "sys-48-antirez-dsv4-q2q4-131k", "order": 151, "benchmark": true, "displayName": "[bench antirez stress] 131k · B4096 · U1024 · KV q4_0", "runtime": { "ctx": 131072, "batch": 4096, "ubatch": 1024 } },
+      { "id": "sys-48-antirez-dsv4-q2q4-kv8", "order": 152, "benchmark": true, "displayName": "[bench antirez] 32k · B4096 · U512 · KV q8_0", "runtime": { "ctx": 32768, "batch": 4096, "ubatch": 512, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" } },
+      { "id": "sys-48-antirez-dsv4-q2q4-kv8-stable", "order": 152.1, "benchmark": false, "displayName": "[control fallido] antirez mejorado · B512 · U64 · KV q8_0", "runtime": { "ctx": 32768, "batch": 512, "ubatch": 64, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0", "--reasoning": "off" }, "comment": "Control experimental: carga sin crash, pero HE0 terminó en idle-timeout durante el prefill (~3–5 tok/s). Se conserva para documentar que B512/U64 estrangula este MoE con offload." },
+      { "id": "sys-48-antirez-dsv4-q2q4-kv8-balanced", "order": 152.2, "benchmark": false, "displayName": "[control timeout] antirez mejorado · B2048 · U256 · KV q8_0", "runtime": { "ctx": 32768, "batch": 2048, "ubatch": 256, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0", "--reasoning": "off" }, "comment": "Control experimental: cargó sin OOM/crash, pero HE0 terminó en idle-timeout a 202,8 s sin primer turno. No es puntuación de calidad; queda fuera de la cola activa." },
+      { "id": "sys-48-antirez-dsv4-q2q4-kvf16", "order": 153, "benchmark": true, "displayName": "[bench antirez stress] 32k · B4096 · U512 · KV q8_0 (cap de política)", "runtime": { "ctx": 32768, "batch": 4096, "ubatch": 512, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" }, "comment": "La variante histórica KV f16 queda limitada a q8_0; los resultados anteriores con f16 no son comparables." },
+      { "id": "sys-48-antirez-dsv4-q2q4-64k-kv8", "order": 154, "benchmark": true, "displayName": "[bench antirez stress] 64k · B4096 · U1024 · KV q8_0", "runtime": { "ctx": 65536, "batch": 4096, "ubatch": 1024, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" } },
+      { "id": "sys-48-antirez-dsv4-q2q4-prefill", "order": 155, "benchmark": true, "displayName": "[bench antirez prefill] 32k · B8192 · U2048 · KV q4_0", "runtime": { "ctx": 32768, "batch": 8192, "ubatch": 2048 } },
+      { "id": "sys-48-antirez-dsv4-q2q4-32k-reasoning-off", "order": 156, "benchmark": false, "displayName": "[retirado 2026-08-28] antirez · 32k · reasoning off · KV q4_0", "runtime": { "ctx": 32768, "batch": 4096, "ubatch": 512 }, "extraArgOverrides": { "--reasoning": "off" }, "comment": "Retirado de la cola activa: HE0 1/1 en 217,863 s, pero HE20 terminó por timeout a 1801,3 s sin resultado evaluable; no ofrece una ruta competitiva de calidad sostenida." },
+      { "id": "sys-48-antirez-dsv4-q2q4-32k-reasoning-low", "order": 157, "benchmark": false, "displayName": "[retirado 2026-08-28] antirez · 32k · reasoning low · KV q4_0", "runtime": { "ctx": 32768, "batch": 4096, "ubatch": 512 }, "extraArgOverrides": { "--reasoning": "low" }, "comment": "Retirado de la cola activa tras HE0 1/1 en 270,169 s y HE20 cancelado en prompt 5/20 tras ~14 min por latencia no competitiva; no se obtuvo score HE20 y no se avanza a BCB." },
+      { "id": "sys-48-antirez-dsv4-q2q4-32k-reasoning-high", "order": 158, "benchmark": true, "displayName": "[bench antirez] 32k · reasoning high · KV q4_0", "runtime": { "ctx": 32768, "batch": 4096, "ubatch": 512 }, "extraArgOverrides": { "--reasoning": "high" }, "comment": "A/B de thinking high; se mantiene como control de calidad, no como candidato de velocidad." },
+      { "id": "sys-48-antirez-dsv4-q2q4-131k-kv8", "order": 159, "benchmark": true, "displayName": "[bench antirez] 131k · KV q8_0", "runtime": { "ctx": 131072, "batch": 4096, "ubatch": 1024, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" }, "comment": "Cruza máximo contexto con KV q8; si no carga, queda como límite de VRAM/host y no como fallo de calidad." }
+    ],
+    "comment": "Cuant híbrido antirez de ~90,89 GiB: expertos Q4K en capas 37–42 y expertos IQ2XXS en el resto. Opt-in porque el README del autor lo orienta al motor DS4 y la compatibilidad llama.cpp debe validarse localmente. Medir carga, texto corto, prefill y decode antes de usarlo en agente. El perfil no reemplaza DeepSeek V4-7-8-26."
+  },
+  {
+    "id": "sys-48-bigbang-v1-q4km",
+    "tier": "48GB-BigBang",
+    "order": 149,
+    "extra": true,
+    "benchmark": false,
+    "autoCompanion": false,
+    "displayName": "[experimental 48GB] BigBang-v1 35B-A3B Q4_K_M · visión",
+    "vision": true,
+    "minVramGb": 24,
+    "minRamGb": 48,
+    "cpuOk": false,
+    "folder": "BigBang-v1-Q4_K_M-GGUF",
+    "agentProfileId": "agent-maximo",
+    "reasoningEffort": "high",
+    "reasoningBudget": 8192,
+    "model": {
+      "repo": "bartowski/endless-frontier_BigBang-v1-GGUF",
+      "file": "endless-frontier_BigBang-v1-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "sizeGb": 21.86,
+      "mmprojRepo": "bartowski/endless-frontier_BigBang-v1-GGUF",
+      "mmprojFile": "mmproj-endless-frontier_BigBang-v1-bf16.gguf"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 128,
+      "threads": 0,
+      "kv": "q8_0",
+      "flashAttn": false,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--flash-attn", "off",
+      "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0",
+      "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift",
+      "--metrics", "--no-warmup", "--jinja", "--parallel", "1", "--reasoning", "on"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10262,
+    "contextPresets": [32768, 65536, 131072, 196608],
+    "benchmarkVariants": [
+      { "id": "sys-bench-48-bigbang-base", "order": 150, "benchmark": false, "displayName": "[retirado 2026-08-21] BigBang · 131k · sin MTP · KV q8_0", "comment": "Retirado: HE0 no produjo un resultado evaluable y no llegó a BCB; usar la variante reparada MTP/B256/U64 como control." },
+      { "id": "sys-bench-48-bigbang-mtp", "order": 151, "displayName": "[bench BigBang] 131k · MTP embebido · KV q8_0", "extraArgOverrides": { "--spec-type": "draft-mtp", "--spec-draft-n-max": "5" }, "comment": "MTP embebido en el GGUF; requiere llama.cpp b10262+. KV limitado a q8_0 por política." },
+      { "id": "sys-bench-48-bigbang-fast", "order": 152, "benchmark": false, "displayName": "[retirado 2026-08-21] BigBang · MTP · batch 1024 · ubatch 256", "runtime": { "batch": 1024, "ubatch": 256 }, "extraArgOverrides": { "--spec-type": "draft-mtp", "--spec-draft-n-max": "5" }, "comment": "Retirado tras crash CUDA histórico y estancamiento del harness en HE20 bajo la huella actual; se conserva la evidencia y se usa BigBang reparado/usuario como referencia." },
+      { "id": "sys-bench-48-bigbang-long", "order": 153, "displayName": "[bench BigBang] 196k · MTP · KV q8_0", "runtime": { "ctx": 196608, "kv": "q8_0" }, "extraArgOverrides": { "--spec-type": "draft-mtp", "--spec-draft-n-max": "5" } },
+      { "id": "sys-bench-48-bigbang-post", "order": 154, "best": true, "displayName": "FAST - BigBang · MTP · top-p 0.08", "runtime": { "ctx": 65536, "batch": 256, "ubatch": 64 }, "extraArgOverrides": { "--temp": "0.70", "--top-p": "0.08", "--spec-type": "draft-mtp", "--spec-draft-n-max": "5" }, "comment": "MTP embebido conservado, pero con 64k/batch 256/ubatch 64: en 131k/batch 512 el primer prefill provoca CUDA invalid argument/illegal memory access con mmproj en esta GPU." },
+      { "id": "sys-repair-48-bigbang-mtp", "order": 155, "displayName": "REPAIR - BigBang · MTP · 64k · B256/U64", "runtime": { "ctx": 65536, "batch": 256, "ubatch": 64, "kv": "q8_0", "flashAttn": true }, "extraArgOverrides": { "--flash-attn": "on", "--cache-type-k": "q8_0", "--cache-type-v": "q8_0", "--temp": "0.70", "--top-p": "0.08", "--reasoning": "off", "--spec-type": "draft-mtp", "--spec-draft-n-max": "5" }, "comment": "Copia de reparación para sys-bench-48-bigbang-mtp y sys-bench-48-bigbang-fast: conserva MTP, baja contexto/batch, usa KV q8_0 y reactiva Flash Attention. Los perfiles originales crashearon con flash off a 131k; no se sobrescriben." },
+      { "id": "sys-bench-48-bigbang-mtp-ngram", "order": 158, "displayName": "[bench BigBang] MTP + ngram · 64k · B256/U64", "runtime": { "ctx": 65536, "batch": 256, "ubatch": 64, "kv": "q8_0", "flashAttn": true }, "extraArgOverrides": { "--flash-attn": "on", "--cache-type-k": "q8_0", "--cache-type-v": "q8_0", "--reasoning": "off", "--spec-type": "draft-mtp,ngram-mod", "--spec-draft-n-max": "5", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia experimental para medir MTP embebido combinado con ngram sobre el perfil reparado." },
+      { "id": "sys-repair-48-bigbang-base", "order": 156, "displayName": "REPAIR - BigBang · sin MTP · 64k · B256/U64", "runtime": { "ctx": 65536, "batch": 256, "ubatch": 64, "kv": "q8_0", "flashAttn": true }, "extraArgOverrides": { "--flash-attn": "on", "--cache-type-k": "q8_0", "--cache-type-v": "q8_0", "--reasoning": "off", "--spec-type": null, "--spec-draft-n-max": null }, "comment": "Copia de reparación para sys-bench-48-bigbang-base: elimina MTP, baja contexto/batch y usa KV q8_0 + Flash Attention. El original crasheó con flash off a 131k; no se sobrescribe." },
+      { "id": "sys-repair-48-bigbang-mtp-balance", "order": 157, "displayName": "BALANCE - BigBang MTP", "runtime": { "ctx": 65536, "batch": 256, "ubatch": 64, "kv": "q8_0", "flashAttn": true }, "extraArgOverrides": { "--flash-attn": "on", "--cache-type-k": "q8_0", "--cache-type-v": "q8_0", "--temp": "0.60", "--top-p": "0.95", "--reasoning": "off", "--spec-type": "draft-mtp", "--spec-draft-n-max": "5" }, "comment": "Perfil BALANCE corregido y promovido desde la copia de reparación: conserva MTP embebido y sampling estándar, pero usa 64k/B256/U64, KV q8_0 y Flash Attention para evitar los crashes CUDA observados en la configuración 131k/flash off." }
+    ],
+    "comment": "Perfil experimental del GGUF publicado por bartowski. Incluye mmproj bf16 para visión. El MTP está embebido en estos quants y se activa con --spec-type draft-mtp; el perfil exige llama.cpp b10262+. Flash Attention queda desactivado porque este modelo provoca un acceso ilegal CUDA reproducible en ggml_cuda_flash_attn_ext_mma_f16_case sobre el equipo dual RTX 3090 de referencia. Comparar siempre contra los perfiles KAT-Coder existentes con la misma suite y repeticiones."
+  },
+  {
+    "id": "sys-experimental-minimax-m27-q3ks",
+    "tier": "48GB-MiniMax",
+    "order": 155,
+    "extra": true,
+    "benchmark": false,
+    "favorite": true,
+    "autoCompanion": false,
+    "displayName": "[experimental 48GB] MiniMax M2.7 Q3_K_S",
+    "minVramGb": 48,
+    "minRamGb": 112,
+    "cpuOk": false,
+    "agentProfileId": "agent-maximo",
+    "model": { "repo": "MiniMaxAI/MiniMax-M2.7-GGUF", "file": "MiniMax-M2.7.Q3_K_S.gguf", "quant": "Q3_K_S" },
+    "runtime": { "ctx": 32768, "gpuLayers": 999, "batch": 4096, "ubatch": 512, "kv": "q4_0", "flashAttn": true },
+    "extraArgs": ["--n-cpu-moe", "45", "--split-mode", "layer", "--tensor-split", "3,1", "--reasoning", "on"],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10331,
+    "comment": "Perfil experimental opt-in; no se recomienda automáticamente. Requiere 2x RTX 3090 y 128 GB de RAM."
+  },
+  {
+    "id": "sys-qwen38-27b-udq4-131k",
+    "tier": "24GB-Qwen38-Vision", "order": 160, "extra": true, "best": true, "favorite": true, "autoCompanion": false,
+    "displayName": "BALANCE - Qwen3.8 UD-Q4 visión",
+    "minVramGb": 24, "minRamGb": 32, "cpuOk": false, "folder": "Qwen3.8-27B-GGUF", "agentProfileId": "agent-maximo",
+    "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "unsloth/Qwen3.8-27B-GGUF", "file": "Qwen3.8-27B-UD-Q4_K_XL.gguf", "mmprojRepo": "unsloth/Qwen3.8-27B-GGUF", "mmprojFile": "mmproj-BF16.gguf", "quant": "UD-Q4_K_XL" },
+    "runtime": { "ctx": 131072, "gpuLayers": 999, "batch": 512, "ubatch": 64, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": false, "mmap": true },
+    "extraArgs": ["--cache-type-k", "q4_0", "--cache-type-v", "q4_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--jinja", "--predict", "4096", "--parallel", "1", "--reasoning", "off"],
+    "mtp": { "enabled": true, "selfContained": true, "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "3"] },
+    "binaryKind": "official", "minimumBinaryBuild": 10331, "contextPresets": [32768, 65536, 131072, 196608],
+    "benchmarkVariants": [
+      { "id": "sys-bench-qwen38-udq4-mtp2", "order": 161, "displayName": "[bench Qwen3.8] UD-Q4 · MTP2 · 131k · mmproj", "extraArgOverrides": { "--spec-draft-n-max": "2" }, "comment": "Comparar con MAX-Q y ThinkingCap." },
+      { "id": "sys-bench-qwen38-udq4-mtp4", "order": 162, "best": true, "displayName": "BALANCE - Qwen3.8 UD-Q4 MTP4", "extraArgOverrides": { "--spec-draft-n-max": "4" }, "comment": "Comparar decode y calidad sostenida contra MTP3." },
+      { "id": "sys-bench-qwen38-udq4-mtp3-196k", "order": 163, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 · 196k · mmproj", "runtime": { "ctx": 196608 }, "comment": "Prueba de contexto largo con la misma visión." },
+      { "id": "sys-bench-qwen38-udq4-mtp2-64k", "order": 166, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · MTP2 · 64k · mmproj", "runtime": { "ctx": 65536 }, "extraArgOverrides": { "--spec-draft-n-max": "2" } },
+      { "id": "sys-bench-qwen38-udq4-mtp3-64k", "order": 167, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 · 64k · mmproj", "runtime": { "ctx": 65536 } },
+      { "id": "sys-bench-qwen38-udq4-mtp4-64k", "order": 168, "displayName": "[bench Qwen3.8] UD-Q4 · MTP4 · 64k · mmproj", "runtime": { "ctx": 65536 }, "extraArgOverrides": { "--spec-draft-n-max": "4" } },
+      { "id": "sys-bench-qwen38-udq4-mtp3-kv8", "order": 169, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 · 131k · KV q8 · mmproj", "runtime": { "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" } },
+      { "id": "sys-bench-qwen38-udq4-mtp3-b1024", "order": 170, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 · B1024 · mmproj", "runtime": { "batch": 1024, "ubatch": 128 } },
+      { "id": "sys-bench-qwen38-udq4-mtp3-b2048", "order": 171, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 · B2048 · mmproj", "runtime": { "batch": 2048, "ubatch": 256 } },
+      { "id": "sys-bench-qwen38-udq4-post-262k-kv8", "order": 192, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 UD-Q4 · MTP3 · 262k · B2048/U512 · KV q8", "runtime": { "ctx": 262144, "batch": 2048, "ubatch": 512, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" }, "comment": "Retirado: HE0 terminó 0/1 y no habilitó HE20/BCB bajo la huella actual; se conserva para investigación de 262k." },
+      { "id": "sys-bench-qwen38-udq4-post-mirror-160k", "order": 207, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · espejo post · 160,9k · MTP2 · B2048/U512", "runtime": { "ctx": 160927, "batch": 2048, "ubatch": 512, "kv": "q4_0" }, "extraArgOverrides": { "--spec-draft-n-max": "2" }, "comment": "Espejo llama.cpp del load screen del post: contexto 160927, MTP2 y eval batch/physical batch 2048/512. Conserva KV q4_0 y el resto del baseline para aislar el efecto de esos ajustes; no replica LM Studio/FP8." },
+      { "id": "sys-bench-qwen38-udq4-post-b8192", "order": 193, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 · B8192/U512 · 131k", "runtime": { "batch": 8192, "ubatch": 512 }, "comment": "Control de max-num-batched-tokens 8192 usando los equivalentes llama.cpp batch/ubatch." },
+      { "id": "sys-bench-qwen38-udq4-post-parallel2", "order": 194, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 · 2 slots · 131k", "runtime": { "parallelSlots": 2 }, "comment": "Mide throughput agregado con dos lanes; no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-udq4-post-parallel4", "order": 195, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 · 4 slots · 131k", "runtime": { "parallelSlots": 4 }, "comment": "Mide throughput agregado con cuatro lanes; no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-udq4-post-parallel6", "order": 196, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 · 6 slots · 131k", "runtime": { "parallelSlots": 6 }, "comment": "Mide throughput agregado con seis lanes; no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-udq4-post-tensor", "order": 214, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · tensor split · 131k · MTP3", "extraArgOverrides": { "--split-mode": "tensor", "--tensor-split": "1,1" }, "comment": "A/B multi-GPU contra el reparto layer. Requiere dos GPUs compatibles; se mide como candidato y no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-udq4-post-mmproj-cpu", "order": 215, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · mmproj en RAM · 131k", "extraArgAdds": ["--no-mmproj-offload"], "comment": "Aísla el ahorro de VRAM del proyector de visión. La suite de texto mide memoria/estabilidad; la visión debe validarse aparte." },
+      { "id": "sys-bench-qwen38-udq4-post-cache-warm", "order": 216, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · cache warm · 131k · MTP3", "extraArgAdds": ["--cache-prompt", "--cache-reuse", "512"], "comment": "Escenario de prefijo repetido. No se mezcla con el resultado cold-cache: mide throughput con prompt cache habilitado." },
+        { "id": "sys-bench-qwen38-udq4-mtp3-ngram", "order": 172, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · MTP3 + ngram · 131k · mmproj", "extraArgOverrides": { "--spec-type": "draft-mtp,ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia experimental para medir repetición de bloques con MTP; no reemplaza MTP3." },
+      { "id": "sys-bench-qwen38-udq4-reasoning-low", "order": 229, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · thinking low · 131k · MTP3 · visión", "extraArgOverrides": { "--reasoning": "low" }, "comment": "A/B exacto contra BALANCE - Qwen3.8 UD-Q4 visión; sólo cambia el nivel de thinking." },
+      { "id": "sys-bench-qwen38-udq4-reasoning-medium", "order": 230, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · thinking medium · 131k · MTP3 · visión", "extraArgOverrides": { "--reasoning": "medium" }, "comment": "A/B exacto contra BALANCE - Qwen3.8 UD-Q4 visión; sólo cambia el nivel de thinking." },
+      { "id": "sys-bench-qwen38-udq4-reasoning-xhigh", "order": 231, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · thinking xhigh · 131k · MTP3 · visión", "extraArgOverrides": { "--reasoning": "xhigh" }, "comment": "A/B exacto contra BALANCE - Qwen3.8 UD-Q4 visión; sólo cambia el nivel de thinking." },
+      { "id": "sys-bench-qwen38-udq4-browser-agent-off", "order": 232, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · Browser Agent · thinking off · 131k", "agentProfileId": "agent-browser", "comment": "A/B del harness Browser Agent nativo contra el control Máximo/off; modelo, runtime, sampling, MTP, visión y template intactos. No es un resultado BU Bench hasta ejecutar una suite de browser real." },
+      { "id": "sys-bench-qwen38-udq4-browser-agent-low", "order": 233, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · Browser Agent · thinking low · 131k", "agentProfileId": "agent-browser", "extraArgOverrides": { "--reasoning": "low" }, "comment": "A/B de Browser Agent nativo con thinking low; sólo cambia harness y nivel de reasoning respecto del control Máximo/off." },
+      { "id": "sys-bench-qwen38-udq4-browser-agent-medium", "order": 234, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · Browser Agent · thinking medium · 131k", "agentProfileId": "agent-browser", "extraArgOverrides": { "--reasoning": "medium" }, "comment": "A/B de Browser Agent nativo con thinking medium; sólo cambia harness y nivel de reasoning respecto del control Máximo/off." },
+      { "id": "sys-bench-qwen38-udq4-browser-agent-xhigh", "order": 235, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · Browser Agent · thinking xhigh · 131k", "agentProfileId": "agent-browser", "extraArgOverrides": { "--reasoning": "xhigh" }, "comment": "A/B de Browser Agent nativo con thinking xhigh; es la corrida prioritaria para contrastar la referencia externa. Requiere suite de browser real para interpretar éxito de navegación." },
+      { "id": "sys-bench-qwen38-udq4-artifact-local", "order": 239, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · Artifacts local/privado · 131k", "agentProfileId": "agent-artifact-local", "comment": "A/B del harness de artefactos local-first: crea, valida y deja el entregable privado sin web, browser ni MCP. Medir con artifact_lifecycle_v1; no publicar." },
+      { "id": "sys-bench-qwen38-udq4-artifact-publisher", "order": 240, "benchmark": true, "displayName": "[bench Qwen3.8] UD-Q4 · Artifacts publicación aprobada · 131k", "agentProfileId": "agent-artifact-publisher", "comment": "A/B del mismo flujo con web/browser/MCP disponibles y approval ask. La suite debe comprobar que preparar/stash no dispara una publicación; cualquier publicación real requiere una prueba separada y aprobación explícita." },
+      { "id": "sys-bench-qwen38-udq4-24gb-fast-mtp4-64k", "order": 236, "benchmark": true, "displayName": "[bench 24GB Qwen3.8] UD-Q4 · fast · MTP4 · 64k · mmproj RAM", "runtime": { "ctx": 65536 }, "extraArgOverrides": { "--spec-draft-n-max": "4" }, "extraArgAdds": ["--no-mmproj-offload"], "comment": "Variante 24GB de baja presión inspirada en CTX=fast del stack externo: 64k, MTP4 y mmproj en RAM. Es un análogo llama.cpp, no DFlash2 ni fp8-KV; validar visión por separado." },
+      { "id": "sys-bench-qwen38-udq4-24gb-lookup-64k", "order": 237, "benchmark": false, "displayName": "[retirado 2026-08-21] UD-Q4 · lookup aproximado · 64k · MTP3", "runtime": { "ctx": 65536 }, "extraArgOverrides": { "--spec-type": "draft-mtp,ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "El intento local terminó en infraestructura/timeout y no es una réplica de DFlash2. Se conserva para documentación, pero no vuelve a la cola sin una implementación de lookup validada." },
+      { "id": "sys-bench-qwen38-udq4-24gb-prefix-cache-64k", "order": 238, "benchmark": true, "displayName": "[bench 24GB Qwen3.8] UD-Q4 · prefix cache · 64k · MTP3", "runtime": { "ctx": 65536 }, "extraArgAdds": ["--cache-prompt", "--cache-reuse", "512"], "comment": "Variante 24GB para turnos largos repetidos: 64k, MTP3 y prompt cache. Medir sólo contra otra corrida warm-cache; no mezclar con latencia cold-cache." },
+      { "id": "sys-bench-qwen38-udq4-48gb-196k-mtp2-kv8-mmproj-ram", "order": 260, "benchmark": true, "displayName": "[bench 48GB Qwen3.8] UD-Q4 · 196k · MTP2 · KV q8 · visión", "runtime": { "ctx": 196608, "batch": 512, "ubatch": 64, "kv": "q8_0" }, "mtp": { "enabled": true, "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "2"] }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" }, "extraArgAdds": ["--no-mmproj-offload"], "comment": "Variante validada en 48GB: conserva visión, MTP2 real, 196k, KV q8, B512/U64 y mmproj en RAM. HE0 1/1, HE20 20/20 y BCB 8/8; queda como referencia de contexto largo con visión." }
+    ],
+    "comment": "Qwen3.8-27B oficial de Unsloth: visión nativa y MTP integrado. Reasoning queda off en este perfil base para el flujo agentico; las variantes reasoning-low, reasoning-medium y reasoning-xhigh permiten medir el efecto del thinking sin cambiar modelo, quant, contexto, batch, MTP, visión ni template. La app descarga el GGUF y mmproj-BF16 desde Hugging Face.", "vision": true
+  },
+  {
+    "id": "sys-qwen38-27b-q4km-131k",
+    "tier": "24GB-Qwen38-Vision", "order": 164, "extra": true, "best": true, "benchmark": true, "autoCompanion": false,
+    "displayName": "[experimental 24GB] Qwen3.8-27B Q4_K_M · MTP · visión · 131k",
+    "minVramGb": 24, "minRamGb": 32, "cpuOk": false, "folder": "Qwen3.8-27B-GGUF-Q4_K_M", "agentProfileId": "agent-maximo", "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "unsloth/Qwen3.8-27B-GGUF", "file": "Qwen3.8-27B-Q4_K_M.gguf", "mmprojRepo": "unsloth/Qwen3.8-27B-GGUF", "mmprojFile": "mmproj-BF16.gguf", "quant": "Q4_K_M" },
+    "runtime": { "ctx": 131072, "gpuLayers": 999, "batch": 512, "ubatch": 64, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": false, "mmap": true },
+    "extraArgs": ["--cache-type-k", "q4_0", "--cache-type-v", "q4_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--jinja", "--predict", "4096", "--parallel", "1", "--reasoning", "on"],
+    "mtp": { "enabled": true, "selfContained": true, "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "3"] }, "binaryKind": "official", "minimumBinaryBuild": 10331, "contextPresets": [32768, 65536, 131072], "vision": true,
+    "benchmarkVariants": [
+      { "id": "sys-bench-qwen38-q4km-mtp2", "order": 172, "displayName": "[bench Qwen3.8] Q4_K_M · MTP2 · 131k · mmproj", "extraArgOverrides": { "--spec-draft-n-max": "2" } },
+      { "id": "sys-bench-qwen38-q4km-mtp4", "order": 173, "benchmark": true, "displayName": "[bench Qwen3.8] Q4_K_M · MTP4 · 131k · mmproj", "extraArgOverrides": { "--spec-draft-n-max": "4" } },
+      { "id": "sys-bench-qwen38-q4km-mtp2-64k", "order": 174, "displayName": "[bench Qwen3.8] Q4_K_M · MTP2 · 64k · mmproj", "runtime": { "ctx": 65536 }, "extraArgOverrides": { "--spec-draft-n-max": "2" } },
+      { "id": "sys-bench-qwen38-q4km-mtp3-64k", "order": 175, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · 64k · mmproj", "runtime": { "ctx": 65536 } },
+      { "id": "sys-bench-qwen38-q4km-mtp4-64k", "order": 176, "displayName": "[bench Qwen3.8] Q4_K_M · MTP4 · 64k · mmproj", "runtime": { "ctx": 65536 }, "extraArgOverrides": { "--spec-draft-n-max": "4" } },
+      { "id": "sys-bench-qwen38-q4km-mtp3-kv8", "order": 177, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · KV q8 · mmproj", "runtime": { "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" } },
+      { "id": "sys-bench-qwen38-q4km-mtp3-b1024", "order": 178, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · B1024 · mmproj", "runtime": { "batch": 1024, "ubatch": 128 } },
+      { "id": "sys-bench-qwen38-q4km-mtp3-b2048", "order": 179, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · B2048 · mmproj", "runtime": { "batch": 2048, "ubatch": 256 } },
+      { "id": "sys-bench-qwen38-q4km-post-262k-kv8", "order": 197, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · 262k · B2048/U512 · KV q8", "runtime": { "ctx": 262144, "batch": 2048, "ubatch": 512, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" }, "comment": "Control llama.cpp inspirado en el post: contexto largo, batch alto y KV q8; no replica vLLM/FP8." },
+      { "id": "sys-bench-qwen38-q4km-post-mirror-160k", "order": 208, "benchmark": true, "displayName": "[bench Qwen3.8] Q4_K_M · espejo post · 160,9k · MTP2 · B2048/U512", "runtime": { "ctx": 160927, "batch": 2048, "ubatch": 512, "kv": "q4_0" }, "extraArgOverrides": { "--spec-draft-n-max": "2" }, "comment": "Espejo llama.cpp del load screen del post: contexto 160927, MTP2 y eval batch/physical batch 2048/512. Conserva KV q4_0 y el resto del baseline para aislar el efecto de esos ajustes; no replica LM Studio/FP8." },
+      { "id": "sys-bench-qwen38-q4km-post-b8192", "order": 198, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · B8192/U512 · 131k", "runtime": { "batch": 8192, "ubatch": 512 }, "comment": "Control de max-num-batched-tokens 8192 usando los equivalentes llama.cpp batch/ubatch." },
+      { "id": "sys-bench-qwen38-q4km-post-parallel2", "order": 199, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · 2 slots · 131k", "runtime": { "parallelSlots": 2 }, "comment": "Mide throughput agregado con dos lanes; no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-q4km-post-parallel4", "order": 200, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · 4 slots · 131k", "runtime": { "parallelSlots": 4 }, "comment": "Mide throughput agregado con cuatro lanes; no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-q4km-post-parallel6", "order": 201, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · 6 slots · 131k", "runtime": { "parallelSlots": 6 }, "comment": "Mide throughput agregado con seis lanes; no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-q4km-mtp3-64k-kv8", "order": 180, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 · 64k · KV q8 · mmproj", "runtime": { "ctx": 65536, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" } },
+      { "id": "sys-bench-qwen38-q4km-mtp3-ngram", "order": 182, "displayName": "[bench Qwen3.8] Q4_K_M · MTP3 + ngram · 131k · mmproj", "extraArgOverrides": { "--spec-type": "draft-mtp,ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia Q4_K_M que combina MTP3 y ngram." }
+    ],
+    "comment": "Variante de referencia de calidad/compatibilidad; mismo mmproj y MTP que UD-Q4. Diez perfiles candidatos por GGUF: el base y nueve variantes pasan HumanEval/0 antes de seleccionar tres para HumanEval/20."
+  },
+  {
+    "id": "sys-qwen38-27b-q5km-131k",
+    "tier": "24GB-Qwen38-Vision", "order": 165, "extra": true, "benchmark": true, "best": true, "autoCompanion": false,
+    "displayName": "[experimental 24GB] Qwen3.8-27B Q5_K_M · MTP · visión · 131k",
+    "minVramGb": 24, "minRamGb": 32, "cpuOk": false, "folder": "Qwen3.8-27B-GGUF-Q5_K_M", "agentProfileId": "agent-maximo", "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "unsloth/Qwen3.8-27B-GGUF", "file": "Qwen3.8-27B-Q5_K_M.gguf", "mmprojRepo": "unsloth/Qwen3.8-27B-GGUF", "mmprojFile": "mmproj-BF16.gguf", "quant": "Q5_K_M" },
+    "runtime": { "ctx": 131072, "gpuLayers": 999, "batch": 512, "ubatch": 64, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": false, "mmap": true },
+    "extraArgs": ["--cache-type-k", "q4_0", "--cache-type-v", "q4_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--jinja", "--predict", "4096", "--parallel", "1", "--reasoning", "on"],
+    "mtp": { "enabled": true, "selfContained": true, "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "3"] }, "binaryKind": "official", "minimumBinaryBuild": 10331, "contextPresets": [32768, 65536, 131072], "vision": true,
+    "benchmarkVariants": [
+      { "id": "sys-bench-qwen38-q5km-mtp2", "order": 181, "displayName": "[bench Qwen3.8] Q5_K_M · MTP2 · 131k · mmproj", "extraArgOverrides": { "--spec-draft-n-max": "2" } },
+      { "id": "sys-bench-qwen38-q5km-mtp4", "order": 182, "displayName": "[bench Qwen3.8] Q5_K_M · MTP4 · 131k · mmproj", "extraArgOverrides": { "--spec-draft-n-max": "4" } },
+      { "id": "sys-bench-qwen38-q5km-mtp2-64k", "order": 183, "displayName": "[bench Qwen3.8] Q5_K_M · MTP2 · 64k · mmproj", "runtime": { "ctx": 65536 }, "extraArgOverrides": { "--spec-draft-n-max": "2" } },
+      { "id": "sys-bench-qwen38-q5km-mtp3-64k", "order": 184, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 · 64k · mmproj", "runtime": { "ctx": 65536 } },
+      { "id": "sys-bench-qwen38-q5km-mtp4-64k", "order": 185, "displayName": "[bench Qwen3.8] Q5_K_M · MTP4 · 64k · mmproj", "runtime": { "ctx": 65536 }, "extraArgOverrides": { "--spec-draft-n-max": "4" } },
+      { "id": "sys-bench-qwen38-q5km-mtp3-kv8", "order": 186, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 · KV q8 · mmproj", "runtime": { "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" } },
+      { "id": "sys-bench-qwen38-q5km-mtp3-b1024", "order": 187, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 · B1024 · mmproj", "runtime": { "batch": 1024, "ubatch": 128 } },
+      { "id": "sys-bench-qwen38-q5km-mtp3-b2048", "order": 188, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 · B2048 · mmproj", "runtime": { "batch": 2048, "ubatch": 256 } },
+      { "id": "sys-bench-qwen38-q5km-post-262k-kv8", "order": 202, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 · 262k · B2048/U512 · KV q8", "runtime": { "ctx": 262144, "batch": 2048, "ubatch": 512, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" }, "comment": "Control llama.cpp inspirado en el post: contexto largo, batch alto y KV q8; no replica vLLM/FP8." },
+      { "id": "sys-bench-qwen38-q5km-post-b8192", "order": 203, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 · B8192/U512 · 131k", "runtime": { "batch": 8192, "ubatch": 512 }, "comment": "Control de max-num-batched-tokens 8192 usando los equivalentes llama.cpp batch/ubatch." },
+      { "id": "sys-bench-qwen38-q5km-post-parallel2", "order": 204, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 · 2 slots · 131k", "runtime": { "parallelSlots": 2 }, "comment": "Mide throughput agregado con dos lanes; no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-q5km-post-parallel4", "order": 205, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 · 4 slots · 131k", "runtime": { "parallelSlots": 4 }, "comment": "Mide throughput agregado con cuatro lanes; no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-q5km-post-parallel6", "order": 206, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 · 6 slots · 131k", "runtime": { "parallelSlots": 6 }, "comment": "Mide throughput agregado con seis lanes; no cambia el perfil base." },
+      { "id": "sys-bench-qwen38-q5km-mtp3-64k-kv8", "order": 189, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q5_K_M · MTP3 · 64k · KV q8 · mmproj", "runtime": { "ctx": 65536, "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" }, "comment": "Retirado: BCB quedó 0/0 con timeout; el control Q5 131k conserva la comparación de calidad." },
+      { "id": "sys-bench-qwen38-q5km-post-mirror-160k", "order": 209, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q5_K_M · espejo post · 160,9k · MTP2 · B2048/U512", "runtime": { "ctx": 160927, "batch": 2048, "ubatch": 512, "kv": "q4_0" }, "extraArgOverrides": { "--spec-draft-n-max": "2" }, "comment": "Retirado: BCB no llegó a una medición evaluable; se conserva el ID para repetirlo sólo con una huella estable." },
+      { "id": "sys-bench-qwen38-q5km-mtp3-ngram", "order": 191, "displayName": "[bench Qwen3.8] Q5_K_M · MTP3 + ngram · 131k · mmproj", "extraArgOverrides": { "--spec-type": "draft-mtp,ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia Q5_K_M que combina MTP3 y ngram." },
+      { "id": "sys-bench-qwen38-q5km-48gb-196k-mtp2-kv8-mmproj-ram", "order": 261, "benchmark": false, "displayName": "[retirado 2026-08-21] Q5_K_M · 196k · MTP2 · KV q8 · visión", "runtime": { "ctx": 196608, "batch": 512, "ubatch": 64, "kv": "q8_0" }, "mtp": { "enabled": true, "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "2"] }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" }, "extraArgAdds": ["--no-mmproj-offload"], "comment": "Retirado tras fallo de infraestructura durante HE0: acceso ilegal de CUDA al cargar con ctx 196k/KV q8/mmproj RAM. Se conserva el ID, perfil e historial; no vuelve a la cola sin una corrección específica del backend." }
+    ],
+    "comment": "Variante de precisión: más peso y menos margen de KV. Diez perfiles candidatos por GGUF pasan HumanEval/0 antes de seleccionar tres para HumanEval/20."
+  },
+  {
+    "id": "sys-qwen38-27b-q4km-24gb-32k",
+    "tier": "24GB-Qwen38-Turing", "order": 242, "extra": true,
+    "benchmark": false, "best": false, "favorite": false, "autoCompanion": false,
+    "displayName": "[bench 24GB] Qwen3.8-27B Q4_K_M · llama-bench control · 32k",
+    "minVramGb": 24, "minRamGb": 32, "cpuOk": false,
+    "folder": "Qwen3.8-27B-GGUF-Q4_K_M", "agentProfileId": "agent-maximo", "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "unsloth/Qwen3.8-27B-GGUF", "file": "Qwen3.8-27B-Q4_K_M.gguf", "quant": "Q4_K_M" },
+    "runtime": { "ctx": 32768, "gpuLayers": 999, "batch": 512, "ubatch": 512, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": false, "mmap": true, "parallelSlots": 1 },
+    "extraArgs": ["--cache-type-k", "q4_0", "--cache-type-v", "q4_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--jinja", "--predict", "128", "--parallel", "1", "--reasoning", "off"],
+    "binaryKind": "official", "minimumBinaryBuild": 10331, "contextPresets": [32768], "vision": false,
+    "benchmarkVariants": [
+      { "id": "sys-bench-qwen38-q4km-24gb-tg128", "order": 243, "benchmark": false, "displayName": "[retirado 2026-08-21] Q4_K_M · tg128 · cold · sin speculative", "comment": "Retirado: BCB quedó 0/0 con timeout y no permite ranking E2E; los diagnósticos ngram/prefix-cache quedan separados." },
+      { "id": "sys-bench-qwen38-q4km-24gb-ngram-diagnostic", "order": 244, "benchmark": true, "displayName": "[diagnóstico 24GB] Q4_K_M · ngram · no rankear", "extraArgOverrides": { "--spec-type": "ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Control negativo para detectar prefijos repetidos o cache-hit: el throughput de ngram no se mezcla con el control tg128 ni se presenta como velocidad real del hardware." },
+      { "id": "sys-bench-qwen38-q4km-24gb-prefix-warm", "order": 245, "benchmark": true, "displayName": "[diagnóstico 24GB] Q4_K_M · prefix cache · warm · no rankear", "extraArgAdds": ["--cache-prompt", "--cache-reuse", "512"], "comment": "Control warm-cache: comparar sólo contra otra corrida con el mismo prefijo y cache habilitado; no usar para rankear contra cold-cache." }
+    ],
+    "comment": "Control honesto para una GPU de 24 GB que también maneja el escritorio: reproduce la receta publicada para Q4_K_M sin MTP, ngram, prompt-cache ni mmproj. La suite de agente puede usarlo después de validar HE0, pero el objetivo primario es el decode tg128 nativo. La cifra pública de 24,36 tok/s es una referencia externa, no un resultado local.",
+    "tags": ["qwen3.8", "q4_k_m", "24gb", "turing", "llama-bench", "cold-decode"]
+  },
+  {
+    "id": "sys-qwen38-27b-q6k-24gb-32k",
+    "tier": "24GB-Qwen38-Turing", "order": 246, "extra": true,
+    "benchmark": false, "best": false, "favorite": false, "autoCompanion": false,
+    "displayName": "[bench 24GB] Qwen3.8-27B Q6_K · llama-bench control · 32k",
+    "minVramGb": 24, "minRamGb": 32, "cpuOk": false,
+    "folder": "Qwen3.8-27B-GGUF-Q6_K", "agentProfileId": "agent-maximo", "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "unsloth/Qwen3.8-27B-GGUF", "file": "Qwen3.8-27B-Q6_K.gguf", "quant": "Q6_K" },
+    "runtime": { "ctx": 32768, "gpuLayers": 999, "batch": 512, "ubatch": 512, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": false, "mmap": true, "parallelSlots": 1 },
+    "extraArgs": ["--cache-type-k", "q4_0", "--cache-type-v", "q4_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--jinja", "--predict", "128", "--parallel", "1", "--reasoning", "off"],
+    "binaryKind": "official", "minimumBinaryBuild": 10331, "contextPresets": [32768], "vision": false,
+    "benchmarkVariants": [
+      { "id": "sys-bench-qwen38-q6k-24gb-tg128", "order": 247, "benchmark": false, "displayName": "[retirado 2026-08-21] Q6_K · tg128 · cold · sin speculative", "comment": "Sin GGUF Q6_K local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-qwen38-q6k-24gb-ngram-diagnostic", "order": 248, "benchmark": false, "displayName": "[retirado 2026-08-21] Q6_K · ngram · no rankear", "extraArgOverrides": { "--spec-type": "ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Sin GGUF Q6_K local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-qwen38-q6k-24gb-prefix-warm", "order": 249, "benchmark": false, "displayName": "[retirado 2026-08-21] Q6_K · prefix cache · warm · no rankear", "extraArgAdds": ["--cache-prompt", "--cache-reuse", "512"], "comment": "Sin GGUF Q6_K local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." }
+    ],
+    "comment": "Control Q6 para la frontera real de 24 GB: el reporte indica que Q6_K ocupa aproximadamente 20,56 GiB y sigue entrando en la RTX 6000/3090, pero con menos margen que Q4. No se promete contexto largo ni se incluye mmproj: primero medir carga completa, VRAM pico y tg128 con el mismo runtime que Q4.",
+    "tags": ["qwen3.8", "q6_k", "24gb", "turing", "llama-bench", "cold-decode"]
+  },
+  {
+    "id": "sys-48-qwen38-27b-q8-196k",
+    "tier": "48GB-Qwen38-Vision", "order": 210, "extra": true, "best": false, "benchmark": false, "favorite": false, "autoCompanion": false,
+    "displayName": "[bench 48GB] Qwen3.8 Uncensored Q8 · 196k · visión",
+    "minVramGb": 48, "minRamGb": 64, "cpuOk": false, "folder": "Qwen3.8-27B-Uncensored-GGUF", "agentProfileId": "agent-maximo", "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF", "file": "Qwen3.8-27B-Uncensored-Q8_0.gguf", "mmprojRepo": "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF", "mmprojFile": "Qwen3.8-27B-Uncensored-vision-f16.gguf", "quant": "Q8_0" },
+    "runtime": { "ctx": 196608, "gpuLayers": 999, "batch": 2048, "ubatch": 256, "threads": 8, "kv": "q8_0", "flashAttn": true, "mlock": false, "mmap": true },
+    "extraArgs": ["--cache-type-k", "q8_0", "--cache-type-v", "q8_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--jinja", "--predict", "4096", "--parallel", "1", "--reasoning", "off", "--split-mode", "layer", "--tensor-split", "1,1"],
+    "mtp": { "enabled": true, "selfContained": true, "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "3"] },
+    "binaryKind": "official", "minimumBinaryBuild": 10331, "contextPresets": [131072, 196608], "vision": true,
+    "benchmarkVariants": [
+      { "id": "sys-bench-48-qwen38-q8-tensor", "order": 211, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q8 · tensor split · 196k · MTP3", "extraArgOverrides": { "--split-mode": "tensor", "--tensor-split": "1,1" }, "comment": "Sin GGUF Q8 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q8-mmproj-cpu", "order": 212, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q8 · mmproj en RAM · 196k", "extraArgAdds": ["--no-mmproj-offload"], "comment": "Sin GGUF Q8 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q8-cache-warm", "order": 213, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q8 · cache warm · 196k · MTP3", "extraArgAdds": ["--cache-prompt", "--cache-reuse", "512"], "comment": "Sin GGUF Q8 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." }
+    ],
+    "comment": "Candidato 48GB derivado del post de LocalLLaMA: Qwen3.8 Uncensored Q8_0 + vision-f16 + MTP embebido, con 196k y B2048/U256. Adaptado a la política reproducible del repo: KV q8_0, sampling conservador, mmap activo y mlock apagado; el post usaba no-mmap/mlock y penalties distintos. Fuente exacta: JonathanColetti/Qwen3.8-27B-Uncensored-GGUF. Ejecutar HE0 antes de HE20/BCB."
+  },
+  {
+    "id": "sys-48-qwen38-27b-q6-96k",
+    "tier": "48GB-Qwen38-Vision", "order": 217, "extra": true, "best": false, "benchmark": false, "favorite": false, "autoCompanion": false,
+    "displayName": "[bench 48GB] Qwen3.8 UD-Q6_K_XL · 96k · MTP2 · visión",
+    "minVramGb": 48, "minRamGb": 64, "cpuOk": false, "folder": "Qwen3.8-27B-GGUF-Q6_K_XL", "agentProfileId": "agent-maximo", "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "unsloth/Qwen3.8-27B-GGUF", "file": "Qwen3.8-27B-UD-Q6_K_XL.gguf", "mmprojRepo": "unsloth/Qwen3.8-27B-GGUF", "mmprojFile": "mmproj-BF16.gguf", "quant": "UD-Q6_K_XL" },
+    "runtime": { "ctx": 98304, "gpuLayers": 999, "batch": 512, "ubatch": 64, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": false, "mmap": true },
+    "extraArgs": ["--cache-type-k", "q4_0", "--cache-type-v", "q4_0", "--fit", "off", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--jinja", "--predict", "4096", "--parallel", "1", "--reasoning", "off", "--split-mode", "layer", "--tensor-split", "1,1"],
+    "mtp": { "enabled": true, "selfContained": true, "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "2"] },
+    "binaryKind": "official", "minimumBinaryBuild": 10331, "contextPresets": [65536, 98304, 131072], "vision": true,
+    "benchmarkVariants": [
+      { "id": "sys-bench-48-qwen38-q6-mtp3-96k", "order": 218, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · MTP3 · 96k · visión", "extraArgOverrides": { "--spec-draft-n-max": "3" }, "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-mtp4-96k", "order": 219, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · MTP4 · 96k · visión", "extraArgOverrides": { "--spec-draft-n-max": "4" }, "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-mtp2-64k", "order": 220, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · MTP2 · 64k · visión", "runtime": { "ctx": 65536 }, "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-mtp2-131k", "order": 221, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · MTP2 · 131k · visión", "runtime": { "ctx": 131072 }, "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-mtp2-kv8", "order": 222, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · MTP2 · 96k · KV q8", "runtime": { "kv": "q8_0" }, "extraArgOverrides": { "--cache-type-k": "q8_0", "--cache-type-v": "q8_0" }, "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-mtp2-b2048", "order": 223, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · MTP2 · 96k · B2048/U512", "runtime": { "batch": 2048, "ubatch": 512 }, "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-post-mirror-96k", "order": 224, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · espejo post · 96k · MTP2", "runtime": { "batch": 2048, "ubatch": 512 }, "extraArgAdds": ["--no-mmproj-offload"], "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-mmproj-cpu", "order": 225, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · mmproj en RAM · 96k", "extraArgAdds": ["--no-mmproj-offload"], "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-tensor", "order": 226, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · tensor split · 96k", "extraArgOverrides": { "--split-mode": "tensor", "--tensor-split": "1,1" }, "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-cache-warm", "order": 227, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · cache warm · 96k", "extraArgAdds": ["--cache-prompt", "--cache-reuse", "512"], "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." },
+      { "id": "sys-bench-48-qwen38-q6-reasoning-on", "order": 228, "benchmark": false, "displayName": "[retirado 2026-08-21] Qwen3.8 Q6 · reasoning on · 96k", "extraArgOverrides": { "--reasoning": "on" }, "comment": "Sin GGUF Q6 local ni artefacto de benchmark en este checkout; se conserva como referencia de catálogo y no entra en la cola." }
+    ],
+    "comment": "Candidato 48GB derivado del post de Qwen_AI: Qwen3.8-27B UD-Q6_K_XL, MTP2, 96k y mmproj-BF16. Base conservadora con KV q4_0, sampling local y split layer 1,1; las variantes separan MTP, contexto, KV q8, batch, mmproj CPU, tensor split, cache warm y reasoning. No replica los 80–110 tok/s del post ni se recomienda automáticamente; ejecutar HE0 antes de HE20/BCB."
+  },
+  {
+    "id": "sys-experiment-qwen36-cache-mtp2",
+    "tier": "24GB-Qwen-Cache-Experiment", "order": 190, "extra": true, "best": true, "benchmark": false, "autoCompanion": false,
+    "displayName": "EXPERIMENTAL - MAX-Q copia · cache híbrido · MTP2",
+    "minVramGb": 24, "minRamGb": 32, "cpuOk": false, "requiresMtpBinary": true,
+    "folder": "ThinkingCap-Qwen3.6-27B-GGUF", "agentProfileId": "agent-maximo",
+    "model": { "repo": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF", "file": "ThinkingCap-Qwen3.6-27B-Q4_K_M.gguf", "mmprojFile": "mmproj-ThinkingCap-Qwen3.6-27B-f16.gguf", "quant": "Q4_K_M" },
+    "runtime": { "ctx": 131000, "gpuLayers": 999, "batch": 512, "ubatch": 64, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": true, "mmap": false },
+    "extraArgs": ["--cache-type-k", "q4_0", "--cache-type-v", "q4_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--cache-ram", "32768", "--cache-reuse", "512", "--ctx-checkpoints", "8", "--checkpoint-min-step", "4096", "--kv-unified", "--cache-idle-slots", "--jinja", "--threads-batch", "8", "--predict", "4096", "--parallel", "1", "--reasoning", "off", "--spec-type", "draft-mtp", "--spec-draft-n-max", "2", "--spec-draft-p-min", "0.0"],
+    "binaryKind": "official", "minimumBinaryBuild": 10331, "vision": true,
+  "benchmarkVariants": [
+    { "id": "sys-bench-qwen36-cache-mtp2-ngram", "order": 194, "displayName": "[bench Qwen3.6] cache híbrido · MTP2 + ngram", "extraArgOverrides": { "--spec-type": "draft-mtp,ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia MTP2 que combina MTP y ngram en la misma ejecución." }
+  ],
+  "comment": "Copia experimental de sys-maxq: sólo cambia el manejo explícito de checkpoints/cache y baja MTP a 2. Sirve para medir estabilidad de cache y latencia contra MAX-Q sin modificarlo. La corrección completa de checkpoints híbridos de PR #25592 no se presume disponible en b10331."
+  },
+  {
+    "id": "sys-experiment-qwen36-cache-mtp4",
+    "tier": "24GB-Qwen-Cache-Experiment", "order": 191, "extra": true, "best": true, "benchmark": false, "autoCompanion": false,
+    "displayName": "EXPERIMENTAL - MAX-Q copia · cache híbrido · MTP4",
+    "minVramGb": 24, "minRamGb": 32, "cpuOk": false, "requiresMtpBinary": true,
+    "folder": "ThinkingCap-Qwen3.6-27B-GGUF", "agentProfileId": "agent-maximo",
+    "model": { "repo": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF", "file": "ThinkingCap-Qwen3.6-27B-Q4_K_M.gguf", "mmprojFile": "mmproj-ThinkingCap-Qwen3.6-27B-f16.gguf", "quant": "Q4_K_M" },
+    "runtime": { "ctx": 131000, "gpuLayers": 999, "batch": 512, "ubatch": 64, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": true, "mmap": false },
+    "extraArgs": ["--cache-type-k", "q4_0", "--cache-type-v", "q4_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--cache-ram", "32768", "--cache-reuse", "512", "--ctx-checkpoints", "8", "--checkpoint-min-step", "4096", "--kv-unified", "--cache-idle-slots", "--jinja", "--threads-batch", "8", "--predict", "4096", "--parallel", "1", "--reasoning", "off", "--spec-type", "draft-mtp", "--spec-draft-n-max", "4", "--spec-draft-p-min", "0.0"],
+    "binaryKind": "official", "minimumBinaryBuild": 10331, "vision": true,
+  "benchmarkVariants": [
+    { "id": "sys-bench-qwen36-cache-mtp4-ngram", "order": 195, "displayName": "[bench Qwen3.6] cache híbrido · MTP4 + ngram", "extraArgOverrides": { "--spec-type": "draft-mtp,ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia MTP4 que combina MTP y ngram en la misma ejecución." }
+  ],
+  "comment": "Copia experimental de sys-maxq con checkpoints híbridos explícitos; conserva MTP4 para una comparación 1:1 con el perfil vigente. No reemplaza ni altera MAX-Q."
+  },
+  {
+    "id": "sys-experiment-qwen36-cache-mtp6",
+    "tier": "24GB-Qwen-Cache-Experiment", "order": 192, "extra": true, "best": true, "benchmark": false, "autoCompanion": false,
+    "displayName": "EXPERIMENTAL - MAX-Q copia · cache híbrido · MTP6 p-min 0.5",
+    "minVramGb": 24, "minRamGb": 32, "cpuOk": false, "requiresMtpBinary": true,
+    "folder": "ThinkingCap-Qwen3.6-27B-GGUF", "agentProfileId": "agent-maximo",
+    "model": { "repo": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF", "file": "ThinkingCap-Qwen3.6-27B-Q4_K_M.gguf", "mmprojFile": "mmproj-ThinkingCap-Qwen3.6-27B-f16.gguf", "quant": "Q4_K_M" },
+    "runtime": { "ctx": 131000, "gpuLayers": 999, "batch": 512, "ubatch": 64, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": true, "mmap": false },
+    "extraArgs": ["--cache-type-k", "q4_0", "--cache-type-v", "q4_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--cache-ram", "32768", "--cache-reuse", "512", "--ctx-checkpoints", "8", "--checkpoint-min-step", "4096", "--kv-unified", "--cache-idle-slots", "--jinja", "--threads-batch", "8", "--predict", "4096", "--parallel", "1", "--reasoning", "off", "--spec-type", "draft-mtp", "--spec-draft-n-max", "6", "--spec-draft-p-min", "0.5"],
+    "binaryKind": "official", "minimumBinaryBuild": 10331, "vision": true,
+  "benchmarkVariants": [
+    { "id": "sys-bench-qwen36-cache-mtp6-ngram", "order": 196, "displayName": "[bench Qwen3.6] cache híbrido · MTP6 + ngram", "extraArgOverrides": { "--spec-type": "draft-mtp,ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia MTP6/p-min 0.5 que combina MTP y ngram; conserva el p-min del perfil base." }
+  ],
+  "comment": "Copia experimental de sys-maxq para medir el punto MTP6/p-min 0.5 reportado en la referencia. Mantiene sampling conservador y todos los límites de cache; no promover sin HE0 y comparación reproducible."
+  },
+  {
+    "id": "sys-experiment-qwen36-cache-text-mtp4",
+    "tier": "24GB-Qwen-Cache-Experiment", "order": 193, "extra": true, "best": true, "benchmark": false, "autoCompanion": false,
+    "displayName": "EXPERIMENTAL - MAX-Q texto-only · cache híbrido · MTP4",
+    "minVramGb": 24, "minRamGb": 32, "cpuOk": false, "requiresMtpBinary": true,
+    "folder": "ThinkingCap-Qwen3.6-27B-GGUF", "agentProfileId": "agent-maximo",
+    "model": { "repo": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF", "file": "ThinkingCap-Qwen3.6-27B-Q4_K_M.gguf", "quant": "Q4_K_M" },
+    "runtime": { "ctx": 131000, "gpuLayers": 999, "batch": 512, "ubatch": 64, "threads": 8, "kv": "q4_0", "flashAttn": true, "mlock": true, "mmap": false },
+    "extraArgs": ["--cache-type-v", "q4_0", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-mmproj", "--no-context-shift", "--metrics", "--no-warmup", "--cache-ram", "32768", "--cache-reuse", "512", "--ctx-checkpoints", "8", "--checkpoint-min-step", "4096", "--kv-unified", "--cache-idle-slots", "--jinja", "--threads-batch", "8", "--predict", "4096", "--parallel", "1", "--reasoning", "off", "--spec-type", "draft-mtp", "--spec-draft-n-max", "4", "--spec-draft-p-min", "0.0"],
+    "binaryKind": "official", "minimumBinaryBuild": 10331,
+  "benchmarkVariants": [
+    { "id": "sys-bench-qwen36-cache-text-mtp4-ngram", "order": 197, "displayName": "[bench Qwen3.6] texto-only · MTP4 + ngram", "extraArgOverrides": { "--spec-type": "draft-mtp,ngram-mod", "--spec-ngram-mod-n-match": "24", "--spec-ngram-mod-n-min": "16", "--spec-ngram-mod-n-max": "64" }, "comment": "Copia texto-only que combina MTP4 y ngram para coding repetitivo." }
+  ],
+  "comment": "Copia texto-only del experimento MTP4: elimina mmproj porque el flujo coding no usa visión y b10331 desactiva cache-reuse en modelos multimodales. Es la variante para comprobar si el cache de prompt/checkpoints realmente aporta en el caso de uso."
+  },
+  {
+    "id": "sys-bench-16-qwen38-rvn-iq3xxs-ngram-131k",
+    "tier": "16GB-Qwen38-Experimental", "order": 242, "extra": true,
+    "benchmark": false, "best": false, "favorite": false, "autoCompanion": false,
+    "displayName": "[bench 16GB] Qwen3.8 Heretic RVN-IQ3_XXS · ngram-mod · 131k",
+    "minVramGb": 16, "minRamGb": 32, "cpuOk": false,
+    "requiresMtpBinary": true, "folder": "Qwen3.8-27B-Heretic-RVN-IQ3_XXS",
+    "agentProfileId": "agent-maximo", "reasoningEffort": "medium", "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "0bserverx/Qwen3.8-27B-Heretic-Abliterated-Uncensored-GGUF", "file": "RVN-IQ3_XXS.gguf", "quant": "IQ3_XXS" },
+    "runtime": { "ctx": 131072, "gpuLayers": 999, "batch": 512, "ubatch": 512, "threads": 8, "kv": "q5_1", "flashAttn": true, "mlock": false, "mmap": true },
+    "extraArgs": ["--cache-type-k", "q5_1", "--cache-type-v", "q5_1", "--fit", "off", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--jinja", "--predict", "4096", "--parallel", "1", "--reasoning-format", "deepseek", "--reasoning-preserve", "--load-mode", "none", "--sleep-idle-seconds", "600", "--spec-type", "ngram-mod", "--spec-ngram-mod-n-min", "4", "--spec-ngram-mod-n-max", "8", "--spec-ngram-mod-n-match", "32"],
+    "binaryKind": "beellama",
+    "comment": "Control 16GB derivado del post de LocalLLaMA adjunto: RVN-IQ3_XXS, ngram-mod 4/8/32 y 131072 de contexto en una RTX 4080 16GB. Usa el template Qwen bundleado en lugar de froggeric_fix_qwen38.jinja, y adapta el sampling a la política local conservadora; no es una recomendación automática. Requiere una build beellama/dflash2-capable con ngram-mod. El quant es uncensored: conservar approvals de tools."
+  },
+  {
+    "id": "sys-bench-16-qwen38-rvn-iq3xxs-dflash2-ngram-105k",
+    "tier": "16GB-Qwen38-Experimental", "order": 243, "extra": true,
+    "benchmark": false, "best": false, "favorite": false, "autoCompanion": false,
+    "displayName": "[bench 16GB] Qwen3.8 Heretic RVN-IQ3_XXS · DFlash2+ngram · 105k",
+    "minVramGb": 16, "minRamGb": 32, "cpuOk": false,
+    "requiresMtpBinary": true, "folder": "Qwen3.8-27B-Heretic-RVN-IQ3_XXS",
+    "agentProfileId": "agent-maximo", "reasoningEffort": "medium", "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "0bserverx/Qwen3.8-27B-Heretic-Abliterated-Uncensored-GGUF", "file": "RVN-IQ3_XXS.gguf", "quant": "IQ3_XXS" },
+    "draftModel": { "repo": "incoai/Qwen3.8-27B-DFlash2-GGUF", "file": "Qwen3.8-27B-DFlash2-Q4_K_M.gguf", "folder": "Qwen3.8-27B-DFlash2-Q4_K_M" },
+    "spec": { "type": "draft-dflash", "draftNgl": "all", "draftNMax": 5 },
+    "runtime": { "ctx": 105000, "gpuLayers": 999, "batch": 512, "ubatch": 512, "threads": 8, "kv": "q5_1", "flashAttn": true, "mlock": false, "mmap": true },
+    "extraArgs": ["--cache-type-k", "q5_1", "--cache-type-v", "q5_1", "--fit", "off", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--jinja", "--predict", "4096", "--parallel", "1", "--reasoning-format", "deepseek", "--reasoning-preserve", "--load-mode", "none", "--sleep-idle-seconds", "600", "--spec-type", "draft-dflash,ngram-mod", "--spec-ngram-mod-n-min", "4", "--spec-ngram-mod-n-max", "8", "--spec-ngram-mod-n-match", "32"],
+    "binaryKind": "beellama",
+    "comment": "Candidata DFlash2+ngram del post de LocalLLaMA: draft Q4_K_M separado, 5 tokens de DFlash2, ngram 4/8/32 y 105000 de contexto. La app lo expresa como draftModel + spec-draft-model; necesita una build beellama/dflash2-capable del fork experimental, no un llama-server oficial sin ese soporte. Se conserva q5_1/KV y se usa sampling conservador para comparar el modelo sin elevar aleatoriamente la temperatura. HE0 antes de cualquier corrida larga."
+  },
+  {
+    "id": "sys-bench-16-qwen38-rvn-iq3xxs-mtp-ngram-105k",
+    "tier": "16GB-Qwen38-Experimental", "order": 244, "extra": true,
+    "benchmark": false, "best": false, "favorite": false, "autoCompanion": false,
+    "displayName": "[bench 16GB] Qwen3.8 Heretic RVN-IQ3_XXS-MTP · MTP+ngram · 105k",
+    "minVramGb": 16, "minRamGb": 32, "cpuOk": false,
+    "requiresMtpBinary": true, "manualOnly": true, "folder": "Qwen3.8-27B-Heretic-RVN-IQ3_XXS-MTP",
+    "agentProfileId": "agent-maximo", "reasoningEffort": "medium", "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": { "repo": "0bserverx/Qwen3.8-27B-Heretic-Abliterated-Uncensored-GGUF", "file": "RVN-IQ3_XXS-MTP.gguf", "quant": "IQ3_XXS" },
+    "runtime": { "ctx": 105000, "gpuLayers": 999, "batch": 512, "ubatch": 512, "threads": 8, "kv": "q5_1", "flashAttn": true, "mlock": false, "mmap": true },
+    "extraArgs": ["--cache-type-k", "q5_1", "--cache-type-v", "q5_1", "--fit", "off", "--temp", "0.60", "--top-p", "0.95", "--top-k", "20", "--min-p", "0.0", "--repeat-penalty", "1.0", "--presence-penalty", "0.0", "--no-context-shift", "--metrics", "--no-warmup", "--jinja", "--predict", "4096", "--parallel", "1", "--reasoning-format", "deepseek", "--reasoning-preserve", "--load-mode", "none", "--sleep-idle-seconds", "600"],
+    "mtp": { "enabled": true, "selfContained": true, "args": ["--spec-type", "draft-mtp,ngram-mod", "--spec-draft-n-max", "2", "--spec-ngram-mod-n-min", "4", "--spec-ngram-mod-n-max", "8", "--spec-ngram-mod-n-match", "32"] },
+    "binaryKind": "beellama",
+    "comment": "Candidata MTP+ngram del post de LocalLLaMA: el autor fusionó manualmente RVN-IQ3_XXS con el modelo MTP y obtuvo 105000 de contexto. manualOnly evita que LlamaCode intente descargar un GGUF fusionado que no está declarado como artefacto remoto; copiarlo bajo la carpeta de modelos del perfil y validar HE0. Usa el template bundleado y sampling conservador, por lo que no es una réplica bit a bit del comando publicado."
+  },
+  {
+    "id": "sys-bench-qwen38-dflash2-vllm-262k",
+    "tier": "48GB-Qwen38-DFlash2-vLLM", "order": 240, "extra": true,
+    "benchmark": false, "best": false, "favorite": false, "autoCompanion": false,
+    "displayName": "[bench 48GB] Qwen3.8 INT8 W8A16 · DFlash2 · vLLM · 262k · n7",
+    "minVramGb": 48, "minRamGb": 64, "cpuOk": false,
+    "agentProfileId": "agent-maximo",
+    "backend": {
+      "kind": "cloud", "host": "127.0.0.1", "port": 8000,
+      "baseUrl": "http://127.0.0.1:8000",
+      "model": "lued/Qwen3.8-27B-INT8-W8A16-DFlash2", "ctx": 262144
+    },
+    "external": {
+      "provider": "vllm", "targetModel": "lued/Qwen3.8-27B-INT8-W8A16-DFlash2",
+      "drafterModel": "lued/Qwen3.8-27B-DFlash2-W8",
+      "speculativeMethod": "dflash", "numSpeculativeTokens": 7,
+      "tensorParallelSize": 2, "maxModelLen": 262144,
+      "kvCacheDtype": "fp8_e4m3", "patchRepo": "noonghunna/club-3090"
+    },
+    "tags": ["qwen3.8", "int8", "w8a16", "dflash2", "vllm", "external-endpoint", "262k", "2x-rtx-3090"],
+    "comment": "Receta exacta del modelo lued: target INT8 W8A16 + drafter W8 separado, DFlash2 con 7 tokens, tensor parallel 2, KV fp8_e4m3 y max-model-len 262144. LlamaCode no lanza vLLM ni descarga estos safetensors: iniciar el servidor externo y medir el endpoint OpenAI-compatible en 127.0.0.1:8000. Comparar tok/s DFlash2 contra el control autoregresivo y registrar version/patches del servidor."
+  },
+  {
+    "id": "sys-bench-qwen38-dflash2-vllm-ar-262k",
+    "tier": "48GB-Qwen38-DFlash2-vLLM", "order": 241, "extra": true,
+    "benchmark": false, "best": false, "favorite": false, "autoCompanion": false,
+    "displayName": "[bench 48GB] Qwen3.8 INT8 W8A16 · vLLM · autoregresivo · 262k",
+    "minVramGb": 48, "minRamGb": 64, "cpuOk": false,
+    "agentProfileId": "agent-maximo",
+    "backend": {
+      "kind": "cloud", "host": "127.0.0.1", "port": 8001,
+      "baseUrl": "http://127.0.0.1:8001",
+      "model": "lued/Qwen3.8-27B-INT8-W8A16-DFlash2", "ctx": 262144
+    },
+    "external": {
+      "provider": "vllm", "targetModel": "lued/Qwen3.8-27B-INT8-W8A16-DFlash2",
+      "speculativeMethod": "none", "numSpeculativeTokens": 0,
+      "tensorParallelSize": 2, "maxModelLen": 262144,
+      "kvCacheDtype": "fp8_e4m3", "patchRepo": "noonghunna/club-3090"
+    },
+    "tags": ["qwen3.8", "int8", "w8a16", "vllm", "external-endpoint", "autoregressive-control", "262k", "2x-rtx-3090"],
+    "comment": "Control autoregresivo para aislar la ganancia de DFlash2: mismo target, tensor parallel, contexto y KV que la receta n7, pero iniciar vLLM sin speculative-config. LlamaCode sólo conecta al endpoint en 127.0.0.1:8001; no inicia el proceso externo. No mezclar resultados si cambian el engine, los patches o el max-model-len."
+  },
+  {
+    "id": "sys-ling30-tiny-q6-131k",
+    "tier": "12GB-Ling30-Tiny",
+    "order": 250,
+    "extra": true,
+    "benchmark": false,
+    "best": false,
+    "favorite": false,
+    "autoCompanion": false,
+    "displayName": "[bench 12GB] Ling 3.0 Tiny Q6 · auxiliar · 131k",
+    "minVramGb": 12,
+    "minRamGb": 16,
+    "cpuOk": false,
+    "folder": "Ling-3.0-tiny-GGUF-Q6_K",
+    "agentProfileId": "agent-chat",
+    "model": {
+      "repo": "bloomer010/Ling-3.0-tiny-GGUF",
+      "file": "Ling-3.0-tiny-Q6_K.gguf",
+      "quant": "Q6_K"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 1024,
+      "ubatch": 256,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k", "q8_0",
+      "--cache-type-v", "q8_0",
+      "--temp", "1.0",
+      "--top-p", "0.95",
+      "--top-k", "20",
+      "--min-p", "0.0",
+      "--repeat-penalty", "1.0",
+      "--presence-penalty", "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--predict", "4096",
+      "--parallel", "1",
+      "--chat-template-kwargs", "{\"enable_thinking\":false}"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10331,
+    "contextPresets": [32768, 65536, 131072],
+    "benchmarkVariants": [
+      {
+        "id": "sys-bench-ling30-tiny-q6-64k",
+        "order": 251,
+        "benchmark": false,
+        "displayName": "[bench Ling 3.0 Tiny] Q6 · auxiliar · 64k",
+        "runtime": { "ctx": 65536 },
+        "comment": "Control de menor contexto para separar el coste de KV del coste de la arquitectura."
+      },
+      {
+        "id": "sys-bench-ling30-tiny-q6-thinking-131k",
+        "order": 252,
+        "benchmark": false,
+        "displayName": "[bench Ling 3.0 Tiny] Q6 · thinking on · 131k",
+        "extraArgOverrides": {
+          "--temp": "1.0",
+          "--chat-template-kwargs": "{\"enable_thinking\":true}"
+        },
+        "comment": "A/B del modo de razonamiento nativo; no mezclar su wall-time con el perfil auxiliar thinking-off."
+      },
+      {
+        "id": "sys-bench-ling30-tiny-q6-kv4-131k",
+        "order": 253,
+        "benchmark": false,
+        "displayName": "[bench Ling 3.0 Tiny] Q6 · auxiliar · KV q4 · 131k",
+        "runtime": { "kv": "q4_0" },
+        "extraArgOverrides": {
+          "--cache-type-k": "q4_0",
+          "--cache-type-v": "q4_0"
+        },
+        "comment": "A/B de memoria/latencia contra KV q8; revisar calidad de resúmenes antes de usarlo como auxiliar."
+      }
+    ],
+    "comment": "Candidato auxiliar derivado de la referencia de Ling 3.0 Tiny: 7,9B totales y 1,3B activos. Usa GGUF Q6, KV q8 y thinking apagado para compresión/resumen y otras tareas no críticas. Es benchmark, no recomendación automática; requiere llama.cpp b10331+ con soporte BailingMoE3 y validar tool-calling antes de usarlo fuera del rol de planificador."
+  },
+  {
+    "id": "sys-bench-ling30-tiny-udq4-64k",
+    "tier": "8GB-Ling30-Tiny",
+    "order": 254,
+    "extra": true,
+    "benchmark": false,
+    "best": false,
+    "favorite": false,
+    "autoCompanion": false,
+    "displayName": "[bench 8GB] Ling 3.0 Tiny UD-Q4 · auxiliar · 64k",
+    "minVramGb": 8,
+    "minRamGb": 16,
+    "cpuOk": false,
+    "folder": "Ling-3.0-tiny-GGUF-UD-Q4_K_XL",
+    "agentProfileId": "agent-chat",
+    "model": {
+      "repo": "bloomer010/Ling-3.0-tiny-GGUF",
+      "file": "Ling-3.0-tiny-UD-Q4_K_XL.gguf",
+      "quant": "UD-Q4_K_XL"
+    },
+    "runtime": {
+      "ctx": 65536,
+      "gpuLayers": 999,
+      "batch": 1024,
+      "ubatch": 256,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k", "q4_0",
+      "--cache-type-v", "q4_0",
+      "--temp", "1.0",
+      "--top-p", "0.95",
+      "--top-k", "20",
+      "--min-p", "0.0",
+      "--repeat-penalty", "1.0",
+      "--presence-penalty", "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--predict", "4096",
+      "--parallel", "1",
+      "--chat-template-kwargs", "{\"enable_thinking\":false}"
+    ],
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10331,
+    "contextPresets": [32768, 65536],
+    "comment": "Candidato de baja memoria para medir si Ling puede cubrir compresión y resúmenes rápidos en una GPU de 8GB. No se asume calidad de tool-calling ni equivalencia con el Q6; primero HE0 y luego una suite de resúmenes con evaluación semántica."
+  },
+  {
+    "id": "sys-hybrid-ling30-qwen38",
+    "tier": "24GB-Hybrid-Ling-Qwen38",
+    "order": 255,
+    "extra": true,
+    "benchmark": false,
+    "best": false,
+    "favorite": false,
+    "autoCompanion": false,
+    "displayName": "[bench hybrid 24GB] Ling Tiny planifica → Qwen3.8 ejecuta",
+    "minVramGb": 24,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "Qwen3.8-27B-GGUF",
+    "agentProfileId": "agent-maximo",
+    "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": {
+      "repo": "unsloth/Qwen3.8-27B-GGUF",
+      "file": "Qwen3.8-27B-UD-Q4_K_XL.gguf",
+      "mmprojRepo": "unsloth/Qwen3.8-27B-GGUF",
+      "mmprojFile": "mmproj-BF16.gguf",
+      "quant": "UD-Q4_K_XL"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 512,
+      "ubatch": 64,
+      "threads": 8,
+      "kv": "q4_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k", "q4_0",
+      "--cache-type-v", "q4_0",
+      "--temp", "0.60",
+      "--top-p", "0.95",
+      "--top-k", "20",
+      "--min-p", "0.0",
+      "--repeat-penalty", "1.0",
+      "--presence-penalty", "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--predict", "4096",
+      "--parallel", "1",
+      "--reasoning", "off"
+    ],
+    "mtp": {
+      "enabled": true,
+      "selfContained": true,
+      "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "3"]
+    },
+    "binaryKind": "official",
+    "minimumBinaryBuild": 10331,
+    "contextPresets": [32768, 65536, 131072],
+    "vision": true,
+    "plannerProfileId": "sys-ling30-tiny-q6-131k",
+    "hybridMode": "sequential",
+    "comment": "Prueba de la arquitectura auxiliar: carga Ling Tiny Q6 sólo para planificar y vuelve a Qwen3.8 para ejecutar con tools. Comparar contra sys-qwen38-27b-udq4-131k en la misma suite, separando tiempo de planificación, tiempo de ejecución, primer intento, reparaciones y calidad final. No implementa todavía routing automático de resúmenes/contexto; es un benchmark del planificador ligero y queda opt-in."
+  },
+  {
+    "id": "sys-bench-qwen38-kvstream-24gb-131k",
+    "tier": "24GB-Qwen38-KV-Streaming",
+    "order": 270,
+    "extra": true,
+    "manualOnly": true,
+    "benchmark": true,
+    "best": false,
+    "favorite": false,
+    "autoCompanion": false,
+    "displayName": "[SUPERIOR CONTEXTO LARGO] Qwen3.8 KV streaming · 131k · K8/V4 · B256/U256",
+    "minVramGb": 24,
+    "minRamGb": 32,
+    "cpuOk": false,
+    "folder": "Qwen3.8-27B-GGUF-DynamicV3",
+    "agentProfileId": "agent-maximo",
+    "chatTemplate": "qwen38-tools-fixed.jinja",
+    "model": {
+      "repo": "unsloth/Qwen3.8-27B-GGUF",
+      "file": "Qwen3.8-27B-UD-Q4_K_XL.gguf",
+      "quant": "UD-Q4_K_XL"
+    },
+    "runtime": {
+      "ctx": 131072,
+      "gpuLayers": 999,
+      "batch": 256,
+      "ubatch": 256,
+      "threads": 8,
+      "kv": "q8_0",
+      "flashAttn": true,
+      "mlock": false,
+      "mmap": true
+    },
+    "extraArgs": [
+      "--cache-type-k", "q8_0",
+      "--cache-type-v", "q4_0",
+      "--kv-stream-stage-mib", "2048",
+      "--split-mode", "none",
+      "--main-gpu", "0",
+      "--no-mmproj",
+      "--temp", "0.60",
+      "--top-p", "0.95",
+      "--top-k", "20",
+      "--min-p", "0.0",
+      "--repeat-penalty", "1.0",
+      "--presence-penalty", "0.0",
+      "--no-context-shift",
+      "--metrics",
+      "--no-warmup",
+      "--jinja",
+      "--predict", "4096",
+      "--parallel", "1",
+      "--reasoning", "off"
+    ],
+    "binaryKind": "kv-streaming",
+    "contextPresets": [32768, 65536, 131072],
+    "vision": false,
+    "comment": "SUPERIOR en estabilidad de ejecución sintética a contexto largo con B256/U256: el fork sachin-detrax commit 11a01c8 completó 8k..131k con pool CUDA de 2048 MiB, K q8_0/V q4_0 y una RTX 3090 de 24 GiB, manteniendo ~4.7 GiB libres al final. INFERIOR en latencia de contexto largo: el prefill cayó de ~1226 tok/s (8k) a ~617 tok/s (131k) y el decode de ~36.0 a ~5.25 tok/s. No promover calidad: el probe NIAH de este GGUF no recuperó la passkey exactamente. Requiere registrar manualmente el binario con flavor kv-streaming; dense Qwen3, una GPU y un slot; no multi-GPU/vision/MoE."
+  }
+]

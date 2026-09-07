@@ -4,6 +4,8 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QHash>
+#include <QSet>
+#include <QJsonObject>
 #include <functional>
 
 // Backend opencode: lanza `opencode serve` (headless) y habla por HTTP + SSE.
@@ -40,6 +42,19 @@ public:
     QVariantList sessions() const override { return m_sessions; }
 
 private:
+    void emitSessionLifecycle();
+    QString lifecycleCorrelation(const QString &sessionId) const;
+    static QString compactJson(const QJsonObject &object);
+    void emitToolRequest(const QString &sessionId, const QString &callId,
+                         const QString &tool, const QString &arguments,
+                         const QStringList &paths);
+    void emitToolStart(const QString &sessionId, const QString &callId,
+                       const QString &tool, const QString &arguments,
+                       const QStringList &paths);
+    void emitToolFinish(const QString &sessionId, const QString &callId,
+                        const QString &tool, bool ok, const QString &result,
+                        const QStringList &paths);
+    void finishOpenLifecycleTools(const QString &sessionId, const QString &reason);
     void launchProcess();
     void initSession();
     void loadSessionList(std::function<void()> then);
@@ -47,6 +62,11 @@ private:
     void doCreateSession();
     void loadSessionMessages(const QString &sessionId);
     void subscribeEvents();
+    QVariantList &messagesForSession(const QString &sessionId);
+    int &assistantIndexForSession(const QString &sessionId);
+    // Publica sólo la sesión que el usuario está mirando. Las demás pueden
+    // seguir generando en segundo plano sin contaminar el panel visible.
+    void publishSessionMessages(const QString &sessionId);
     // response: "once" | "always" | "reject"
     void respondPermission(const QString &sessionId, const QString &permissionId,
                            const QString &response);
@@ -64,8 +84,17 @@ private:
     QVariantList m_messages;
     QVariantList m_sessions;
     int        m_curAsstIdx = -1;
+    QHash<QString, QVariantList> m_sessionMessages;
+    QHash<QString, int> m_sessionAssistantIndices;
     bool       m_stopping = false;
     bool       m_forceNew = false;
     QString    m_approvalMode = QStringLiteral("ask");
     QHash<QString, QString> m_pendingPerm;  // permissionId -> sessionId
+    QString    m_correlationId;
+    QString    m_lifecycleSessionId;
+    QHash<QString, QString> m_sessionCorrelations;
+    QHash<QString, QVariantMap> m_lifecycleTools;
+    QSet<QString> m_lifecycleRequested;
+    QSet<QString> m_lifecycleStarted;
+    QSet<QString> m_lifecycleFinished;
 };

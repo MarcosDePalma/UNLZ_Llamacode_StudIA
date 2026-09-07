@@ -2,6 +2,7 @@
 #include <QtEndian>
 #include <cmath>
 #include <cstring>
+#include <climits>
 
 namespace {
 // Escribe un entero little-endian en out.
@@ -55,6 +56,79 @@ QByteArray wavExtractPcm(const QByteArray &wav)
         if (sz & 1) ++pos; // chunks padded a tamaño par
     }
     return {};
+}
+
+bool wavPcm16Format(const QByteArray &wav, int *sampleRate, int *channels)
+{
+    if (wav.size() < 12 || !wav.startsWith("RIFF") || wav.mid(8, 4) != "WAVE")
+        return false;
+    int pos = 12;
+    while (pos + 8 <= wav.size()) {
+        const QByteArray id = wav.mid(pos, 4);
+        const quint32 sz = qFromLittleEndian<quint32>(
+            reinterpret_cast<const uchar *>(wav.constData() + pos + 4));
+        pos += 8;
+        if (id == "fmt ") {
+            if (sz < 16 || pos + 16 > wav.size()) return false;
+            const uchar *p = reinterpret_cast<const uchar *>(wav.constData() + pos);
+            const quint16 audioFmt = qFromLittleEndian<quint16>(p);
+            const quint16 ch       = qFromLittleEndian<quint16>(p + 2);
+            const quint32 rate     = qFromLittleEndian<quint32>(p + 4);
+            const quint16 bits     = qFromLittleEndian<quint16>(p + 14);
+            if (audioFmt != 1 || bits != 16 || ch == 0 || rate == 0) return false;
+            if (sampleRate) *sampleRate = int(rate);
+            if (channels)   *channels = int(ch);
+            return true;
+        }
+        pos += int(sz);
+        if (sz & 1) ++pos;
+    }
+    return false;
+}
+
+bool wavPcm16DataRange(const QByteArray &wav, int *sampleRate, int *channels,
+                       int *dataOffset, quint32 *dataSize)
+{
+    if (wav.size() < 12 || !wav.startsWith("RIFF") || wav.mid(8, 4) != "WAVE")
+        return false;
+    bool haveFmt = false;
+    bool haveData = false;
+    int rate = 0;
+    int ch = 0;
+    int offset = -1;
+    quint32 size = 0;
+    int pos = 12;
+    while (pos + 8 <= wav.size()) {
+        const QByteArray id = wav.mid(pos, 4);
+        const quint32 chunkSize = qFromLittleEndian<quint32>(
+            reinterpret_cast<const uchar *>(wav.constData() + pos + 4));
+        const int chunkData = pos + 8;
+        if (id == "fmt ") {
+            if (chunkSize < 16 || chunkData + 16 > wav.size()) return false;
+            const uchar *p = reinterpret_cast<const uchar *>(wav.constData() + chunkData);
+            const quint16 format = qFromLittleEndian<quint16>(p);
+            ch = int(qFromLittleEndian<quint16>(p + 2));
+            rate = int(qFromLittleEndian<quint32>(p + 4));
+            const quint16 bits = qFromLittleEndian<quint16>(p + 14);
+            if (format != 1 || ch <= 0 || rate <= 0 || bits != 16) return false;
+            haveFmt = true;
+        } else if (id == "data") {
+            offset = chunkData;
+            size = chunkSize;
+            haveData = true;
+            break;
+        }
+        const qint64 next = qint64(chunkData) + qint64(chunkSize)
+            + (chunkSize & 1u);
+        if (next > wav.size() || next > INT_MAX) return false;
+        pos = int(next);
+    }
+    if (!haveFmt || !haveData || offset < 0) return false;
+    if (sampleRate) *sampleRate = rate;
+    if (channels) *channels = ch;
+    if (dataOffset) *dataOffset = offset;
+    if (dataSize) *dataSize = size;
+    return true;
 }
 
 double rms(const int16_t *samples, int count)

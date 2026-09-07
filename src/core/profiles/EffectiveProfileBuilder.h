@@ -44,6 +44,11 @@ private:
     static void applySamplingPolicy(const Context &ctx,
                                     QStringList &args,
                                     QStringList &warnings);
+    static void applyAdaptiveSpeculation(const ModelProfile &mp,
+                                         const LlamaBinary &bin,
+                                         QStringList &args,
+                                         QStringList &warnings,
+                                         QStringList &errors);
 
     static void addFlag(const LlamaBinary &bin, const QString &flag,
                         const QString &value, QStringList &args,

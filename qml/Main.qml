@@ -1,8 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Qt.labs.platform as Platform
 import LlamaCode 1.0
+import "components/NavigationPolicy.js" as NavigationPolicy
 
 ApplicationWindow {
     id: window
@@ -20,13 +20,93 @@ ApplicationWindow {
     property color frameBorderColor: active ? Theme.frameBorderActive : Theme.frameBorderInact
     property color frameBgColor: Theme.baseBg
     property color titleBarColor: Theme.titleBg
-    property int resizeHandleSize: 8
+    // Un marco visible ayuda a distinguir la ventana del escritorio cuando no
+    // ocupa toda la pantalla. En maximizado se elimina para no duplicar el
+    // borde del área de trabajo del sistema.
+    property int windowedFrameWidth: 2
+    // Los laterales deben ser más angostos que los scrollbars (14 px) para no
+    // interceptar su thumb. Las esquinas conservan un área amplia y cómoda.
+    property int sideResizeHandleSize: 3
+    property int cornerResizeHandleSize: 8
     property bool restoringWindowState: true
     // Minimizar a la bandeja de notificación al cerrar (en vez de salir).
     property bool minimizeToTray: Boolean(App.readSetting("window/minimizeToTray", false))
     // Bandera para forzar salida real desde el menú del tray.
     property bool forceQuit: false
     property bool autoCreatingInitialProfile: false
+
+    Window {
+        id: desktopAgentIndicator
+        width: 310
+        height: 54
+        x: Screen.desktopAvailableWidth - width - 18
+        y: 18
+        visible: App.desktopIndicatorVisible && App.desktopAgentActive
+        color: "transparent"
+        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowTransparentForInput
+        Rectangle {
+            anchors.fill: parent
+            radius: 14
+            color: Theme.popupBg
+            border.width: 2
+            border.color: Theme.accent
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 11
+                spacing: 10
+                Rectangle {
+                    width: 12; height: 12; radius: 6; color: Theme.accent
+                    SequentialAnimation on opacity {
+                        running: desktopAgentIndicator.visible; loops: Animation.Infinite
+                        NumberAnimation { to: 0.35; duration: 650 }
+                        NumberAnimation { to: 1; duration: 650 }
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true; spacing: 1
+                    Text { text: "La IA está usando el escritorio"; color: Theme.textPrimary; font.bold: true; font.pixelSize: 12 }
+                    Text { text: App.desktopAgentAction; color: Theme.textSecondary; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
+                }
+            }
+        }
+    }
+
+    // Una superficie independiente por pantalla evita que el contorno trate el
+    // escritorio virtual entero como un único rectángulo en setups multimonitor.
+    Instantiator {
+        model: Qt.application.screens
+        delegate: Window {
+            required property var modelData
+            screen: modelData
+            x: modelData.virtualX; y: modelData.virtualY
+            width: modelData.width; height: modelData.height
+            visible: App.desktopIndicatorVisible && App.desktopAgentActive
+            color: "transparent"
+            flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowTransparentForInput
+            Rectangle { anchors.fill: parent; color: "transparent"; border.width: 5; border.color: Theme.accent }
+        }
+    }
+
+    Window {
+        id: desktopCursorIndicator
+        property point cursorPosition: Qt.point(0, 0)
+        width: 38; height: 38
+        x: cursorPosition.x - width / 2; y: cursorPosition.y - height / 2
+        visible: App.desktopIndicatorVisible && App.desktopAgentActive
+        color: "transparent"
+        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowTransparentForInput
+        Rectangle {
+            anchors.fill: parent; radius: width / 2; color: "transparent"
+            border.width: 4; border.color: Theme.accent
+        }
+        Timer {
+            interval: 33; repeat: true; running: desktopCursorIndicator.visible
+            onTriggered: {
+                const p = App.desktopCursorState()
+                desktopCursorIndicator.cursorPosition = Qt.point(p.x, p.y)
+            }
+        }
+    }
 
     function showFromTray() {
         if (Boolean(App.readSetting("window/maximized", false)))
@@ -108,6 +188,17 @@ ApplicationWindow {
 
                     Item { Layout.fillWidth: true }
 
+                    Text {
+                        visible: App.startupBusy || (App.startupStatus || "").length > 0
+                        text: App.startupStatus
+                        color: Theme.textSecondary
+                        font.pixelSize: 10
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: 330
+                        Layout.alignment: Qt.AlignVCenter
+                        rightPadding: 12
+                    }
+
                     ToolButton {
                         text: "\uE921"
                         flat: true
@@ -175,41 +266,137 @@ ApplicationWindow {
                 spacing: 0
 
                 NavBar {
+                    id: navBar
                     Layout.fillHeight: true
                     currentIndex: stack.currentIndex
                     onPageSelected: function(idx) { stack.currentIndex = idx }
                 }
 
+                // Si la página activa queda inhabilitada (se apagó server/agente),
+                // volver a Lanzar. Tasks (7) exige agente; el resto serverOnly, server.
+                Connections {
+                    target: App
+                    function guard() {
+                        const i = stack.currentIndex
+                        const page = navBar.pages[i] || { serverOnly: false }
+                        if (NavigationPolicy.shouldNavigateToLaunch(
+                                page, App.backendAvailable, App.agentRunning,
+                                App.agentStarting, App.thinkingRestarting))
+                            stack.currentIndex = 0
+                    }
+                    function onServerRunningChanged() { guard() }
+                    function onBackendAvailableChanged() { guard() }
+                    function onAgentRunningChanged() { guard() }
+                    // Al instalar dependencias, abrir la sección Descargas. El
+                    // índice sale de NavBar para que agregar secciones no lo
+                    // desincronice del StackLayout.
+                    function onNavigateToDownloads() {
+                        stack.currentIndex = navBar.indexOfKey("nav.downloads")
+                    }
+                }
+
                 Rectangle { width: 1; Layout.fillHeight: true; color: Theme.divider }
 
-                StackLayout {
+                // Crear todas las páginas al iniciar dispara un árbol QML muy
+                // grande y puede dejar sin respuesta incluso al tray. Cada
+                // Loader se activa al visitar su sección y conserva el objeto
+                // creado para no perder el estado de los formularios.
+                Item {
                     id: stack
+                    property int currentIndex: 0
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    currentIndex: 0
 
-                    LaunchPage      {}
-                    ProfilesPage    {}
-                    ModelRootsPage  { id: modelRootsPage }
-                    BinariesPage    { id: binariesPage }
-                    ChatPage        {}
-                    AgentPage       {}
-                    ResearchPage    {}
-                    TasksPage       {}
-                    BenchmarkPage   {}
-                    CharlaPage      {}
-                    StudiaPage      {}
-                    SettingsPage    {}
+                    Component { id: launchPageComponent; LaunchPage {} }
+                    Component { id: profilesPageComponent; ProfilesPage {} }
+                    Component { id: modelRootsPageComponent; ModelRootsPage {} }
+                    Component { id: binariesPageComponent; BinariesPage {} }
+                    Component { id: chatPageComponent; ChatPage {} }
+                    Component { id: agentPageComponent; AgentPage {} }
+                    Component { id: researchPageComponent; ResearchPage {} }
+                    Component { id: dataLabPageComponent; DataLabPage {} }
+                    Component { id: tasksPageComponent; TasksPage {} }
+                    Component { id: charlaPageComponent; CharlaPage {} }
+                    Component { id: benchmarkPageComponent; BenchmarkPage {} }
+                    Component { id: rankingPageComponent; RankingPage {} }
+                    Component { id: tunerPageComponent; TunerPage {} }
+                    Component { id: downloadsPageComponent; DownloadsPage {} }
+                    Component { id: agentsPageComponent; AgentsPage {} }
+                    Component { id: studiaPageComponent; StudiaPage {} }
+                    Component { id: settingsPageComponent; SettingsPage {} }
+
+                    Loader { id: launchLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 0; visible: stack.currentIndex === 0; sourceComponent: launchPageComponent; onLoaded: loaded = true }
+                    Loader { id: profilesLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 1; visible: stack.currentIndex === 1; sourceComponent: profilesPageComponent; onLoaded: loaded = true }
+                    Loader { id: modelRootsLoader; property bool loaded: false; property bool prewarm: false; property bool pendingOpen: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 2; visible: stack.currentIndex === 2; sourceComponent: modelRootsPageComponent; onLoaded: { loaded = true; if (pendingOpen && item) { pendingOpen = false; item.openAddDialog() } } }
+                    Loader { id: binariesLoader; property bool loaded: false; property bool prewarm: false; property bool pendingOpen: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 3; visible: stack.currentIndex === 3; sourceComponent: binariesPageComponent; onLoaded: { loaded = true; if (pendingOpen && item) { pendingOpen = false; item.openAddDialog() } } }
+                    Loader { id: chatLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 4; visible: stack.currentIndex === 4; sourceComponent: chatPageComponent; onLoaded: loaded = true }
+                    Loader { id: agentLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 5; visible: stack.currentIndex === 5; sourceComponent: agentPageComponent; onLoaded: loaded = true }
+                    Loader { id: researchLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 6; visible: stack.currentIndex === 6; sourceComponent: researchPageComponent; onLoaded: loaded = true }
+                    Loader { id: dataLabLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 7; visible: stack.currentIndex === 7; sourceComponent: dataLabPageComponent; onLoaded: loaded = true }
+                    Loader { id: tasksLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 8; visible: stack.currentIndex === 8; sourceComponent: tasksPageComponent; onLoaded: loaded = true }
+                    Loader { id: charlaLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 9; visible: stack.currentIndex === 9; sourceComponent: charlaPageComponent; onLoaded: loaded = true }
+                    Loader { id: benchmarkLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 10; visible: stack.currentIndex === 10; sourceComponent: benchmarkPageComponent; onLoaded: loaded = true }
+                    Loader { id: rankingLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 11; visible: stack.currentIndex === 11; sourceComponent: rankingPageComponent; onLoaded: loaded = true }
+                    Loader { id: tunerLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 12; visible: stack.currentIndex === 12; sourceComponent: tunerPageComponent; onLoaded: loaded = true }
+                    Loader { id: downloadsLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 13; visible: stack.currentIndex === 13; sourceComponent: downloadsPageComponent; onLoaded: loaded = true }
+                    Loader { id: agentsLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 14; visible: stack.currentIndex === 14; sourceComponent: agentsPageComponent; onLoaded: loaded = true }
+                    Loader { id: studiaLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 15; visible: stack.currentIndex === 15; sourceComponent: studiaPageComponent; onLoaded: loaded = true }
+                    Loader { id: settingsLoader; property bool loaded: false; property bool prewarm: false; anchors.fill: parent; active: loaded || prewarm || stack.currentIndex === 16; visible: stack.currentIndex === 16; sourceComponent: settingsPageComponent; onLoaded: loaded = true }
+
+                    property var allLoaders: [launchLoader, profilesLoader, modelRootsLoader, binariesLoader,
+                        chatLoader, agentLoader, researchLoader, dataLabLoader, tasksLoader, charlaLoader,
+                        benchmarkLoader, rankingLoader, tunerLoader, downloadsLoader, agentsLoader, studiaLoader, settingsLoader]
+                    property int prewarmIndex: 0
+                    property bool prewarmStarted: false
+                    function startPrewarming() {
+                        if (prewarmStarted) return
+                        prewarmStarted = true
+                        prewarmTimer.start()
+                    }
+                    Timer {
+                        id: prewarmTimer
+                        interval: 180
+                        repeat: true
+                        onTriggered: {
+                            if (stack.prewarmIndex >= stack.allLoaders.length) {
+                                stop()
+                                return
+                            }
+                            const loader = stack.allLoaders[stack.prewarmIndex]
+                            if (loader) loader.prewarm = true
+                            stack.prewarmIndex += 1
+                        }
+                    }
+                }
+
+                Connections {
+                    target: App
+                    function onStartupChanged() {
+                        if (!App.startupBusy && (App.startupStatus || "").length > 0)
+                            stack.startPrewarming()
+                    }
                 }
             }
         }
+    }
+
+    // Se dibuja por encima del contenido para que ningún panel opaque alguno
+    // de los cuatro lados del marco. No intercepta arrastre ni redimensionado.
+    Rectangle {
+        id: windowFrameOverlay
+        anchors.fill: parent
+        color: "transparent"
+        border.width: window.visibility === Window.Windowed ? window.windowedFrameWidth : 0
+        border.color: window.frameBorderColor
+        z: 1000
+        enabled: false
     }
 
     MouseArea {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: window.resizeHandleSize
+        width: window.sideResizeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeHorCursor
         onPressed: window.startResize(Qt.LeftEdge)
@@ -218,7 +405,7 @@ ApplicationWindow {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: window.resizeHandleSize
+        width: window.sideResizeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeHorCursor
         onPressed: window.startResize(Qt.RightEdge)
@@ -227,7 +414,7 @@ ApplicationWindow {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: window.resizeHandleSize
+        height: window.sideResizeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeVerCursor
         onPressed: window.startResize(Qt.TopEdge)
@@ -236,7 +423,7 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        height: window.resizeHandleSize
+        height: window.sideResizeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeVerCursor
         onPressed: window.startResize(Qt.BottomEdge)
@@ -244,8 +431,8 @@ ApplicationWindow {
     MouseArea {
         anchors.left: parent.left
         anchors.top: parent.top
-        width: window.resizeHandleSize
-        height: window.resizeHandleSize
+        width: window.cornerResizeHandleSize
+        height: window.cornerResizeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeFDiagCursor
         onPressed: window.startResize(Qt.TopEdge | Qt.LeftEdge)
@@ -253,8 +440,8 @@ ApplicationWindow {
     MouseArea {
         anchors.right: parent.right
         anchors.top: parent.top
-        width: window.resizeHandleSize
-        height: window.resizeHandleSize
+        width: window.cornerResizeHandleSize
+        height: window.cornerResizeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeBDiagCursor
         onPressed: window.startResize(Qt.TopEdge | Qt.RightEdge)
@@ -262,8 +449,8 @@ ApplicationWindow {
     MouseArea {
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        width: window.resizeHandleSize
-        height: window.resizeHandleSize
+        width: window.cornerResizeHandleSize
+        height: window.cornerResizeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeBDiagCursor
         onPressed: window.startResize(Qt.BottomEdge | Qt.LeftEdge)
@@ -271,37 +458,45 @@ ApplicationWindow {
     MouseArea {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        width: window.resizeHandleSize
-        height: window.resizeHandleSize
+        width: window.cornerResizeHandleSize
+        height: window.cornerResizeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeFDiagCursor
         onPressed: window.startResize(Qt.BottomEdge | Qt.RightEdge)
     }
 
-    // Global error toast
+    // Global status/error toast
     Popup {
         id: errorToast
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: 380
-        height: 60
+        width: Math.min(380, parent.width - 32)
+        height: 78
         modal: false
 
         property string message: ""
-        function show(msg) { message = msg; open(); closeTimer.start() }
+        property bool success: false
+        function show(msg, ok) {
+            message = msg
+            success = ok ?? false
+            open()
+            closeTimer.restart()
+        }
 
         background: Rectangle {
-            color: Theme.errorBg; radius: 8
-            border.color: Theme.errorBorder; border.width: 1
+            color: errorToast.success ? Theme.surfaceBg : Theme.errorBg; radius: 8
+            border.color: errorToast.success ? Theme.accent : Theme.errorBorder; border.width: 1
         }
 
         Text {
             anchors.centerIn: parent
             text: errorToast.message
-            color: Theme.errorText; font.pixelSize: 13
+            color: errorToast.success ? Theme.textPrimary : Theme.errorText; font.pixelSize: 13
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
             width: parent.width - 24
+            maximumLineCount: 3
+            elide: Text.ElideRight
         }
 
         Timer { id: closeTimer; interval: 4000; onTriggered: errorToast.close() }
@@ -313,8 +508,8 @@ ApplicationWindow {
         modal: true
         clip: true
         closePolicy: Popup.NoAutoClose
-        width: 760
-        height: 640
+        width: Math.min(760, parent.width - 48)
+        height: Math.min(640, parent.height - 48)
         padding: 18
         x: Math.round((parent.width - width) / 2)
         y: Math.round((parent.height - height) / 2)
@@ -327,6 +522,7 @@ ApplicationWindow {
         }
 
         contentItem: ColumnLayout {
+            id: setupCol
             width: setupPopup.availableWidth
             height: setupPopup.availableHeight
             spacing: 12
@@ -338,7 +534,11 @@ ApplicationWindow {
                 font.bold: true
             }
             Text {
-                text: (App.langV, App.l("setup.description"))
+                // Al repetir el asistente (ya hay binarios/modelos) el texto de
+                // "no hay binarios ni modelos" sería falso: mostrar uno neutro.
+                text: (App.langV, App.needsSetup
+                    ? App.l("setup.description")
+                    : "Reinstalá o cambiá de perfil recomendado cuando quieras.")
                 color: Theme.textSecondary
                 Layout.fillWidth: true
                 Layout.preferredWidth: setupPopup.availableWidth
@@ -346,6 +546,128 @@ ApplicationWindow {
                 clip: true
                 wrapMode: Text.WordWrap
                 font.pixelSize: 13
+            }
+
+            // ── Inicio rápido: perfil de sistema recomendado por hardware ──
+            // Un clic baja modelo + binario del tier más cercano (≤ HW) y lo activa.
+            property bool fastStartDismissed: false
+            // Depende de hardwareSummary para re-evaluar tras un rescan.
+            readonly property var sysPick: (App.hardwareSummary, App.recommendedSystemProfile())
+            readonly property var showcase: (App.hardwareSummary, App.recommendedShowcase())
+            function recommendedProfileLabel() {
+                const name = sysPick.displayName ?? ""
+                if (name.length > 0) return name
+                const tier = sysPick.tier ?? ""
+                return tier.length > 0 ? ("Perfil " + tier) : ""
+            }
+
+            // ── Perfil recomendado por hardware ─────────────────────────
+            // Card única y adaptativa: en placas de 24GB+ ofrece el showcase
+            // (MAX-Q coding + FAST-GEMMA general); en el resto, el tier de
+            // sistema ≤ VRAM (el más cercano por debajo). Sin showcase ni tier
+            // (no debería pasar) la card no se muestra.
+            Rectangle {
+                id: recCard
+                Layout.fillWidth: true
+                Layout.preferredHeight: scCol.implicitHeight + 24
+                visible: !setupCol.fastStartDismissed
+                         && (setupCol.showcase.length > 0 || (setupCol.sysPick.launchId ?? "").length > 0)
+                radius: 8
+                color: Theme.surfaceBg
+                border.color: Theme.accent
+
+                readonly property bool isShowcase: setupCol.showcase.length > 0
+
+                ColumnLayout {
+                    id: scCol
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 6
+                    Text {
+                        text: recCard.isShowcase
+                              ? "★ Perfiles recomendados para tu computadora"
+                              : "★ Perfil recomendado para tu computadora"
+                        color: Theme.textPrimary
+                        font { pixelSize: 14; bold: true }
+                    }
+                    // Showcase 24GB: lista de ambos perfiles.
+                    Repeater {
+                        model: recCard.isShowcase ? setupCol.showcase : []
+                        Text {
+                            Layout.fillWidth: true
+                            text: "• " + (modelData.displayName ?? "")
+                            color: Theme.textSecondary
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    // Tier único recomendado (≤ VRAM).
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !recCard.isShowcase
+                        text: "Perfil recomendado: " + setupCol.recommendedProfileLabel()
+                        color: Theme.textPrimary
+                        font { pixelSize: 13; bold: true }
+                        wrapMode: Text.WordWrap
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        spacing: 10
+                        // Showcase: instalar ambos / coding / general.
+                        LcButton {
+                            text: "Instalar ambos"
+                            visible: recCard.isShowcase
+                            Layout.preferredHeight: 34
+                            enabled: !App.modelDownloadRunning
+                            onClicked: { App.acceptShowcase(); setupPopup.close() }
+                        }
+                        // Un botón "Sólo <label>" por perfil del grupo (Coding/General
+                        // a 24GB; Visión/Agente a 8GB). Data-driven desde el showcase.
+                        Repeater {
+                            model: recCard.isShowcase ? setupCol.showcase : []
+                            LcButton {
+                                text: "Sólo " + (modelData.label || modelData.displayName || "")
+                                secondary: true
+                                Layout.preferredHeight: 34
+                                enabled: !App.modelDownloadRunning && (modelData.launchId || "").length > 0
+                                onClicked: { App.acceptShowcaseOne(modelData.launchId); setupPopup.close() }
+                            }
+                        }
+                        // Tier único: instalar y usar. Cierra el diálogo para que se
+                        // vea Descargas/Lanzar (acceptSystemProfileImpl navega allí);
+                        // si no, el modal modal quedaba tapando todo y parecía no hacer nada.
+                        LcButton {
+                            text: "Instalar y usar"
+                            visible: !recCard.isShowcase
+                            Layout.preferredHeight: 34
+                            enabled: !App.modelDownloadRunning
+                            onClicked: { App.installAndUseSystemProfile(setupCol.sysPick.launchId ?? ""); setupPopup.close() }
+                        }
+                        LcButton {
+                            text: "No, gracias"
+                            secondary: true
+                            Layout.preferredHeight: 34
+                            onClicked: setupCol.fastStartDismissed = true
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: App.modelDownloadRunning || App.modelDownloadStatus.length > 0
+                        spacing: 8
+                        ProgressBar {
+                            Layout.preferredWidth: 150; from: 0; to: 100
+                            value: App.modelDownloadProgress
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: App.modelDownloadStatus
+                            color: App.modelDownloadRunning ? Theme.accent : Theme.textMuted
+                            font.pixelSize: 11
+                            elide: Text.ElideMiddle
+                        }
+                    }
+                }
             }
 
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.divider }
@@ -365,7 +687,11 @@ ApplicationWindow {
                 LcButton {
                     text: (App.langV, App.l("setup.locateBinary"))
                     secondary: true
-                    onClicked: { stack.currentIndex = 3; binariesPage.openAddDialog() }
+                    onClicked: {
+                        stack.currentIndex = 3
+                        if (binariesLoader.item) binariesLoader.item.openAddDialog()
+                        else binariesLoader.pendingOpen = true
+                    }
                 }
                 LcButton {
                     text: {
@@ -423,7 +749,11 @@ ApplicationWindow {
                 LcButton {
                     text: (App.langV, App.l("setup.locateModel"))
                     secondary: true
-                    onClicked: { stack.currentIndex = 2; modelRootsPage.openAddDialog() }
+                    onClicked: {
+                        stack.currentIndex = 2
+                        if (modelRootsLoader.item) modelRootsLoader.item.openAddDialog()
+                        else modelRootsLoader.pendingOpen = true
+                    }
                 }
                 LcButton {
                     text: (App.langV, App.l("setup.downloadModel"))
@@ -584,6 +914,13 @@ ApplicationWindow {
                 text: (App.langV, App.l("setup.tip"))
                 color: Theme.textMuted
                 font.pixelSize: 12
+            }
+            LcButton {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 4
+                text: "Cerrar asistente"
+                secondary: true
+                onClicked: setupPopup.close()
             }
         }
     }
@@ -788,13 +1125,18 @@ ApplicationWindow {
         height = restoredH
         x = savedX
         y = savedY
-        if (savedMaximized)
+        const startHidden = StartedWithWindows && window.minimizeToTray
+        if (HeadlessMode || startHidden) {
+            visible = false
+        } else if (savedMaximized) {
             showMaximized()
-        else
+        } else {
             visible = true
+        }
         restoringWindowState = false
 
         // El escaneo pesado ya corrió en main.cpp bajo el splash → counts listos.
+        syncTray()
         if (App.needsSetup) setupPopup.open()
         maybeCreateInitialProfile()
         App.checkForUpdates()
@@ -808,30 +1150,31 @@ ApplicationWindow {
         }
     }
 
-    // Ícono en la bandeja de notificación. Visible sólo con el toggle activo.
-    // Click izquierdo o doble click restaura; botón derecho da menú Abrir/Salir.
-    Platform.SystemTrayIcon {
-        id: trayIcon
-        visible: window.minimizeToTray
-        icon.source: AppIconSource
-        tooltip: "UNLZ_Llamacode"
-        onActivated: function(reason) {
-            if (reason === Platform.SystemTrayIcon.Trigger
-                    || reason === Platform.SystemTrayIcon.DoubleClick)
-                window.showFromTray()
-        }
-        menu: Platform.Menu {
-            Platform.MenuItem {
-                text: (App.langV, App.l("tray.open"))
-                onTriggered: window.showFromTray()
-            }
-            Platform.MenuItem { separator: true }
-            Platform.MenuItem {
-                text: (App.langV, App.l("tray.quit"))
-                onTriggered: { window.forceQuit = true; Qt.quit() }
-            }
-        }
+    // El tray es nativo para que su menú siga siendo atendible aunque QML esté
+    // cargando una página pesada. Las acciones vuelven a este mismo objeto para
+    // conservar el flujo de restauración y Teach.
+    function syncTray() {
+        const teachActive = App.teachState === "recording" || App.teachState === "paused"
+        Tray.visible = window.minimizeToTray || teachActive
+        Tray.setTeachState(App.teachState)
+        Tray.setMenuTexts(App.l("tray.open"), "Pausar Teach", "Continuar Teach",
+                          "Finalizar Teach", "Cancelar Teach", App.l("tray.quit"))
     }
+
+    Connections {
+        target: Tray
+        function onOpenRequested() { window.showFromTray() }
+        function onQuitRequested() { window.forceQuit = true; Qt.quit() }
+        function onPauseTeachRequested(paused) { App.pauseTeach(paused) }
+        function onFinishTeachRequested() { App.finishTeach() }
+        function onCancelTeachRequested() { App.cancelTeach() }
+    }
+    Connections {
+        target: App
+        function onTeachChanged() { syncTray() }
+        function onLanguageChanged() { syncTray() }
+    }
+    onMinimizeToTrayChanged: syncTray()
 
     onXChanged: saveWindowState()
     onYChanged: saveWindowState()
@@ -842,6 +1185,9 @@ ApplicationWindow {
     Connections {
         target: App
         function onServerError(message) { errorToast.show(message) }
+        function onResearchFinished(id, title) {
+            errorToast.show("Investigación terminada: " + title, true)
+        }
         function onSetupStateChanged() {
             maybeCreateInitialProfile()
             if (App.needsSetup) setupPopup.open()
@@ -859,6 +1205,10 @@ ApplicationWindow {
             if (App.updateAvailable)
                 updatePopup.open()
         }
+        // Otra instancia intentó abrirse → restaurar/enfocar esta ventana.
+        function onSecondInstanceLaunched() { showFromTray() }
+        // Botón "Repetir asistente inicial".
+        function onShowSetupRequested() { setupPopup.open() }
     }
     Connections {
         target: App.binaryRegistry

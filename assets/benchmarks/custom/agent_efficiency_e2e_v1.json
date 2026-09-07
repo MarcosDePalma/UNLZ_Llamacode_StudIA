@@ -1,0 +1,63 @@
+{
+  "id": "agent_efficiency_e2e_v1",
+  "name": "Agent efficiency E2E v1",
+  "description": "Suite versionada y reproducible para comparar calidad, tiempo, tokens y uso de tools entre versiones del agente.",
+  "variants": ["baseline", "honey"],
+  "evaluation": {
+    "toggleDirective": "honey",
+    "additionalMetrics": [
+      "filesChanged",
+      "addedLines",
+      "removedLines",
+      "toolCalls",
+      "repairs",
+      "regressions"
+    ],
+    "gate": "No aceptar Honey si reduce éxito funcional o aumenta regresiones."
+  },
+  "source": "bundled",
+  "protocolVersion": 1,
+  "recommendedPasses": 3,
+  "prompts": [
+    {
+      "id": "python_parser_regression",
+      "category": "bugfix",
+      "isSpeed": false,
+      "maxTokens": 6000,
+      "prompt": "Creá parser.py y test_parser.py. Implementá parse_record(line), que acepte 'clave=valor;clave2=valor2', preserve '=' dentro del valor, ignore segmentos vacíos y lance ValueError para segmentos sin '=' o claves vacías. Usá sólo stdlib. Terminá ejecutando los tests.",
+      "acceptance": {
+        "files": ["parser.py", "test_parser.py"],
+        "commands": [
+          {"name": "compile", "command": "python -m py_compile parser.py test_parser.py", "timeoutMs": 30000},
+          {"name": "tests", "command": "python -m unittest -v test_parser.py", "timeoutMs": 30000}
+        ]
+      }
+    },
+    {
+      "id": "typescript_localization",
+      "category": "feature",
+      "isSpeed": false,
+      "maxTokens": 6000,
+      "prompt": "Creá i18n.ts e i18n.test.js. Implementá en TypeScript sin dependencias una función translate(locale,key,vars) con catálogos es/en, fallback a es, interpolación {{name}} y error claro para clave inexistente. El test debe transpilarse conceptualmente sin herramientas externas: agregá también i18n.js equivalente ejecutable y probalo con node.",
+      "acceptance": {
+        "files": ["i18n.ts", "i18n.js", "i18n.test.js"],
+        "commands": [
+          {"name": "tests", "command": "node i18n.test.js", "timeoutMs": 30000}
+        ]
+      }
+    },
+    {
+      "id": "cpp_safe_refactor",
+      "category": "maintenance",
+      "isSpeed": false,
+      "maxTokens": 6500,
+      "prompt": "Creá stats.cpp con un programa C++17 que lea enteros por stdin, descarte tokens inválidos y emita JSON con count,min,max,sum y mean. Para entrada sin enteros debe emitir count 0 y null en el resto. Creá test_stats.py que compile y pruebe casos normales, inválidos y vacío. No uses librerías externas.",
+      "acceptance": {
+        "files": ["stats.cpp", "test_stats.py"],
+        "commands": [
+          {"name": "tests", "command": "python test_stats.py", "timeoutMs": 60000}
+        ]
+      }
+    }
+  ]
+}

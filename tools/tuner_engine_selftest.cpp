@@ -55,7 +55,7 @@ int main(int argc, char **argv)
     // ── Primitivas puras ──────────────────────────────────────────────────────
     QVector<TunableParam> params = {
         {ParamSpec::intRange("ngl", 0, 40, 8), "-ngl", false},
-        {ParamSpec::categorical("cache-type-k", {"f16", "q8_0", "q4_0"}, true),
+        {ParamSpec::categorical("cache-type-k", {"q8_0", "q4_0"}, true),
          "--cache-type-k", false},
         {ParamSpec::categorical("flash-attn", {"off", "on"}), "--flash-attn", true},
     };
@@ -88,13 +88,13 @@ int main(int argc, char **argv)
 
     const QByteArray sample =
         R"({"content":"hi","timings":{"predicted_per_second":37.2}})";
-    CHECK(qAbs(TunerEngine::parseThroughput(sample) - 37.2) < 0.01,
+    CHECK(qAbs(TunerEngine::parseThroughput(sample).genTps - 37.2) < 0.01,
           "parseThroughput predicted_per_second");
     const QByteArray sampleFallback =
         R"({"timings":{"predicted_ms":2000,"predicted_n":100}})";
-    CHECK(qAbs(TunerEngine::parseThroughput(sampleFallback) - 50.0) < 0.01,
+    CHECK(qAbs(TunerEngine::parseThroughput(sampleFallback).genTps - 50.0) < 0.01,
           "parseThroughput fallback ms/n");
-    CHECK(TunerEngine::parseThroughput("{}") < 0, "parseThroughput sin datos = -1");
+    CHECK(!TunerEngine::parseThroughput("{}").valid(), "parseThroughput sin datos = invalido");
 
     CHECK(qAbs(TunerEngine::scoreQuality("hay def is_prime aca", {"is_prime", "def"}) - 1.0) < 0.01,
           "scoreQuality 2/2");

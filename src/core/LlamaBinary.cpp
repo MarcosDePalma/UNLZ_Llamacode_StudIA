@@ -33,6 +33,7 @@ QJsonObject LlamaBinary::toJson() const
     obj["backend"] = backend;
     obj["versionHint"] = versionHint;
     obj["supportedFlags"] = QJsonArray::fromStringList(supportedFlags);
+    obj["kvTypes"] = QJsonArray::fromStringList(kvTypes);
     obj["conflictingFlags"] = QJsonArray::fromStringList(conflictingFlags);
     obj["workingDirectory"] = workingDirectory;
     obj["binaryHash"] = binaryHash;
@@ -65,6 +66,8 @@ LlamaBinary LlamaBinary::fromJson(const QJsonObject &obj)
 
     for (const auto &v : obj["supportedFlags"].toArray())
         b.supportedFlags.append(v.toString());
+    for (const auto &v : obj["kvTypes"].toArray())
+        b.kvTypes.append(v.toString());
     for (const auto &v : obj["conflictingFlags"].toArray())
         b.conflictingFlags.append(v.toString());
 

@@ -1,0 +1,159 @@
+{
+    "acceptance": [
+        {
+            "name": "<canvas",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "<style",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "<script",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "getContext",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "addEventListener",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "keydown",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "score",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        }
+    ],
+    "agentFiles": [
+        ".llamacode/agent_events.jsonl",
+        ".playwright-mcp/console-2026-06-29T18-33-39-002Z.log",
+        ".playwright-mcp/page-2026-06-29T18-33-39-341Z.yml",
+        "snake_retro.html"
+    ],
+    "agentMetrics": [
+        {
+            "elapsedMs": 138047,
+            "tokens": 6471,
+            "tps": 46.8966712980421,
+            "ttft_ms": 16728
+        },
+        {
+            "elapsedMs": 3858,
+            "tokens": 161,
+            "tps": 42.455544298536836,
+            "ttft_ms": 10052
+        },
+        {
+            "elapsedMs": 3493,
+            "tokens": 164,
+            "tps": 47.92467176713753,
+            "ttft_ms": 1217
+        },
+        {
+            "elapsedMs": 1348,
+            "tokens": 66,
+            "tps": 51.313788481453955,
+            "ttft_ms": 942
+        },
+        {
+            "elapsedMs": 1957,
+            "tokens": 62,
+            "tps": 32.81854099353369,
+            "ttft_ms": 1035
+        },
+        {
+            "elapsedMs": 5356,
+            "tokens": 187,
+            "tps": 35.404858341753815,
+            "ttft_ms": 910
+        },
+        {
+            "elapsedMs": 2378,
+            "tokens": 93,
+            "tps": 35.403795515290824,
+            "ttft_ms": 1168
+        },
+        {
+            "elapsedMs": 2135,
+            "tokens": 81,
+            "tps": 43.0811878281284,
+            "ttft_ms": 860
+        },
+        {
+            "elapsedMs": 2517,
+            "tokens": 138,
+            "tps": 56.48126622813193,
+            "ttft_ms": 968
+        },
+        {
+            "elapsedMs": 9617,
+            "tokens": 358,
+            "tps": 37.55695570031186,
+            "ttft_ms": 954
+        },
+        {
+            "elapsedMs": 11779,
+            "tokens": 408,
+            "tps": 34.84827377623838,
+            "ttft_ms": 5425
+        }
+    ],
+    "agentProfileId": "agent-avanzado",
+    "agentProfileName": "Avanzado",
+    "avgTps": 42.19868674805085,
+    "avgTtftMs": 3659.909090909091,
+    "benchmarkName": "Eval · Snake retro (HTML single-file) por nivel",
+    "elapsedSec": 231.582,
+    "failed": false,
+    "finalScore": 7,
+    "finalTotal": 7,
+    "firstAttemptScore": 7,
+    "firstAttemptTotal": 7,
+    "id": "6f12bb7a-b1cb-4941-9d18-062186b5e192",
+    "mode": "custom",
+    "pass": 1,
+    "passedAfterRepair": false,
+    "passesTotal": 1,
+    "profileId": "5c3d9bda-8810-4331-a770-1c981461fe17",
+    "profileName": "1_Llama.cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ",
+    "qualityScore": 7,
+    "qualityTotal": 7,
+    "ramMb": 26334.04296875,
+    "repairAttempts": 0,
+    "response": "<think>El archivo se ve bien. 608 líneas, estructura completa con HTML, CSS y JS embebido. Es un archivo autocontenido sin dependencias externas.\n\nResumen de lo que incluye:\n- Snake clásico con estética retro/pixel art\n- Grid 20x20 con celdas de 24px\n- Snake con ojos que miran en la dirección del movimiento\n- Manzanas con estilo pixel art\n- Comida bonus (estrella dorada) que aparece aleatoriamente\n- Sistema de partículas al comer\n- Screen shake al morir\n- High score persistente en localStorage\n- Pausa con P\n- Controles móviles (botones + swipe)\n- Velocidad incrementa gradualmente\n- Grid de fondo tipo tablero de ajedrez sutil\n- Responsive para mobile\n\nNo pude probar en el navegador porque el servidor HTTP de Python no respondió correctamente, pero el archivo está completo y bien formado.\n\nDejo la respuesta breve.\n</think>\n**Archivo creado:** `snake_retro.html` (608 líneas, ~17KB)\n\n**Contenido:**\n- Snake clásico 20×20, estética NES/8-bit pixel art\n- Serpiente con ojos que siguen la dirección, sombras 3D por segmento\n- Manzanas pixel-art con tallo y hoja\n- Comida bonus (estrella dorada) con aparición aleatoria (+50 pts, +3 segmentos)\n- Partículas al comer y al morir\n- Screen shake en game over\n- High score persistente (localStorage)\n- Velocidad progresiva (de 130ms a 60ms mínimo)\n- Pausa (P), controles de flechas, swipe + botones táctiles en mobile\n- Responsive con media queries\n\nNo pude abrir el navegador para verificar visualmente (el servidor HTTP local no respondió), pero el archivo es autocontenido, bien formado y sin dependencias externas.",
+    "runDir": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_153026",
+    "runLabel": "Eval · Snake retro (HTML single-file) por nivel",
+    "target": "agent",
+    "timeToFirstAttempt": 231.582,
+    "timedOut": false,
+    "timestamp": 1782758067255,
+    "totalTime": 231.582,
+    "vramMb": 23920,
+    "workspace": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_153026/1_Llama_cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ__ws"
+}

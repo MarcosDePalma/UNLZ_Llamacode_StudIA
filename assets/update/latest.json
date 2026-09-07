@@ -1,6 +1,6 @@
 {
-  "newVersion": true,
-  "version": "0.1.1",
+  "newVersion": false,
+  "version": "0.1.116",
   "title": "Nueva version disponible",
   "summary": "Incluye el detector de actualizaciones, mejoras de arranque y avisos con changelog dentro de la app.",
   "changelog": [
@@ -8,5 +8,5 @@
     "Popup de actualizacion pendiente al iniciar LlamaCode.",
     "Opciones para actualizar ahora, postergar al proximo inicio o silenciar hasta la proxima version."
   ],
-  "updateUrl": "https://raw.githubusercontent.com/guideahon/UNLZ_Llamacode/main/scripts/bootstrap.ps1"
+  "updateUrl": "https://raw.githubusercontent.com/cristianlukas/UNLZ_Llamacode/main/scripts/bootstrap.ps1"
 }

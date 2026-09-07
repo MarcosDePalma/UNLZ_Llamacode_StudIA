@@ -1,0 +1,34 @@
+{
+  "schema": "llamacode-long-context-matrix-config-v1",
+  "serverExe": "C:/path/to/deepseek-lid-cuda/llama-server.exe",
+  "modelPath": "C:/path/to/DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf",
+  "commonArgs": [
+    "--n-cpu-moe", "39",
+    "--fit-target", "512",
+    "--fit-ctx", "{context}",
+    "--split-mode", "layer",
+    "--temp", "0.60",
+    "--top-p", "0.95",
+    "--top-k", "20",
+    "--min-p", "0.0",
+    "--repeat-penalty", "1.0",
+    "--presence-penalty", "0.0",
+    "--no-context-shift",
+    "--metrics", "--no-warmup", "--jinja",
+    "--threads-batch", "0",
+    "--predict", "16384",
+    "--parallel", "1",
+    "--reasoning", "off"
+  ],
+  "variant": {
+    "id": "deepseek-lid-cuda-f16-kv",
+    "args": [
+      "--cache-type-k", "f16",
+      "--cache-type-v", "f16"
+    ],
+    "env": {
+      "GGML_CUDA_NO_PINNED": "1"
+    }
+  },
+  "contexts": [131072, 262144, 524288, 1048576]
+}

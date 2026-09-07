@@ -2,6 +2,9 @@
 #include "CatalogModel.h"
 #include <QAbstractListModel>
 #include <QList>
+#include <QSet>
+#include <QHash>
+#include <QPair>
 
 class ModelCatalog : public QAbstractListModel
 {
@@ -26,6 +29,9 @@ public:
         TensorBreakdownRole,
         BpwRole,
         QuantMismatchRole,
+        ArchitectureRole,
+        ParameterCountRole,
+        TrainedContextRole,
         IsVisionCandidateRole,
         IsDraftCandidateRole,
         IsAvailableRole
@@ -56,11 +62,32 @@ public:
     Q_INVOKABLE void addOrUpdate(const CatalogModel &model);
     Q_INVOKABLE void addBatch(const QList<CatalogModel> &models);
     Q_INVOKABLE void markRootUnavailable(const QString &rootId);
+    // Tras un scan COMPLETO de un root: marca no disponibles las filas de ese root
+    // que el scan ya no encontró en disco. Sin esto, un modelo borrado o movido
+    // queda disponible para siempre y la UI lo sigue ofreciendo (y un perfil que
+    // lo referencia falla recién al arrancar el server). `presentIds` son los ids
+    // que devolvió el scan; si viene vacío no se toca nada, para que un scan
+    // fallido no invalide el catálogo entero.
+    void reconcileRoot(const QString &rootId, const QSet<QString> &presentIds);
+
+private:
+    // Ancla estable por archivo (identidad = nombre + tamaño). Reusa la de una fila
+    // previa del mismo archivo; si es la primera vez, devuelve MAX+1.
+    qint64 assignStableId(const CatalogModel &m);
+    void backfillStableIds();
+public:
     Q_INVOKABLE void removeByRootId(const QString &rootId);
     Q_INVOKABLE QVariantMap get(const QString &id) const;
     Q_INVOKABLE QVariantMap getAt(int row) const;
+    // Override manual de compatibilidad, persistido aparte del scanner para que
+    // un rescan no lo borre.
+    Q_INVOKABLE bool setManualCompatibility(const QString &id, bool vision, bool draft);
 
     CatalogModel findById(const QString &id) const;
+    // Resolución por ancla estable: sobrevive a que el gguf se mueva de carpeta,
+    // cosa que el id textual (derivado de la ruta) no hace. Prefiere una fila
+    // disponible si hay varias con el mismo ancla.
+    CatalogModel findByStableId(qint64 stableId) const;
     QList<CatalogModel> allForRoot(const QString &rootId) const;
 
 signals:
@@ -76,6 +103,8 @@ private:
     QString dbPath() const;
     int indexOfId(const QString &id) const;
     bool matchesFilter(const CatalogModel &m) const;
+    void loadManualCompatibility();
+    void saveManualCompatibility() const;
 
     QList<CatalogModel> m_all;
     QList<const CatalogModel *> m_visible;
@@ -86,4 +115,5 @@ private:
 
     // SQLite connection name
     QString m_connName;
+    QHash<QString, QPair<bool, bool>> m_manualCompatibility;
 };

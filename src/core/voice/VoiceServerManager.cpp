@@ -2,8 +2,10 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QStandardPaths>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QUrl>
 #include <QPair>
 #include <QProcess>
@@ -16,20 +18,26 @@ struct Engine {
     const char *id; const char *name; const char *engine;
     const char *modelFile; const char *modelUrl; int sizeMb;
     const char *endpointPath; int defaultPort;
+    const char *transport; bool installable; const char *docsUrl;
 };
 const Engine kEngines[] = {
     {"whisper-tiny",  "Whisper tiny (multilingüe, ~78 MB, rápido)",   "whisper-cpp",
      "ggml-tiny.bin",
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
-     78,  "/inference", 8081},
+     78,  "/inference", 8081, "http_batch", true, "https://github.com/ggerganov/whisper.cpp"},
     {"whisper-base",  "Whisper base (multilingüe, ~148 MB, balance)", "whisper-cpp",
      "ggml-base.bin",
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
-     148, "/inference", 8081},
+     148, "/inference", 8081, "http_batch", true, "https://github.com/ggerganov/whisper.cpp"},
     {"whisper-small", "Whisper small (multilingüe, ~488 MB, preciso)","whisper-cpp",
      "ggml-small.bin",
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
-     488, "/inference", 8081},
+     488, "/inference", 8081, "http_batch", true, "https://github.com/ggerganov/whisper.cpp"},
+    {"parakeet-tdt-0.6b-v3", "Parakeet TDT v3 (local nativo, experimental, ~356 MB)", "parakeet-cli",
+     "ggml-parakeet-tdt-0.6b-v3-q4_0.bin",
+     "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/main/ggml-parakeet-tdt-0.6b-v3-q4_0.bin?download=true",
+     356, "", 0, "process_batch", true,
+     "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"},
 };
 
 // Voces piper (TTS process-mode). Cada voz = .onnx + .onnx.json (rhasspy/piper-voices).
@@ -70,7 +78,11 @@ QVariantList VoiceServerManager::sttCatalog()
             {"modelUrl", QString::fromLatin1(e.modelUrl)},
             {"sizeMb", e.sizeMb},
             {"endpointPath", QString::fromLatin1(e.endpointPath)},
-            {"defaultPort", e.defaultPort}});
+            {"defaultPort", e.defaultPort},
+            {"transport", QString::fromLatin1(e.transport)},
+            {"installable", e.installable},
+            {"requiresCommand", !e.installable},
+            {"docsUrl", QString::fromLatin1(e.docsUrl)}});
     }
     return out;
 }
@@ -107,6 +119,16 @@ QVariantMap VoiceServerManager::ttsVoice(const QString &id)
     return {};
 }
 
+QString VoiceServerManager::defaultTtsVoiceForLang(const QString &lang)
+{
+    const QString base = QStringLiteral("es_ES-davefx-medium");
+    if (lang.isEmpty()) return base;
+    for (const Voice &v : kVoices)
+        if (lang == QLatin1String(v.lang))
+            return QString::fromLatin1(v.id);
+    return base;     // sin voz para ese idioma → español base
+}
+
 QString VoiceServerManager::ttsModelPath(const QString &voiceId)
 {
     const QVariantMap v = ttsVoice(voiceId);
@@ -127,16 +149,127 @@ QStringList VoiceServerManager::buildPiperArgs(const QString &modelPath, const Q
     return {QStringLiteral("-m"), modelPath, QStringLiteral("-f"), outWav};
 }
 
+QStringList VoiceServerManager::buildPiperResidentArgs(const QString &modelPath, const QString &outDir)
+{
+    return {QStringLiteral("-m"), modelPath,
+            QStringLiteral("--json-input"),
+            QStringLiteral("--output_dir"), outDir};
+}
+
+QStringList VoiceServerManager::buildPocketServerArgs(const QString &scriptPath,
+                                                       const QString &language,
+                                                       const QString &voice,
+                                                       const QString &modelConfig,
+                                                       int port, bool quantize)
+{
+    QStringList args{scriptPath,
+                     QStringLiteral("--host"), QStringLiteral("127.0.0.1"),
+                     QStringLiteral("--port"), QString::number(port),
+                     QStringLiteral("--language"), language.isEmpty()
+                         ? QStringLiteral("spanish") : language};
+    if (!voice.trimmed().isEmpty())
+        args << QStringLiteral("--voice") << voice.trimmed();
+    if (!modelConfig.trimmed().isEmpty())
+        args << QStringLiteral("--config") << modelConfig.trimmed();
+    if (quantize) args << QStringLiteral("--quantize");
+    return args;
+}
+
 QString VoiceServerManager::installRoot()
 {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     return base + QStringLiteral("/voice");
 }
 
+QString VoiceServerManager::pocketRoot()
+{
+    return installRoot() + QStringLiteral("/pocket-tts");
+}
+
+QString VoiceServerManager::pocketVenvDir()
+{
+    return pocketRoot() + QStringLiteral("/venv");
+}
+
+QString VoiceServerManager::pocketManagedPythonPath()
+{
+#ifdef Q_OS_WIN
+    return QDir(pocketVenvDir()).filePath(QStringLiteral("Scripts/python.exe"));
+#else
+    return QDir(pocketVenvDir()).filePath(QStringLiteral("bin/python"));
+#endif
+}
+
+QString VoiceServerManager::pocketCacheDir()
+{
+    return pocketRoot() + QStringLiteral("/cache");
+}
+
+QString VoiceServerManager::pocketServerScriptPath()
+{
+    return pocketRoot() + QStringLiteral("/pocket_tts_server.py");
+}
+
+int VoiceServerManager::pocketDefaultPort()
+{
+    return 8200;
+}
+
+bool VoiceServerManager::pocketRuntimeInstalled()
+{
+    return QFileInfo::exists(pocketManagedPythonPath())
+        && QFileInfo::exists(QDir(pocketRoot()).filePath(QStringLiteral("installed.ok")));
+}
+
+bool VoiceServerManager::pocketServerScriptAvailable()
+{
+    if (QFileInfo::exists(pocketServerScriptPath())
+        || QFile(QStringLiteral(":/tools/pocket_tts_server.py")).exists())
+        return true;
+    const QString appDir = QCoreApplication::applicationDirPath();
+    return QFileInfo::exists(QDir(appDir).filePath(QStringLiteral("../../tools/pocket_tts_server.py")))
+        || QFileInfo::exists(QDir(appDir).filePath(QStringLiteral("../tools/pocket_tts_server.py")))
+        || QFileInfo::exists(QDir::current().filePath(QStringLiteral("tools/pocket_tts_server.py")));
+}
+
+bool VoiceServerManager::ensurePocketServerScript(QString *error)
+{
+    const QString destination = pocketServerScriptPath();
+    if (QFileInfo::exists(destination)) return true;
+    if (!QDir().mkpath(pocketRoot())) {
+        if (error) *error = QStringLiteral("no se pudo crear la carpeta de Pocket TTS");
+        return false;
+    }
+
+    QFile resource(QStringLiteral(":/tools/pocket_tts_server.py"));
+    if (resource.exists() && resource.open(QIODevice::ReadOnly)) {
+        QFile output(destination);
+        if (output.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            const QByteArray data = resource.readAll();
+            if (output.write(data) == data.size()) {
+                output.close();
+                return true;
+            }
+        }
+    }
+
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QStringList candidates = {
+        QDir(appDir).filePath(QStringLiteral("../../tools/pocket_tts_server.py")),
+        QDir(appDir).filePath(QStringLiteral("../tools/pocket_tts_server.py")),
+        QDir::current().filePath(QStringLiteral("tools/pocket_tts_server.py"))};
+    for (const QString &source : candidates) {
+        if (!QFileInfo::exists(source)) continue;
+        if (QFile::copy(source, destination)) return true;
+    }
+    if (error) *error = QStringLiteral("no se encontró el helper pocket_tts_server.py");
+    return false;
+}
+
 QString VoiceServerManager::modelPath(const QString &engineId)
 {
     const QVariantMap e = sttEngine(engineId);
-    if (e.isEmpty()) return {};
+    if (e.isEmpty() || e.value("modelFile").toString().isEmpty()) return {};
     return installRoot() + QStringLiteral("/") + engineId + QStringLiteral("/")
            + e.value("modelFile").toString();
 }
@@ -171,6 +304,12 @@ void VoiceServerManager::installModel(const QString &engineId)
     }
     const QVariantMap e = sttEngine(engineId);
     if (e.isEmpty()) { emit installFinished(engineId, false, QStringLiteral("motor desconocido")); return; }
+    if (!e.value(QStringLiteral("installable"), true).toBool()
+        || e.value(QStringLiteral("modelUrl")).toString().isEmpty()) {
+        emit installFinished(engineId, false,
+                             QStringLiteral("este motor requiere configurar un sidecar externo"));
+        return;
+    }
     startDownloadQueue(engineId, {{ e.value("modelUrl").toString(), modelPath(engineId) }});
 }
 
@@ -268,12 +407,36 @@ QString VoiceServerManager::defaultBinaryUrl(const QString &kind)
     if (kind == QLatin1String("piper"))
         return QStringLiteral("https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip");
     if (kind == QLatin1String("whisper-server"))
-        return QStringLiteral("https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.4/whisper-bin-x64.zip");
+        return QStringLiteral("https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-x64.zip");
 #elif defined(Q_OS_LINUX)
     if (kind == QLatin1String("piper"))
         return QStringLiteral("https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz");
     // whisper.cpp no publica binario Linux prearmado → vacío (se compila).
 #endif
+    return {};
+}
+
+QString VoiceServerManager::installedBinaryPath(const QString &kind)
+{
+    // El paquete oficial de whisper.cpp trae parakeet-cli junto con
+    // whisper-server. Aceptamos ambos lugares para que Parakeet quede
+    // administrado por la misma descarga y no dupliquemos ~100 MB de binarios.
+    const QStringList dirs = kind == QLatin1String("parakeet-cli")
+        ? QStringList{binDir() + QStringLiteral("/whisper-server"),
+                      binDir() + QStringLiteral("/parakeet-cli")}
+        : QStringList{binDir() + QStringLiteral("/") + kind};
+    QStringList names;
+    if (kind == QLatin1String("piper")) names << "piper.exe" << "piper";
+    else if (kind == QLatin1String("parakeet-cli")) names << "parakeet-cli.exe" << "parakeet-cli";
+    else names << "whisper-server.exe" << "server.exe" << "whisper-server" << "server";
+    for (const QString &dir : dirs) {
+        QDirIterator it(dir, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            if (names.contains(it.fileName(), Qt::CaseInsensitive))
+                return it.filePath();
+        }
+    }
     return {};
 }
 
@@ -350,15 +513,7 @@ void VoiceServerManager::extractAndLocate(const QString &kind, const QString &ar
         QFile::remove(archive);
         if (code != 0) { emit binaryInstalled(kind, false, QString(), QStringLiteral("falló la extracción")); return; }
         // Localizar el ejecutable extraído.
-        QStringList names;
-        if (kind == QLatin1String("piper")) names << "piper.exe" << "piper";
-        else names << "whisper-server.exe" << "server.exe" << "whisper-server" << "server";
-        QString found;
-        QDirIterator it(destDir, QDir::Files, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            it.next();
-            if (names.contains(it.fileName(), Qt::CaseInsensitive)) { found = it.filePath(); break; }
-        }
+        const QString found = installedBinaryPath(kind);
         if (found.isEmpty())
             emit binaryInstalled(kind, false, QString(),
                 QStringLiteral("descargado pero no se encontró el ejecutable en el paquete"));

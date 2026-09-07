@@ -9,6 +9,99 @@ Item {
     property bool newProjectDialogOpen: false
     property var thinkExpanded: ({})
     property var chatAttachments: []
+    property string chatSearchText: ""
+    property var chatSearchResults: []
+
+    function refreshChatSearch() {
+        root.chatSearchResults = root.chatSearchText.trim().length > 0
+                                  ? App.searchChatHistory(root.chatSearchText) : []
+    }
+
+    Popup {
+        id: samplingPopup
+        parent: Overlay.overlay
+        modal: false
+        padding: 14
+        x: Math.max(8, root.width - width - 18)
+        y: 54
+        width: 260
+        background: Rectangle {
+            color: Theme.popupBg; radius: 8
+            border.color: Theme.popupBorderColor
+        }
+        ColumnLayout {
+            width: parent.width
+            spacing: 8
+            Text {
+                text: "Sampling de esta sesión"
+                color: Theme.textPrimary
+                font.bold: true
+            }
+            Text {
+                text: "Vacío hereda el valor del servidor."
+                color: Theme.textMuted
+                font.pixelSize: 11
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "Temp."; color: Theme.textSecondary; Layout.preferredWidth: 70 }
+                LcTextField {
+                    id: chatTempField
+                    Layout.fillWidth: true
+                    text: App.chatTemperature >= 0 ? String(App.chatTemperature) : ""
+                    placeholderText: "0.6"
+                    onEditingFinished: App.chatTemperature = text.trim().length ? Number(text) : -1
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "Top-p"; color: Theme.textSecondary; Layout.preferredWidth: 70 }
+                LcTextField {
+                    id: chatTopPField
+                    Layout.fillWidth: true
+                    text: App.chatTopP >= 0 ? String(App.chatTopP) : ""
+                    placeholderText: "0.95"
+                    onEditingFinished: App.chatTopP = text.trim().length ? Number(text) : -1
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "Top-k"; color: Theme.textSecondary; Layout.preferredWidth: 70 }
+                LcTextField {
+                    id: chatTopKField
+                    Layout.fillWidth: true
+                    text: App.chatTopK >= 0 ? String(App.chatTopK) : ""
+                    placeholderText: "20"
+                    onEditingFinished: App.chatTopK = text.trim().length ? Number(text) : -1
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "Min-p"; color: Theme.textSecondary; Layout.preferredWidth: 70 }
+                LcTextField {
+                    Layout.fillWidth: true
+                    text: App.chatMinP >= 0 ? String(App.chatMinP) : ""
+                    placeholderText: "0.0"
+                    onEditingFinished: App.chatMinP = text.trim().length ? Number(text) : -1
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "Repeat"; color: Theme.textSecondary; Layout.preferredWidth: 70 }
+                LcTextField {
+                    Layout.fillWidth: true
+                    text: App.chatRepeatPenalty >= 0 ? String(App.chatRepeatPenalty) : ""
+                    placeholderText: "1.0"
+                    onEditingFinished: App.chatRepeatPenalty = text.trim().length ? Number(text) : -1
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                LcButton { text: "Cerrar"; secondary: true; onClicked: samplingPopup.close() }
+            }
+        }
+    }
 
     Dialog {
         id: thinkingRestartDialog
@@ -17,6 +110,11 @@ Item {
         x: Math.round((parent.width - width) / 2)
         y: Math.round((parent.height - height) / 2)
         width: Math.min(560, root.width - 48)
+        height: 230
+        leftPadding: 20
+        rightPadding: 20
+        topPadding: 16
+        bottomPadding: 16
         closePolicy: Popup.CloseOnEscape
 
         property bool targetEnabled: false
@@ -111,9 +209,10 @@ Item {
     }
 
     MermaidPreviewDialog { id: mermaidPreview }
-    function openMermaidPreview(imgUrl, src) {
+    function openMermaidPreview(imgUrl, src, isSvg) {
         mermaidPreview.imageSource = imgUrl
         mermaidPreview.mermaidSource = src
+        mermaidPreview.isSvg = isSvg === true
         mermaidPreview.open()
     }
 
@@ -270,6 +369,33 @@ Item {
                             font { pixelSize: 12; bold: true }
                             Layout.fillWidth: true
                         }
+                        LcButton {
+                            text: "⌕"
+                            secondary: true
+                            implicitWidth: 30
+                            ToolTip.visible: hovered
+                            ToolTip.text: "Buscar en el historial"
+                            onClicked: chatSearchField.forceActiveFocus()
+                        }
+                    }
+                }
+
+                LcTextField {
+                    id: chatSearchField
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 8
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 6
+                    placeholderText: "Buscar chats…"
+                    text: root.chatSearchText
+                    onTextChanged: {
+                        root.chatSearchText = text
+                        root.refreshChatSearch()
+                    }
+                    Keys.onEscapePressed: {
+                        text = ""
+                        focus = false
                     }
                 }
 
@@ -335,7 +461,8 @@ Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    model: App.chatSessions
+                    model: root.chatSearchText.trim().length > 0
+                           ? root.chatSearchResults : App.chatSessions
                     ScrollBar.vertical: LcScrollBar { policy: ScrollBar.AsNeeded }
 
                     section.property: "projectName"
@@ -345,7 +472,9 @@ Item {
                         anchors.centerIn: parent
                         width: parent.width - 32
                         visible: sessionsList.count === 0
-                        text: "Sin chats todavía.\nUsá + para crear uno."
+                        text: root.chatSearchText.trim().length > 0
+                              ? "No hay coincidencias."
+                              : "Sin chats todavía.\nUsá + para crear uno."
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
                         color: Theme.textMuted
@@ -844,6 +973,49 @@ Item {
                             verticalAlignment: Text.AlignVCenter
                         }
                     }
+                    // Salida estructurada: fuerza JSON válido (GBNF) en la respuesta.
+                    CheckBox {
+                        id: jsonModeCheck
+                        visible: App.serverRunning && App.serverReady
+                        text: "JSON"
+                        checked: false
+                        onToggled: App.chatSetStructuredOutput(
+                            checked ? "root   ::= object\n" +
+                                      "value  ::= object | array | string | number | (\"true\" | \"false\" | \"null\") ws\n" +
+                                      "object ::= \"{\" ws ( string \":\" ws value (\",\" ws string \":\" ws value)* )? \"}\" ws\n" +
+                                      "array  ::= \"[\" ws ( value (\",\" ws value)* )? \"]\" ws\n" +
+                                      "string ::= \"\\\"\" ( [^\"\\\\] | \"\\\\\" . )* \"\\\"\" ws\n" +
+                                      "number ::= \"-\"? ([0-9] | [1-9] [0-9]*) (\".\" [0-9]+)? ([eE] [-+]? [0-9]+)? ws\n" +
+                                      "ws ::= [ \\t\\n]*\n"
+                                    : "", "")
+                        contentItem: Text {
+                            text: jsonModeCheck.text
+                            color: Theme.textPrimary
+                            font.pixelSize: 12
+                            leftPadding: jsonModeCheck.indicator.width + 6
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Fuerza al modelo a responder con JSON válido (GBNF grammar)."
+                    }
+                    // Persona Diseño: sesga al modelo a emitir artifacts visuales
+                    // (bloques mermaid/svg) que se rinden inline.
+                    CheckBox {
+                        id: personaDesignerCheck
+                        visible: App.serverRunning && App.serverReady
+                        text: "Diseño"
+                        checked: App.chatPersonaDesigner
+                        onToggled: App.chatPersonaDesigner = checked
+                        contentItem: Text {
+                            text: personaDesignerCheck.text
+                            color: Theme.textPrimary
+                            font.pixelSize: 12
+                            leftPadding: personaDesignerCheck.indicator.width + 6
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Sesga al modelo a responder con diagramas (mermaid) y gráficos (svg) que se rinden inline."
+                    }
                 }
             }
 
@@ -866,6 +1038,11 @@ Item {
                 cacheBuffer: 4000
                 model: App.chatMessages
                 ScrollBar.vertical: LcScrollBar { policy: ScrollBar.AsNeeded }
+
+                // Scroll inicial al fondo una sola vez (contexto del ListView, no del
+                // delegate: evita ReferenceError cuando un delegate reciclado corre el
+                // Qt.callLater diferido).
+                Component.onCompleted: { followBottom = true; Qt.callLater(scrollToBottom) }
 
                 Text {
                     anchors.centerIn: parent
@@ -1005,7 +1182,7 @@ Item {
                                         width: parent.width
                                         text: delegateRoot.thinkContent
                                         color: Theme.textMuted
-                                        font.family: "Consolas,monospace"
+                                        font.family: Theme.codeFont
                                         font.pixelSize: 12
                                         wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
                                         readOnly: true
@@ -1118,7 +1295,7 @@ Item {
                                                 MouseArea {
                                                     anchors.fill: parent
                                                     cursorShape: Qt.PointingHandCursor
-                                                    onClicked: root.openMermaidPreview(mermaidWrap.imgUrl, mermaidWrap.segSrc)
+                                                    onClicked: root.openMermaidPreview(mermaidWrap.imgUrl, mermaidWrap.segSrc, isSvg)
                                                 }
                                             }
                                             Text {
@@ -1257,8 +1434,6 @@ Item {
                         property bool justCopied: false
                         Timer { id: chatCopyResetTimer; interval: 1500; onTriggered: bubbleRect.justCopied = false }
                     }
-
-                    Component.onCompleted: { msgList.followBottom = true; Qt.callLater(() => { msgList.scrollToBottom() }) }
                 }
 
                 // Auto-scroll por contentY directo (no positionViewAtEnd) para
@@ -1333,6 +1508,60 @@ Item {
                     id: inputCol
                     anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 10; bottomMargin: 10 }
                     spacing: 6
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        visible: App.chatQueuedCount > 0
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text { text: "Mensajes en cola"; color: Theme.textSecondary; font { pixelSize: 11; bold: true } }
+                            Item { Layout.fillWidth: true }
+                            LcButton { text: "Vaciar cola"; danger: true; onClicked: App.clearChatQueue() }
+                        }
+                        ScrollView {
+                            Layout.fillWidth: true
+                            // Evita que ScrollView colapse antes de crear los
+                            // delegates de la cola.
+                            Layout.preferredHeight: Math.min(220, Math.max(52, App.chatQueuedCount * 56))
+                            clip: true
+                            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                            Column {
+                                id: chatQueueRows
+                                width: parent.width
+                                spacing: 4
+                                Repeater {
+                                    model: App.chatQueuedMessages
+                                    Rectangle {
+                                        required property int index
+                                        required property string modelData
+                                        width: chatQueueRows.width
+                                        height: 52
+                                        radius: 6; color: Theme.inputBg; border.color: Theme.borderColor
+                                        RowLayout {
+                                            anchors.fill: parent; anchors.margins: 6; spacing: 6
+                                            Text { text: (index + 1) + ")"; color: Theme.textMuted; font.bold: true }
+                                            Text { Layout.fillWidth: true; text: modelData; color: Theme.textPrimary
+                                                wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                            LcButton { text: "Previsualizar"; secondary: true
+                                                onClicked: { chatQueueDialog.editIndex = -1; chatQueueDialog.open() } }
+                                            LcButton { text: "Editar"; secondary: true
+                                                onClicked: { chatQueueDialog.editIndex = index; chatQueueDialog.open() } }
+                                            LcButton { text: "Eliminar"; danger: true; onClicked: App.removeChatQueuedMessage(index) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    LcButton {
+                        text: "Sampling"
+                        secondary: true
+                        visible: App.serverRunning && App.serverReady
+                        onClicked: samplingPopup.open()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Temperatura, top-p y top-k de esta sesión"
+                    }
 
                     // Chips de adjuntos
                     Flow {
@@ -1456,5 +1685,59 @@ Item {
                 }
             }
         }
+    }
+
+    LcDialog {
+        id: chatQueueDialog
+        modal: true
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
+        width: Math.min(680, parent.width - 40)
+        height: Math.min(520, parent.height - 40)
+        title: "Mensajes en cola (" + App.chatQueuedCount + ")"
+        property int editIndex: -1
+        footer: RowLayout {
+            width: parent.width
+            LcButton { text: "Vaciar cola"; danger: true; onClicked: App.clearChatQueue() }
+            Item { Layout.fillWidth: true }
+            LcButton { text: "Cerrar"; secondary: true; onClicked: chatQueueDialog.close() }
+        }
+        contentItem: ListView {
+            id: chatQueueList
+            clip: true
+            spacing: 8
+            model: App.chatQueuedMessages
+            delegate: Rectangle {
+                required property int index
+                required property string modelData
+                width: chatQueueList.width
+                height: queueEditor.visible ? Math.max(118, queueEditor.contentHeight + 58) : preview.implicitHeight + 42
+                radius: 7
+                color: Theme.inputBg
+                border.color: Theme.borderColor
+                property bool editing: chatQueueDialog.editIndex === index
+                Text { id: number; anchors { left: parent.left; top: parent.top; margins: 9 }
+                    text: (index + 1) + "."; color: Theme.textMuted; font.bold: true }
+                Text { id: preview; visible: !parent.editing
+                    anchors { left: number.right; right: controls.left; top: parent.top; margins: 9 }
+                    text: modelData; color: Theme.textPrimary; wrapMode: Text.Wrap; maximumLineCount: 5; elide: Text.ElideRight }
+                TextArea { id: queueEditor; visible: parent.editing
+                    anchors { left: number.right; right: controls.left; top: parent.top; margins: 7 }
+                    text: modelData; color: Theme.textPrimary; wrapMode: TextArea.Wrap
+                    background: Rectangle { color: Theme.baseBg; radius: 4; border.color: Theme.inputBorderColor } }
+                Column {
+                    id: controls
+                    anchors { right: parent.right; top: parent.top; margins: 7 }
+                    spacing: 5
+                    LcButton { text: parent.parent.editing ? "Guardar" : "Editar"; secondary: true
+                        onClicked: { if (parent.parent.editing) { if (App.updateChatQueuedMessage(index, queueEditor.text)) chatQueueDialog.editIndex = -1 } else chatQueueDialog.editIndex = index } }
+                    LcButton { text: "Eliminar"; danger: true; onClicked: App.removeChatQueuedMessage(index) }
+                }
+            }
+            Text { anchors.centerIn: parent; visible: App.chatQueuedCount === 0
+                text: "No hay mensajes en cola."; color: Theme.textMuted }
+        }
+        onOpened: if (App.chatQueuedCount === 0) close()
     }
 }

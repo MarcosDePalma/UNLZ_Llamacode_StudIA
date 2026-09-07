@@ -1,0 +1,71 @@
+﻿{
+    "balanced":  true,
+    "comparisons":  [
+                        {
+                            "addedLinesDelta":  -66,
+                            "baselineProfileId":  "agent-intermedio",
+                            "candidateProfileId":  "agent-minimal",
+                            "comparisonTimeChangePct":  -34.72309472640106,
+                            "elapsedChangePct":  -34.72309472640106,
+                            "filesChangedDelta":  0,
+                            "qualityDeltaPctPoints":  0,
+                            "removedLinesDelta":  0,
+                            "successRateDeltaPctPoints":  0
+                        }
+                    ],
+    "groupBy":  "agentProfileId",
+    "profileCount":  2,
+    "profiles":  [
+                     {
+                         "agentVariant":  "baseline",
+                         "comparisonTimeMetric":  "timeToFirstAttempt",
+                         "failedRuns":  1,
+                         "fullyAcceptedRuns":  1,
+                         "honeyEnabled":  false,
+                         "medianAddedLines":  126,
+                         "medianColdFirstAttemptSec":  30.245,
+                         "medianElapsedSec":  211.142,
+                         "medianFilesChanged":  4,
+                         "medianFirstAttemptSec":  30.245,
+                         "medianQualityPct":  100,
+                         "medianRemovedLines":  0,
+                         "medianRepairAttempts":  1,
+                         "medianWarmFirstAttemptSec":  0,
+                         "outcomeSpread":  true,
+                         "profileId":  "agent-intermedio",
+                         "profileName":  "Intermedio",
+                         "qualityRangePctPoints":  0,
+                         "runs":  2,
+                         "stabilityRatePct":  50,
+                         "successRatePct":  50,
+                         "successfulRuns":  1
+                     },
+                     {
+                         "agentVariant":  "baseline",
+                         "comparisonTimeMetric":  "timeToFirstAttempt",
+                         "failedRuns":  1,
+                         "fullyAcceptedRuns":  1,
+                         "honeyEnabled":  false,
+                         "medianAddedLines":  60,
+                         "medianColdFirstAttemptSec":  19.743,
+                         "medianElapsedSec":  98.537,
+                         "medianFilesChanged":  4,
+                         "medianFirstAttemptSec":  19.743,
+                         "medianQualityPct":  100,
+                         "medianRemovedLines":  0,
+                         "medianRepairAttempts":  2,
+                         "medianWarmFirstAttemptSec":  0,
+                         "outcomeSpread":  true,
+                         "profileId":  "agent-minimal",
+                         "profileName":  "Minimal (local-first)",
+                         "qualityRangePctPoints":  0,
+                         "runs":  2,
+                         "stabilityRatePct":  50,
+                         "successRatePct":  50,
+                         "successfulRuns":  1
+                     }
+                 ],
+    "rows":  4,
+    "runCount":  4,
+    "schemaVersion":  1
+}

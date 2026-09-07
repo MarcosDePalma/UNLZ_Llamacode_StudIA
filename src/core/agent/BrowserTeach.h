@@ -29,6 +29,12 @@ public:
     // Nombre → slug seguro para filename (minúsculas, [a-z0-9_-]).
     static QString sanitize(const QString &name);
 
+    // Directorio de perfil de browser persistente del skill (cookies/localStorage/
+    // sesión). Codegen graba con --user-data-dir acá → Playwright genera el .mjs con
+    // launchPersistentContext(<dir>), así el replay reusa el login (no re-loguear en
+    // cada corrida). Lo crea si no existe. "" si el nombre no da slug válido.
+    static QString profileDir(const QString &name);
+
     // Comando de shell (para `cmd /c` en Win / `sh -c`) que graba el skill con
     // Playwright codegen. Al cerrar el inspector se escribe el .mjs.
     static QString recordCommand(const QString &name, const QString &url);

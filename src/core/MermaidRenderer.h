@@ -43,6 +43,15 @@ public:
     // del PNG o "" si el SVG es inválido / no se pudo escribir.
     Q_INVOKABLE QString renderSvg(const QString &source);
 
+    // Exporta el artifact renderizado a PNG en destPath. mermaid: usa el PNG
+    // cacheado (false si todavía no se rindió). svg: rasteriza si hace falta.
+    // Devuelve true si copió el archivo.
+    Q_INVOKABLE bool exportPng(const QString &source, const QString &destPath);
+
+    // Escribe el source crudo (svg/mermaid) tal cual en destPath. Devuelve true
+    // si escribió todos los bytes.
+    Q_INVOKABLE bool exportSource(const QString &source, const QString &destPath);
+
     // Helper estático para tests: split puro sin instanciar QML.
     static QVariantList splitSegments(const QString &content);
 

@@ -1,0 +1,10 @@
+singleton App 1.0 App.qml
+singleton Theme 1.0 Theme.qml
+LcDialog 1.0 LcDialog.qml
+LcButton 1.0 LcButton.qml
+LcTextField 1.0 LcTextField.qml
+LcColorPicker 1.0 LcColorPicker.qml
+LcColorRow 1.0 LcColorRow.qml
+LcComboBox 1.0 LcComboBox.qml
+LcSwitch 1.0 LcSwitch.qml
+LcHarnessEditor 1.0 LcHarnessEditor.qml

@@ -9,11 +9,43 @@ Item {
     property real logHeight: 220
     property real minLogHeight: 120
     property bool _restored: false   // evita pisar la setting durante la carga inicial
+    property bool _syncingActiveLaunch: false
+    property string logLevel: "all"
+    property string diagnosticLevel: ""
+    property string diagnosticMessage: ""
     property string pendingPortLaunchId: ""
     property string pendingPortHost: ""
     property int pendingPortCurrent: 0
     property int pendingPortSuggested: 0
     property bool pendingPortStartAgent: false
+
+    Connections {
+        target: App
+        function onServerDiagnostic(level, message) {
+            root.diagnosticLevel = level
+            root.diagnosticMessage = message
+        }
+    }
+
+    function startProfile(launchId, withAgent) {
+        if (withAgent)
+            App.startServerAndAgent(launchId)
+        else
+            App.startServer(launchId)
+    }
+
+    function syncToActiveLaunch() {
+        const id = App.activeLaunchId
+        if (!id || id.length === 0) return
+        root._syncingActiveLaunch = true
+        launchCombo.selectLaunchProfile(id)
+        root._syncingActiveLaunch = false
+    }
+
+    onVisibleChanged: {
+        if (visible && App.serverRunning)
+            syncToActiveLaunch()
+    }
 
     Connections {
         target: App
@@ -25,12 +57,178 @@ Item {
             root.pendingPortStartAgent = startAgent
             portCollisionDialog.open()
         }
+        function onLanProfileReady(launchProfileId, error) {
+            lanDialog.busy = false
+            lanDialog.message = error.length > 0
+                ? error
+                : "Servidor remoto iniciado y agente conectado."
+            if (error.length === 0)
+                lanDialog.close()
+        }
+    }
+
+    LcDialog {
+        id: lanDialog
+        modal: true
+        width: 560
+        height: 330
+        x: Math.round((root.width - width) / 2)
+        y: Math.round((root.height - height) / 2)
+        title: "Usar un servidor LAN"
+        standardButtons: Dialog.NoButton
+        footer: null
+        property bool busy: false
+        property string message: ""
+        property var selectedServer: (serverCombo.currentIndex >= 0
+                                      && serverCombo.currentIndex < App.lanServers.length)
+                                     ? App.lanServers[serverCombo.currentIndex] : null
+        property var remoteProfiles: selectedServer ? (selectedServer.profiles || []) : []
+        background: Rectangle { color: Theme.surfaceBg; radius: 8; border.color: Theme.borderColor }
+
+        onOpened: {
+            message = ""
+            App.discoverLanServers()
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                Layout.fillWidth: true
+                text: "LlamaCode busca automáticamente equipos que estén compartiendo su gateway en esta red."
+                color: Theme.textSecondary
+                wrapMode: Text.WordWrap
+                font.pixelSize: 12
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "Servidor"; color: Theme.textMuted; Layout.preferredWidth: 70 }
+                LcComboBox {
+                    id: serverCombo
+                    Layout.fillWidth: true
+                    model: App.lanServers
+                    textRole: "name"
+                    onCurrentIndexChanged: profileCombo.currentIndex = 0
+                }
+                LcButton {
+                    text: App.lanDiscoveryActive ? "Buscando…" : "Buscar otra vez"
+                    secondary: true
+                    enabled: !App.lanDiscoveryActive && !lanDialog.busy
+                    onClicked: App.discoverLanServers()
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "Perfil"; color: Theme.textMuted; Layout.preferredWidth: 70 }
+                LcComboBox {
+                    id: profileCombo
+                    Layout.fillWidth: true
+                    model: lanDialog.remoteProfiles
+                    textRole: "name"
+                    valueRole: "id"
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: !App.lanDiscoveryActive && App.lanServers.length === 0
+                text: "No encontré servidores. En la otra PC activá Configuración → Gateway → Compartir server en LAN y revisá el firewall de red privada."
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+                font.pixelSize: 11
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: lanDialog.message.length > 0
+                text: lanDialog.message
+                color: Theme.errorText
+                wrapMode: Text.WordWrap
+                font.pixelSize: 11
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: 8
+                LcButton {
+                    text: "Cancelar"
+                    secondary: true
+                    enabled: !lanDialog.busy
+                    onClicked: lanDialog.close()
+                }
+                LcButton {
+                    text: lanDialog.busy ? "Iniciando servidor remoto…" : "Usar perfil remoto"
+                    enabled: !lanDialog.busy && lanDialog.selectedServer
+                             && profileCombo.currentIndex >= 0
+                    onClicked: {
+                        const profile = lanDialog.remoteProfiles[profileCombo.currentIndex]
+                        if (!profile) return
+                        lanDialog.busy = true
+                        lanDialog.message = ""
+                        App.useLanServer(lanDialog.selectedServer.url,
+                                         lanDialog.selectedServer.apiKey || "",
+                                         profile.id || "", profile.name || profile.id,
+                                         profile.context || 4096)
+                    }
+                }
+            }
+        }
+    }
+
+    // Perfil de sistema seleccionado sin modelo/binario: ofrecer instalar deps.
+    LcDialog {
+        id: depsDialog
+        property string launchId: ""
+        property string profileName: ""
+        modal: true
+        width: 460
+        height: 200
+        x: Math.round((root.width - width) / 2)
+        y: Math.round((root.height - height) / 2)
+        title: "Faltan dependencias"
+        standardButtons: Dialog.NoButton
+        footer: null
+        background: Rectangle { color: Theme.surfaceBg; radius: 8; border.color: Theme.borderColor }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 420
+                text: "Al perfil «" + depsDialog.profileName + "» le faltan modelos o binarios.\n¿Descargar e instalar las dependencias?"
+                color: Theme.textPrimary
+                font.pixelSize: 13
+                wrapMode: Text.WordWrap
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: 10
+                LcButton {
+                    text: "Instalar dependencias"
+                    onClicked: { App.acceptSystemProfile(depsDialog.launchId); depsDialog.close() }
+                }
+                LcButton {
+                    text: "Cerrar"
+                    secondary: true
+                    onClicked: depsDialog.close()
+                }
+            }
+        }
     }
 
     function startWithPortCheck(withAgent) {
         const launchId = launchCombo.currentValue ?? ""
         if (!launchId || launchId.length === 0)
             return
+        const vf = App.launchVramFitStatus(launchId)
+        if (vf.warning === true) {
+            vramWarningDialog.launchId = launchId
+            vramWarningDialog.withAgent = withAgent
+            vramWarningDialog.message = vf.message || ""
+            vramWarningDialog.freeGb = vf.freeGb ?? 0
+            vramWarningDialog.requiredGb = vf.requiredGb ?? 0
+            vramWarningDialog.open()
+            return
+        }
+        startAfterVramCheck(launchId, withAgent)
+    }
+
+    function startAfterVramCheck(launchId, withAgent) {
         const st = App.launchPortStatus(launchId)
         if (st.blocked === true && (st.suggestedPort ?? 0) > 0) {
             portConflictDialog.launchId = launchId
@@ -41,16 +239,86 @@ Item {
             portConflictDialog.open()
             return
         }
-        if (withAgent)
-            App.startServerAndAgent(launchId)
-        else
-            App.startServer(launchId)
+        startProfile(launchId, withAgent)
+    }
+
+    Dialog {
+        id: vramWarningDialog
+        modal: true
+        width: 500
+        height: 300
+        x: Math.round((root.width - width) / 2)
+        y: Math.round((root.height - height) / 2)
+        closePolicy: Popup.CloseOnEscape
+        leftPadding: 22
+        rightPadding: 22
+        topPadding: 20
+        bottomPadding: 16
+
+        property string launchId: ""
+        property bool withAgent: true
+        property string message: ""
+        property real freeGb: 0
+        property real requiredGb: 0
+
+        background: Rectangle {
+            color: Theme.surfaceBg
+            radius: 8
+            border.color: Theme.errorText
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                text: "VRAM insuficiente para este perfil"
+                color: Theme.textPrimary
+                font { pixelSize: 16; bold: true }
+            }
+            Text {
+                Layout.fillWidth: true
+                text: vramWarningDialog.message
+                color: Theme.textSecondary
+                font.pixelSize: 13
+                wrapMode: Text.WordWrap
+            }
+            Text {
+                Layout.fillWidth: true
+                text: "Recomendación: cerrá apps que usen GPU o elegí un perfil con menor contexto/modelo. Continuar puede hacer que el servidor cargue en memoria compartida y decodifique a pocos tokens por segundo."
+                color: Theme.textMuted
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        footer: Item {
+            implicitHeight: 58
+            RowLayout {
+                anchors {
+                    right: parent.right; bottom: parent.bottom
+                    rightMargin: 22; bottomMargin: 16
+                }
+                spacing: 8
+                LcButton {
+                    text: "Cancelar"
+                    secondary: true
+                    onClicked: vramWarningDialog.close()
+                }
+                LcButton {
+                    text: "Continuar igual"
+                    onClicked: {
+                        vramWarningDialog.close()
+                        root.startAfterVramCheck(vramWarningDialog.launchId, vramWarningDialog.withAgent)
+                    }
+                }
+            }
+        }
     }
 
     Dialog {
         id: portConflictDialog
         modal: true
         width: 430
+        height: 250
         x: Math.round((root.width - width) / 2)
         y: Math.round((root.height - height) / 2)
         closePolicy: Popup.CloseOnEscape
@@ -105,10 +373,7 @@ Item {
                 onClicked: {
                     if (App.setLaunchBackendPort(portConflictDialog.launchId, portConflictDialog.suggestedPort)) {
                         portConflictDialog.close()
-                        if (portConflictDialog.withAgent)
-                            App.startServerAndAgent(portConflictDialog.launchId)
-                        else
-                            App.startServer(portConflictDialog.launchId)
+                        root.startProfile(portConflictDialog.launchId, portConflictDialog.withAgent)
                     }
                 }
             }
@@ -126,6 +391,9 @@ Item {
                 const _lang = App.langV
                 return App.serverRunning ? App.l("launch.running") : App.l("launch.stopped")
             }
+            // Re-abrir el asistente inicial (si se canceló por error el setup).
+            actionLabel: "Repetir asistente inicial"
+            onActionClicked: App.requestShowSetup()
         }
 
         RowLayout {
@@ -143,18 +411,56 @@ Item {
 
                 Text { text: (App.langV, App.l("launch.profile")); color: Theme.textMuted; font.pixelSize: 12 }
 
+                LcButton {
+                    text: "Usar un servidor LAN"
+                    secondary: true
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 44
+                    onClicked: lanDialog.open()
+                }
+
                 LcComboBox {
                     id: launchCombo
                     Layout.fillWidth: true
-                    // Menú ordenado: favoritos (★) arriba; displayName = alias - name.
-                    property var launchMenu: App.profileManager.launchProfilesForMenu()
+                    // Menú filtrado por hardware: oculta perfiles de sistema de más
+                    // VRAM que el equipo; marca "ready" (modelo+binario presentes).
+                    property var launchMenu: App.launchMenu()
+                    function refreshMenu() {
+                        const sel = launchCombo.currentValue
+                        launchCombo.launchMenu = App.launchMenu()
+                        const i = launchCombo.indexOfValue(sel)
+                        if (i >= 0) launchCombo.currentIndex = i
+                    }
+                    function selectLaunchProfile(id) {
+                        if (!id || id.length === 0) return
+                        launchCombo.launchMenu = App.launchMenu()
+                        const i = launchCombo.indexOfValue(id)
+                        if (i >= 0) {
+                            launchCombo.currentIndex = i
+                            App.computeEffectiveProfile(id)
+                        }
+                    }
+                    function itemById(id) {
+                        for (var i = 0; i < launchMenu.length; i++)
+                            if (launchMenu[i].id === id) return launchMenu[i]
+                        return null
+                    }
                     Connections {
                         target: App.profileManager
-                        function onLaunchesChanged() {
-                            const sel = launchCombo.currentValue
-                            launchCombo.launchMenu = App.profileManager.launchProfilesForMenu()
-                            const i = launchCombo.indexOfValue(sel)
-                            if (i >= 0) launchCombo.currentIndex = i
+                        function onLaunchesChanged() { launchCombo.refreshMenu() }
+                    }
+                    Connections {
+                        target: App
+                        // tras descargar deps / escanear, recomputar ready.
+                        function onSetupStateChanged() { launchCombo.refreshMenu() }
+                        // startServer también lo invocan benchmarks, Tasks y Charla.
+                        // Reflejar el perfil realmente activo sin convertir ese swap
+                        // interno en la preferencia persistida del usuario.
+                        function onActiveLaunchIdChanged() {
+                            root.syncToActiveLaunch()
+                        }
+                        function onLaunchProfileSelected(launchProfileId) {
+                            launchCombo.selectLaunchProfile(launchProfileId)
                         }
                     }
                     model: launchMenu
@@ -169,11 +475,33 @@ Item {
                         color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 10
                         verticalAlignment: Text.AlignVCenter
                     }
+                    // Items no-ready (faltan deps) grisados.
+                    delegate: ItemDelegate {
+                        width: launchCombo.width
+                        highlighted: launchCombo.highlightedIndex === index
+                        opacity: (modelData.ready === false) ? 0.45 : 1.0
+                        contentItem: Text {
+                            text: (modelData.displayName || "")
+                                  + (modelData.ready === false ? "  (faltan deps)" : "")
+                            color: Theme.theme === "oled" ? "white" : Theme.textPrimary
+                            font.pixelSize: 13; leftPadding: 6; elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle { color: highlighted ? Theme.borderColor : Theme.inputBg }
+                    }
                     onCurrentValueChanged: {
-                        if (currentValue) {
-                            App.computeEffectiveProfile(currentValue)
-                            // Recordar el último perfil usado (no durante la carga inicial).
-                            if (root._restored) App.writeSetting("lastLaunchId", currentValue)
+                        if (!currentValue) return
+                        // Recomputar SIEMPRE para que la vista previa refleje ESTE perfil
+                        // (si no, queda el comando del perfil anterior = preview stale).
+                        App.computeEffectiveProfile(currentValue)
+                        if (root._restored && !root._syncingActiveLaunch)
+                            App.writeSetting("lastLaunchId", currentValue)
+                        const it = itemById(currentValue)
+                        if (it && it.ready === false) {
+                            // Perfil de sistema sin modelo/binario: ofrecer instalar deps.
+                            depsDialog.launchId = currentValue
+                            depsDialog.profileName = it.displayName || ""
+                            depsDialog.open()
                         }
                     }
 
@@ -185,7 +513,10 @@ Item {
                             if (i >= 0) launchCombo.currentIndex = i
                         }
                         root._restored = true
-                        if (launchCombo.currentValue) App.computeEffectiveProfile(launchCombo.currentValue)
+                        if (App.serverRunning && App.activeLaunchId.length > 0)
+                            root.syncToActiveLaunch()
+                        else if (launchCombo.currentValue)
+                            App.computeEffectiveProfile(launchCombo.currentValue)
                     }
                 }
 
@@ -259,6 +590,16 @@ Item {
                         secondary: true
                         enabled: launchCombo.currentValue !== undefined
                         onClicked: App.computeEffectiveProfile(launchCombo.currentValue)
+                    }
+
+                    LcButton {
+                        text: App.installingOfficialBinary ? "Actualizando binario…" : "Actualizar binario requerido"
+                        secondary: true
+                        visible: launchCombo.currentValue !== undefined
+                                 && App.effectiveProfile !== undefined
+                                 && (App.effectiveProfile.blockingErrors ?? []).length > 0
+                        enabled: visible && !App.installingOfficialBinary && !App.serverRunning && !App.serverStopping
+                        onClicked: App.installRequiredBinaryForProfile(launchCombo.currentValue)
                     }
                 }
 
@@ -418,24 +759,17 @@ Item {
                                 spacing: 2
                                 Repeater {
                                     model: App.profileManager.launchProfiles
-                                    delegate: CheckBox {
+                                    delegate: LcCheckBox {
                                         id: poolCheck
                                         required property string name
                                         required property string profileId
                                         Layout.fillWidth: true
+                                        text: name
                                         checked: !!routerBox.pool[profileId]
                                         onToggled: {
                                             var p = routerBox.pool
                                             p[profileId] = checked
                                             routerBox.pool = p
-                                        }
-                                        contentItem: Text {
-                                            text: poolCheck.name
-                                            color: Theme.theme === "oled" ? "white" : Theme.textPrimary
-                                            font.pixelSize: 12
-                                            leftPadding: poolCheck.indicator.width + 6
-                                            verticalAlignment: Text.AlignVCenter
-                                            elide: Text.ElideRight
                                         }
                                     }
                                 }
@@ -457,6 +791,8 @@ Item {
                                   ? (App.serverIsRouter ? "Detener router" : "Detener server")
                                   : "Iniciar router"
                             danger: App.serverRunning
+                            // Acción secundaria: el celeste se reserva para "servidor + agente".
+                            secondary: !App.serverRunning
                             Layout.fillWidth: true
                             enabled: App.serverRunning || (function(){
                                 for (var k in routerBox.pool) if (routerBox.pool[k]) return true
@@ -527,7 +863,7 @@ Item {
                                 verticalAlignment: TextInput.AlignVCenter
                                 text: endpointBox.endpointUrl
                                 color: Theme.textPrimary
-                                font.family: "Consolas, monospace"
+                                font.family: Theme.codeFont
                                 font.pixelSize: 13
                                 readOnly: true
                                 selectByMouse: true
@@ -650,6 +986,31 @@ Item {
                 }
 
                 Rectangle {
+                    visible: root.diagnosticMessage.length > 0
+                    Layout.fillWidth: true
+                    implicitHeight: diagnosticText.implicitHeight + 12
+                    color: root.diagnosticLevel === "error" ? Theme.errorBg
+                                                               : Qt.rgba(Theme.warnText.r, Theme.warnText.g, Theme.warnText.b, 0.12)
+                    radius: 6
+                    Text {
+                        id: diagnosticText
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 6 }
+                        text: (root.diagnosticLevel.length > 0 ? "[" + root.diagnosticLevel + "] " : "")
+                              + root.diagnosticMessage
+                        color: Theme.textPrimary
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 11
+                    }
+                }
+
+                ComboBox {
+                    Layout.preferredWidth: 180
+                    model: ["all", "error", "warn", "stderr", "stdout", "lifecycle", "health", "diag"]
+                    currentIndex: model.indexOf(root.logLevel)
+                    onActivated: root.logLevel = currentText
+                }
+
+                Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     color: Theme.inputBg
@@ -664,9 +1025,9 @@ Item {
 
                         TextArea {
                             readOnly: true
-                            text: App.serverLog
+                            text: App.serverLogByLevel(root.logLevel)
                             color: Theme.textSecondary
-                            font { family: "Consolas,monospace"; pixelSize: 12 }
+                            font { family: Theme.codeFont; pixelSize: 12 }
                             wrapMode: TextArea.WrapAnywhere
                             background: null
                             onTextChanged: cursorPosition = text.length
@@ -683,10 +1044,11 @@ Item {
         modal: true
         focus: true
         width: Math.min(520, parent.width - 48)
+        height: 250
         padding: 18
         closePolicy: Popup.CloseOnEscape
         x: Math.round((parent.width - width) / 2)
-        y: Math.round((parent.height - implicitHeight) / 2)
+        y: Math.round((parent.height - height) / 2)
 
         background: Rectangle {
             color: Theme.popupBg

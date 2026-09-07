@@ -1,0 +1,48 @@
+{
+  "schema": "llamacode-kv-cache-ab-config-v1",
+  "launcher": {
+    "kind": "wsl",
+    "distro": "Ubuntu-22.04",
+    "cwd": "/home/your-user/fraqtl/runtime"
+  },
+  "serverExe": "/home/your-user/fraqtl/runtime/llama-server",
+  "modelPath": "/home/your-user/fraqtl/qwen3-4b-instruct-2507-Q4_K_M.gguf",
+  "commonArgs": [
+    "--ctx-size", "131072",
+    "--n-gpu-layers", "99",
+    "--split-mode", "none",
+    "--main-gpu", "0",
+    "--flash-attn", "on",
+    "--metrics",
+    "--no-warmup",
+    "--parallel", "1",
+    "--jinja",
+    "--cache-ram", "0"
+  ],
+  "variants": [
+    {
+      "id": "q8-kv",
+      "args": ["--cache-type-k", "q8_0", "--cache-type-v", "q8_0"],
+      "env": {}
+    },
+    {
+      "id": "fraqtl-compressed-kv",
+      "args": [
+        "--cache-type-k", "f16",
+        "--cache-type-v", "f16",
+        "--fraqtl-kv",
+        "--fraqtl-eigenbasis", "/home/your-user/fraqtl/sidecars/sidecar_real_u_qwen3-4b-instruct-2507.bin",
+        "--fraqtl-kv-protect", "32",
+        "--fraqtl-k-eigenbasis", "/home/your-user/fraqtl/sidecars/qwen3-4b-instruct-2507-k16-int3.fraqtl-k-eigenbasis.bin",
+        "--fraqtl-sink-tokens", "0",
+        "--fraqtl-residual-window", "0"
+      ],
+      "env": {
+        "LD_LIBRARY_PATH": ".",
+        "FRAQTL_MEMBRANE": "1",
+        "FRAQTL_MEMBRANE_EXCLUSIVE": "1",
+        "LLAMA_ATTN_ROT_DISABLE": "1"
+      }
+    }
+  ]
+}

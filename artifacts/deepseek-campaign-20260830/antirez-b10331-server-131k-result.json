@@ -1,0 +1,22 @@
+{
+  "model": "D:\\Models\\llamacpp\\DeepSeek-V4-antirez-Q2Q4-imatrix-0731\\DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed-0731.gguf",
+  "usage": {
+    "completion_tokens": 256,
+    "prompt_tokens": 50,
+    "total_tokens": 306,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 50,
+    "prompt_ms": 7240.176,
+    "prompt_per_token_ms": 144.80352000000002,
+    "prompt_per_second": 6.905909469604053,
+    "predicted_n": 256,
+    "predicted_ms": 30918.561,
+    "predicted_per_token_ms": 120.77562890625,
+    "predicted_per_second": 8.279816127277075
+  }
+}

@@ -10,6 +10,7 @@ QJsonObject ModelRoot::toJson() const
     obj["path"] = path;
     obj["label"] = label;
     obj["scanMode"] = scanMode;
+    obj["kind"] = kind;
     obj["enabled"] = enabled;
     obj["priority"] = priority;
     obj["tags"] = QJsonArray::fromStringList(tags);
@@ -23,6 +24,7 @@ ModelRoot ModelRoot::fromJson(const QJsonObject &obj)
     r.path = obj["path"].toString();
     r.label = obj["label"].toString();
     r.scanMode = obj["scanMode"].toString("manual");
+    r.kind = obj["kind"].toString("dir");
     r.enabled = obj["enabled"].toBool(true);
     r.priority = obj["priority"].toInt(0);
     r.isOnline = QFileInfo::exists(r.path);

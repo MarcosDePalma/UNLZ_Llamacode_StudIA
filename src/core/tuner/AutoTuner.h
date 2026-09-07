@@ -55,7 +55,18 @@ using Config = std::map<std::string, int>;
 
 // Resultado de evaluar un candidato.
 struct TrialResult {
-    double throughput = 0.0;  // tokens/seg (mayor = mejor)
+    // Objetivo que ve el optimizador (mayor = mejor). Es una mezcla ponderada de
+    // prefill y generación; la capa de integración decide el peso. El core no
+    // sabe de dónde sale: para el TPE sigue siendo un escalar.
+    double throughput = 0.0;
+    // Desglose informativo (tokens/seg). No participa de la optimización: sirve
+    // para reportar en UI/logs, porque un score mezclado es ilegible sin ver las
+    // dos patas. -1 = no medido.
+    double promptTps = -1.0;   // prefill / prompt processing (PP)
+    double genTps = -1.0;      // generación / token generation (TG)
+    int draftTokens = 0;       // tokens propuestos por el drafter, si aplica
+    int draftAcceptedTokens = 0; // tokens aceptados por el target, si aplica
+    double draftAcceptancePct = -1.0; // -1 = backend no reportó speculative metrics
     double quality = 0.0;     // score EvalSuite normalizado [0,1] (mayor = mejor)
     bool failed = false;      // el servidor no arrancó / OOM / timeout
 };

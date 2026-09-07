@@ -26,6 +26,9 @@ void SecretStoreTests::diskRoundTrip()
     QFile::remove(SecretStore::filePath());
     {
         SecretStore s;
+        // QtKeychain persiste fuera del archivo de fallback y puede sobrevivir a
+        // una corrida abortada; limpiar también el backend real hace el test idempotente.
+        s.remove("MY_KEY");
         QVERIFY(!s.has("MY_KEY"));
         s.set("MY_KEY", "sk-abc");
         QVERIFY(s.has("MY_KEY"));

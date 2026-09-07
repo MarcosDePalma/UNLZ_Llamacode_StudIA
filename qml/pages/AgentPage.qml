@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import LlamaCode 1.0
 
@@ -13,6 +14,83 @@ Item {
     property double lastAgentActivityMs: Date.now()
     property int idleSeconds: 0
     property var agentAttachments: []
+    property string lastProfileSuggestionKind: ""
+    property var portableSkillRows: []
+    property var selectedPortableSkill: ({})
+    property bool restoringSessionModes: false
+    property string restoredSessionModesId: ""
+    property string nativeSaveRunId: ""
+    property string nativeSaveRelativePath: ""
+
+    function sessionModeKey(sessionId, field) {
+        return "agent/sessionModes/" + sessionId + "/" + field
+    }
+
+    function persistCurrentSessionModes() {
+        const sessionId = App.opencodeSessionId
+        if (restoringSessionModes || !sessionId || sessionId.length === 0) return
+        App.writeSetting(sessionModeKey(sessionId, "approvalMode"), App.agentApprovalMode)
+        App.writeSetting(sessionModeKey(sessionId, "agentProfileId"), App.activeAgentProfileId)
+    }
+
+    function restoreCurrentSessionModes() {
+        const sessionId = App.opencodeSessionId
+        if (!sessionId || sessionId.length === 0 || sessionId === restoredSessionModesId) return
+        restoringSessionModes = true
+
+        // Aplicar primero el nivel: un perfil puede definir su aprobación por
+        // defecto. La política guardada se restaura después y tiene la última palabra.
+        const savedProfile = String(App.readSetting(
+            sessionModeKey(sessionId, "agentProfileId"), ""))
+        if (savedProfile.length > 0)
+            App.activeAgentProfileId = savedProfile
+
+        const savedApproval = String(App.readSetting(
+            sessionModeKey(sessionId, "approvalMode"), ""))
+        if (savedApproval.length > 0)
+            App.agentApprovalMode = savedApproval
+
+        restoredSessionModesId = sessionId
+        restoringSessionModes = false
+        // Una sesión nueva o legacy hereda el modo visible actual y desde este
+        // momento ya cuenta con una preferencia propia.
+        persistCurrentSessionModes()
+    }
+
+    // App.agentMessages es QVariantList y cada NOTIFY crea una instancia nueva.
+    // Mantener un ListModel estable evita que ListView se vacíe durante un frame
+    // y fuerce contentY al inicio al enviar o actualizar un mensaje.
+    ListModel {
+        id: agentMessageUiModel
+        dynamicRoles: true
+    }
+
+    function sameAgentMessage(a, b) {
+        if (!a || !b) return false
+        const fields = ["role", "content", "typing", "status", "createdAt",
+                        "completedAt", "tokens", "elapsedMs", "tps", "reverted",
+                        "diff", "absPath", "path", "ok", "name", "command",
+                        "output", "title"]
+        for (let i = 0; i < fields.length; ++i) {
+            const key = fields[i]
+            if ((a[key] ?? null) !== (b[key] ?? null))
+                return false
+        }
+        return true
+    }
+
+    function syncAgentMessageModel() {
+        const source = App.agentMessages
+        const shared = Math.min(agentMessageUiModel.count, source.length)
+        for (let i = 0; i < shared; ++i) {
+            if (!sameAgentMessage(agentMessageUiModel.get(i).entry, source[i]))
+                agentMessageUiModel.setProperty(i, "entry", source[i])
+        }
+        while (agentMessageUiModel.count > source.length)
+            agentMessageUiModel.remove(agentMessageUiModel.count - 1)
+        for (let i = shared; i < source.length; ++i)
+            agentMessageUiModel.append({entry: source[i]})
+    }
 
     // ── Ancho del panel de sesiones (redimensionable + persistente) ──────
     property int sessionsPanelWidth: 220
@@ -75,16 +153,31 @@ Item {
         root.mentionStart = -1
         mentionPopup.close()
     }
-    // Envío normal (idle): incluye adjuntos si los hay.
+    function sendAgentNow(text, attachments) {
+        if (attachments.length > 0)
+            App.sendToAgentWithAttachments(text, attachments)
+        else
+            App.sendToAgent(text)
+        agentInput.text = ""
+        root.agentAttachments = []
+    }
+
+    // Envío normal (idle): antes ofrece una copia optimizada cuando la consigna
+    // difiere materialmente del perfil activo. Nunca cambia el original solo.
     function agentSend() {
         const t = agentInput.text.trim()
         if (t.length === 0 && root.agentAttachments.length === 0) return
-        if (root.agentAttachments.length > 0)
-            App.sendToAgentWithAttachments(t, root.agentAttachments)
-        else
-            App.sendToAgent(t)
-        agentInput.text = ""
-        root.agentAttachments = []
+        const recommendation = App.profileManager.recommendAgentProfile(t, App.activeAgentProfileId)
+        if (recommendation && recommendation.kind
+                && recommendation.kind !== root.lastProfileSuggestionKind) {
+            root.lastProfileSuggestionKind = recommendation.kind
+            profileSuggestionDialog.recommendation = recommendation
+            profileSuggestionDialog.pendingText = t
+            profileSuggestionDialog.pendingAttachments = root.agentAttachments.slice()
+            profileSuggestionDialog.open()
+            return
+        }
+        sendAgentNow(t, root.agentAttachments.slice())
     }
 
     readonly property bool waitingApproval: (App.agentPendingTool.id ?? "").length > 0
@@ -133,6 +226,11 @@ Item {
         x: Math.round((parent.width - width) / 2)
         y: Math.round((parent.height - height) / 2)
         width: 460
+        height: 230
+        leftPadding: 20
+        rightPadding: 20
+        topPadding: 16
+        bottomPadding: 16
         closePolicy: Popup.CloseOnEscape
         background: Rectangle { color: Theme.popupBg; radius: 12; border.color: Theme.popupBorderColor; border.width: 1 }
         Overlay.modal: Rectangle { color: Theme.overlayColor }
@@ -174,6 +272,544 @@ Item {
                         App.startAgent(root._pendingCloudProfile)
                     }
                 }
+            }
+        }
+    }
+
+    Dialog {
+        id: profileSuggestionDialog
+        property var recommendation: ({})
+        property string pendingText: ""
+        property var pendingAttachments: []
+        modal: true
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
+        width: 500
+        height: 210
+        leftPadding: 20
+        rightPadding: 20
+        topPadding: 16
+        bottomPadding: 16
+        closePolicy: Popup.CloseOnEscape
+        background: Rectangle {
+            color: Theme.popupBg
+            radius: 12
+            border.color: Theme.popupBorderColor
+            border.width: 1
+        }
+        Overlay.modal: Rectangle { color: Theme.overlayColor }
+        header: Rectangle {
+            color: Theme.popupHeaderBg; height: 50; radius: 12
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 1
+                color: Theme.popupHeaderBorder
+            }
+            Text {
+                anchors { left: parent.left; leftMargin: 20; verticalCenter: parent.verticalCenter }
+                text: "Perfil recomendado: " + (profileSuggestionDialog.recommendation.label || "optimizado")
+                color: Theme.textPrimary; font { pixelSize: 14; bold: true }
+            }
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            Text {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                color: Theme.textSecondary; font.pixelSize: 12
+                text: profileSuggestionDialog.recommendation.reason || ""
+            }
+            Text {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                color: Theme.textMuted; font.pixelSize: 11
+                text: "Se creará una copia editable del perfil actual: temperatura "
+                      + profileSuggestionDialog.recommendation.temperature
+                      + " · " + profileSuggestionDialog.recommendation.toolCount + " tools · razonamiento "
+                      + (profileSuggestionDialog.recommendation.thinking ? "activo" : "desactivado")
+                      + ". El perfil original no cambia."
+            }
+        }
+        footer: Rectangle {
+            color: Theme.popupHeaderBg; height: 54; radius: 12
+            Rectangle {
+                anchors.top: parent.top
+                width: parent.width
+                height: 1
+                color: Theme.popupHeaderBorder
+            }
+            Row {
+                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                spacing: 10
+                LcButton {
+                    text: "Ahora no"
+                    secondary: true
+                    onClicked: {
+                        profileSuggestionDialog.close()
+                        root.sendAgentNow(profileSuggestionDialog.pendingText,
+                                          profileSuggestionDialog.pendingAttachments)
+                    }
+                }
+                LcButton {
+                    text: "Crear copia y usar"
+                    onClicked: {
+                        const id = App.profileManager.createRecommendedAgentProfile(
+                            App.activeAgentProfileId, profileSuggestionDialog.recommendation.kind)
+                        if (id) App.activeAgentProfileId = id
+                        profileSuggestionDialog.close()
+                        root.sendAgentNow(profileSuggestionDialog.pendingText,
+                                          profileSuggestionDialog.pendingAttachments)
+                    }
+                }
+            }
+        }
+    }
+
+    // Bandeja local de corridas nativas: los estados uncertain se resuelven
+    // explícitamente y los entregables sólo salen del sandbox mediante Save As.
+    Dialog {
+        id: nativeRunsDialog
+        modal: true
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
+        width: Math.min(900, parent.width - 36)
+        height: Math.min(680, parent.height - 36)
+        leftPadding: 18; rightPadding: 18; topPadding: 14; bottomPadding: 14
+        closePolicy: Popup.CloseOnEscape
+        onOpened: App.refreshNativeAgentRuns()
+        background: Rectangle {
+            color: Theme.popupBg; radius: 12
+            border.color: Theme.popupBorderColor; border.width: 1
+        }
+        Overlay.modal: Rectangle { color: Theme.overlayColor }
+        header: Rectangle {
+            color: Theme.popupHeaderBg; height: 52; radius: 12
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.popupHeaderBorder }
+            Text {
+                anchors { left: parent.left; leftMargin: 20; verticalCenter: parent.verticalCenter }
+                text: "📦 Inbox de corridas nativas"
+                color: Theme.textPrimary; font { pixelSize: 14; bold: true }
+            }
+        }
+        contentItem: ColumnLayout {
+            spacing: 9
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    Layout.fillWidth: true
+                    text: App.nativeUncertainRunCount > 0
+                        ? "Hay " + App.nativeUncertainRunCount + " corrida(s) incierta(s): requieren decisión humana."
+                        : "Corridas y entregables persistidos localmente."
+                    color: App.nativeUncertainRunCount > 0 ? Theme.warnText : Theme.textMuted
+                    font.pixelSize: 11; wrapMode: Text.WordWrap
+                }
+                LcButton {
+                    text: "Actualizar"; secondary: true
+                    onClicked: App.refreshNativeAgentRuns()
+                }
+            }
+            ListView {
+                id: nativeRunsList
+                Layout.fillWidth: true; Layout.fillHeight: true
+                clip: true; spacing: 6
+                model: App.nativeAgentRuns
+                delegate: Rectangle {
+                    required property var modelData
+                    width: nativeRunsList.width; height: 96; radius: 7
+                    color: Theme.inputBg; border.color: Theme.borderColor
+                    RowLayout {
+                        anchors { fill: parent; margins: 9 }
+                        spacing: 9
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 2
+                            Text {
+                                text: (modelData.status || "") + " · " + (modelData.harnessNamespace || "native")
+                                color: modelData.status === "completed" ? Theme.successText
+                                     : modelData.status === "uncertain" ? Theme.warnText
+                                       : modelData.status === "failed" ? Theme.errorText : Theme.textPrimary
+                                font { pixelSize: 12; bold: true }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.objective || modelData.detail || "Sin objetivo"
+                                color: Theme.textSecondary; font.pixelSize: 10
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.workspace || ""
+                                color: Theme.textMuted; font.pixelSize: 9; elide: Text.ElideMiddle
+                            }
+                        }
+                        ColumnLayout {
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 4
+                            LcButton {
+                                text: "Detalle"; secondary: true
+                                onClicked: {
+                                    nativeRunDetailDialog.runId = modelData.runId || ""
+                                    nativeRunDetailDialog.open()
+                                }
+                            }
+                            LcButton {
+                                text: "Abrir carpeta"; secondary: true
+                                onClicked: App.openNativeAgentRunDirectory(modelData.runId || "")
+                            }
+                            LcButton {
+                                text: "Cerrar incierta"; danger: true
+                                visible: modelData.status === "uncertain"
+                                onClicked: App.resolveNativeAgentRun(
+                                    modelData.runId || "", "cancelled",
+                                    "cancelada explícitamente desde Inbox")
+                            }
+                        }
+                    }
+                }
+                Text {
+                    anchors.centerIn: parent; visible: nativeRunsList.count === 0
+                    text: "Todavía no hay corridas nativas persistidas."
+                    color: Theme.textMuted; font.pixelSize: 11
+                }
+            }
+        }
+        footer: null
+    }
+
+    Dialog {
+        id: nativeRunDetailDialog
+        property string runId: ""
+        property var run: ({})
+        property var manifest: ({})
+        property var events: []
+        property string errorText: ""
+        property bool allowOverwrite: false
+        modal: true; parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2); y: Math.round((parent.height - height) / 2)
+        width: Math.min(820, parent.width - 36); height: Math.min(600, parent.height - 36)
+        leftPadding: 16; rightPadding: 16; topPadding: 14; bottomPadding: 14
+        closePolicy: Popup.CloseOnEscape
+        onOpened: {
+            run = App.nativeAgentRun(runId)
+            manifest = App.nativeAgentDeliverableManifest(runId)
+            events = App.nativeAgentRunEvents(runId)
+            errorText = ""
+            allowOverwrite = false
+        }
+        background: Rectangle { color: Theme.popupBg; radius: 12; border.color: Theme.popupBorderColor }
+        Overlay.modal: Rectangle { color: Theme.overlayColor }
+        header: Rectangle {
+            color: Theme.popupHeaderBg; height: 48; radius: 12
+            Text {
+                anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
+                text: "Detalle · " + (nativeRunDetailDialog.runId || "corrida")
+                color: Theme.textPrimary; font { pixelSize: 13; bold: true }
+            }
+        }
+        contentItem: ColumnLayout {
+            spacing: 8
+            Text {
+                Layout.fillWidth: true
+                text: (nativeRunDetailDialog.run.status || "") + " · "
+                    + (nativeRunDetailDialog.run.detail || nativeRunDetailDialog.run.objective || "")
+                color: Theme.textSecondary; font.pixelSize: 11; wrapMode: Text.WordWrap
+            }
+            Text {
+                Layout.fillWidth: true
+                text: nativeRunDetailDialog.manifest && nativeRunDetailDialog.manifest.entries
+                    ? "Entregables: " + nativeRunDetailDialog.manifest.entries.length
+                    : "No hay entregables capturados para esta corrida."
+                color: Theme.textMuted; font.pixelSize: 11
+            }
+            TextArea {
+                Layout.fillWidth: true; Layout.preferredHeight: 92
+                readOnly: true
+                text: nativeRunDetailDialog.events.length > 0
+                    ? nativeRunDetailDialog.events.map(function(event) {
+                        return "#" + (event.seq || "?") + " · "
+                            + (event.kind || "evento") + " · " + (event.ts || "")
+                    }).join("\n") : "Sin eventos registrados."
+                color: Theme.textMuted; font.pixelSize: 10
+                wrapMode: TextArea.WrapAnywhere
+                background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.inputBorderColor }
+            }
+            Text {
+                Layout.fillWidth: true; visible: nativeRunDetailDialog.errorText.length > 0
+                text: nativeRunDetailDialog.errorText
+                color: Theme.errorText; font.pixelSize: 11; wrapMode: Text.WordWrap
+            }
+            ListView {
+                id: nativeDeliverablesList
+                Layout.fillWidth: true; Layout.fillHeight: true
+                clip: true; spacing: 5
+                model: nativeRunDetailDialog.manifest && nativeRunDetailDialog.manifest.entries
+                    ? nativeRunDetailDialog.manifest.entries : []
+                delegate: Rectangle {
+                    required property var modelData
+                    width: nativeDeliverablesList.width; height: 54; radius: 6
+                    color: Theme.inputBg; border.color: Theme.borderColor
+                    RowLayout {
+                        anchors { fill: parent; margins: 8 }
+                        Text {
+                            Layout.fillWidth: true
+                            text: (modelData.status || "") + " · " + (modelData.path || "")
+                            color: modelData.stored === false ? Theme.warnText : Theme.textPrimary
+                            font.pixelSize: 10; elide: Text.ElideMiddle
+                        }
+                        LcButton {
+                            text: "Guardar como"; secondary: true
+                            enabled: modelData.stored !== false
+                            onClicked: {
+                                root.nativeSaveRunId = nativeRunDetailDialog.runId
+                                root.nativeSaveRelativePath = modelData.path || ""
+                                nativeSaveDialog.open()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        footer: Rectangle {
+            color: Theme.popupHeaderBg; height: 50; radius: 12
+            RowLayout {
+                anchors {
+                    left: parent.left; leftMargin: 14
+                    right: parent.right; rightMargin: 14
+                    verticalCenter: parent.verticalCenter
+                }
+                CheckBox {
+                    id: nativeOverwriteCheck
+                    text: "Permitir reemplazar destino"
+                    checked: nativeRunDetailDialog.allowOverwrite
+                    onClicked: nativeRunDetailDialog.allowOverwrite = checked
+                    contentItem: Text {
+                        text: nativeOverwriteCheck.text
+                        color: Theme.textMuted; font.pixelSize: 10
+                        leftPadding: nativeOverwriteCheck.indicator.width + 5
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                LcButton { text: "Cerrar"; secondary: true; onClicked: nativeRunDetailDialog.close() }
+            }
+        }
+    }
+
+    FileDialog {
+        id: nativeSaveDialog
+        title: "Guardar entregable"
+        fileMode: FileDialog.SaveFile
+        onAccepted: {
+            const path = selectedFile && selectedFile.toLocalFile
+                ? selectedFile.toLocalFile() : String(selectedFile)
+            if (!App.saveNativeAgentDeliverable(root.nativeSaveRunId,
+                                                root.nativeSaveRelativePath, path,
+                                                nativeRunDetailDialog.allowOverwrite)) {
+                nativeRunDetailDialog.errorText =
+                    "No se pudo guardar. El destino no se pisa automáticamente; elegí otra ruta."
+            } else {
+                nativeRunDetailDialog.errorText = "Entregable guardado en " + path
+            }
+        }
+    }
+
+    // Corridas largas de Claude Code/Codex: el prompt y los logs quedan en un
+    // manifiesto durable, aunque el usuario cierre este diálogo o la app.
+    Dialog {
+        id: managedRunsDialog
+        modal: true
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
+        width: Math.min(820, parent.width - 36)
+        height: Math.min(650, parent.height - 36)
+        leftPadding: 18; rightPadding: 18; topPadding: 14; bottomPadding: 14
+        closePolicy: Popup.CloseOnEscape
+        property string selectedRuntime: "claude"
+        property bool applyEdits: false
+        property string errorText: ""
+        background: Rectangle {
+            color: Theme.popupBg; radius: 12
+            border.color: Theme.popupBorderColor; border.width: 1
+        }
+        Overlay.modal: Rectangle { color: Theme.overlayColor }
+        header: Rectangle {
+            color: Theme.popupHeaderBg; height: 52; radius: 12
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.popupHeaderBorder }
+            Text {
+                anchors { left: parent.left; leftMargin: 20; verticalCenter: parent.verticalCenter }
+                text: "🚀 Corridas administradas"
+                color: Theme.textPrimary; font { pixelSize: 14; bold: true }
+            }
+        }
+        contentItem: ColumnLayout {
+            spacing: 9
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "Runtime"; color: Theme.textSecondary; font.pixelSize: 12 }
+                LcComboBox {
+                    id: managedRuntimeCombo
+                    Layout.preferredWidth: 150
+                    model: ["claude", "codex"]
+                    currentIndex: managedRunsDialog.selectedRuntime === "codex" ? 1 : 0
+                    onActivated: managedRunsDialog.selectedRuntime = currentValue
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: "Workspace: " + (App.currentAgentProjectDir() || "directorio actual")
+                    color: Theme.textMuted; font.pixelSize: 11; elide: Text.ElideMiddle
+                }
+            }
+            TextArea {
+                id: managedPrompt
+                Layout.fillWidth: true; Layout.preferredHeight: 130
+                placeholderText: "Describí la revisión o implementación larga…"
+                color: Theme.textPrimary; wrapMode: TextArea.Wrap
+                background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.inputBorderColor }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                CheckBox {
+                    id: managedEditsCheck
+                    text: "Permitir ediciones"
+                    checked: managedRunsDialog.applyEdits
+                    onClicked: managedRunsDialog.applyEdits = checked
+                    contentItem: Text { text: managedEditsCheck.text; color: Theme.textPrimary; font.pixelSize: 11
+                        leftPadding: managedEditsCheck.indicator.width + 6 }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: managedRunsDialog.applyEdits
+                        ? "Se conserva la aprobación del CLI; no se activa bypass automáticamente."
+                        : "Modo plan: lectura y reporte, sin escribir el workspace."
+                    color: managedRunsDialog.applyEdits ? Theme.warnText : Theme.textMuted
+                    font.pixelSize: 11; wrapMode: Text.WordWrap
+                }
+                LcButton {
+                    text: "Iniciar"
+                    enabled: managedPrompt.text.trim().length > 0
+                    onClicked: {
+                        const id = App.startManagedAgentRun({
+                            runtime: managedRunsDialog.selectedRuntime,
+                            prompt: managedPrompt.text,
+                            workspace: App.currentAgentProjectDir(),
+                            applyEdits: managedRunsDialog.applyEdits,
+                            approvalMode: App.agentApprovalMode,
+                            ownerId: "manual-managed-agent"
+                        })
+                        if (id.length > 0) {
+                            managedPrompt.text = ""
+                            managedRunsDialog.errorText = ""
+                        } else {
+                            managedRunsDialog.errorText = App.managedAgentRunStore.lastError
+                        }
+                    }
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: managedRunsDialog.errorText.length > 0
+                text: managedRunsDialog.errorText
+                color: Theme.errorText; font.pixelSize: 11; wrapMode: Text.WordWrap
+            }
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.divider }
+            Text {
+                text: "Historial local · " + App.managedAgentRunStore.activeCount + " activa(s)"
+                color: Theme.textSecondary; font { pixelSize: 12; bold: true }
+            }
+            ListView {
+                id: managedRunsList
+                Layout.fillWidth: true; Layout.fillHeight: true
+                clip: true; spacing: 6
+                model: App.managedAgentRunStore.runs
+                delegate: Rectangle {
+                    required property var modelData
+                    width: managedRunsList.width; height: 88; radius: 7
+                    color: Theme.inputBg; border.color: Theme.borderColor
+                    RowLayout {
+                        anchors { fill: parent; margins: 9 }
+                        spacing: 9
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 2
+                            Text {
+                                text: (modelData.runtime || "cli") + " · " + (modelData.status || "")
+                                      + (modelData.resultStatus ? " · " + modelData.resultStatus : "")
+                                color: modelData.resultStatus === "verified" ? Theme.successText
+                                     : ["failed", "stale", "timed_out"].indexOf(modelData.status) >= 0
+                                       ? Theme.errorText : Theme.textPrimary
+                                font { pixelSize: 12; bold: true }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.summary || modelData.workspace || ""
+                                color: Theme.textMuted; font.pixelSize: 10; elide: Text.ElideRight
+                            }
+                            Text {
+                                text: modelData.startedAt || ""
+                                color: Theme.textMuted; font.pixelSize: 9
+                            }
+                        }
+                        LcButton {
+                            text: "Logs"; secondary: true
+                            onClicked: {
+                                managedLogDialog.runId = modelData.runId || ""
+                                managedLogDialog.open()
+                            }
+                        }
+                        LcButton {
+                            text: "Abrir"; secondary: true
+                            onClicked: App.openManagedAgentRunDirectory(modelData.runId || "")
+                        }
+                        LcButton {
+                            text: "Parar"; danger: true
+                            visible: ["starting", "running", "stopping", "verifying"].indexOf(modelData.status) >= 0
+                            onClicked: App.stopManagedAgentRun(modelData.runId || "")
+                        }
+                        LcButton {
+                            text: "Reintentar"; secondary: true
+                            visible: ["failed", "cancelled", "timed_out", "stale"].indexOf(modelData.status) >= 0
+                            onClicked: App.managedAgentRunStore.retryRun(modelData.runId || "")
+                        }
+                        LcButton {
+                            text: "×"; secondary: true
+                            visible: ["starting", "running", "stopping", "verifying"].indexOf(modelData.status) < 0
+                            onClicked: App.removeManagedAgentRun(modelData.runId || "")
+                        }
+                    }
+                }
+                Text {
+                    anchors.centerIn: parent; visible: managedRunsList.count === 0
+                    text: "Todavía no hay corridas administradas."
+                    color: Theme.textMuted; font.pixelSize: 11
+                }
+            }
+        }
+        footer: null
+    }
+
+    Dialog {
+        id: managedLogDialog
+        property string runId: ""
+        modal: true; parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2); y: Math.round((parent.height - height) / 2)
+        width: Math.min(900, parent.width - 36); height: Math.min(620, parent.height - 36)
+        leftPadding: 16; rightPadding: 16; topPadding: 14; bottomPadding: 14
+        background: Rectangle { color: Theme.popupBg; radius: 12; border.color: Theme.popupBorderColor }
+        Overlay.modal: Rectangle { color: Theme.overlayColor }
+        contentItem: Flickable {
+            clip: true; contentWidth: width; contentHeight: managedLogText.implicitHeight
+            Text {
+                id: managedLogText
+                width: parent.width
+                text: App.managedAgentRunLog(managedLogDialog.runId)
+                color: Theme.textPrimary; font.family: Theme.codeFont; font.pixelSize: 11
+                wrapMode: Text.WrapAnywhere
+            }
+        }
+        footer: Rectangle {
+            color: Theme.popupHeaderBg; height: 50; radius: 12
+            Row {
+                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                LcButton { text: "Cerrar"; secondary: true; onClicked: managedLogDialog.close() }
             }
         }
     }
@@ -255,6 +891,11 @@ Item {
         x: Math.round((parent.width - width) / 2)
         y: Math.round((parent.height - height) / 2)
         width: Math.min(560, root.width - 48)
+        height: 230
+        leftPadding: 20
+        rightPadding: 20
+        topPadding: 16
+        bottomPadding: 16
         closePolicy: Popup.CloseOnEscape
 
         property bool targetEnabled: false
@@ -332,22 +973,9 @@ Item {
         }
     }
 
-    // La página vive en un StackLayout (no se recrea): al mostrarse, sincronizar
-    // con el perfil que se lanzó en "Lanzar" (App.activeLaunchId) y re-resolver
-    // el harness por si cambió en Perfiles.
-    onVisibleChanged: if (visible) { syncToActiveLaunch(); if (selectedLaunchId.length > 0) resolveHarness(selectedLaunchId) }
-
-    // Selecciona en el combo el launch activo (el que se inició en Lanzar).
-    // No pisa la selección si el agente ya está corriendo.
-    function syncToActiveLaunch() {
-        if (App.agentRunning) return
-        const id = App.activeLaunchId
-        if (!id || id.length === 0) return
-        if (id === selectedLaunchId) return
-        selectedLaunchId = id
-        profileCombo.currentIndex = profileCombo.indexOfValue(id)
-        resolveHarness(id)
-    }
+    // La página vive en un StackLayout (no se recrea): re-resolver el harness
+    // al mostrarla, conservando siempre la última selección explícita de Agente.
+    onVisibleChanged: if (visible && selectedLaunchId.length > 0) resolveHarness(selectedLaunchId)
 
     function projectDirForSection(sectionName) {
         for (let i = 0; i < App.agentSessions.length; i++) {
@@ -358,19 +986,22 @@ Item {
     }
 
     function resolveHarness(launchId) {
+        // Política: todo perfil usa el agente nativo LlamaAgent. Perfiles viejos sin
+        // harness ("none") o con Opencode se normalizan a llamaagent (espeja
+        // AppController::normalizeHarnessAdapter para que la UI no quede grisada).
         if (!launchId || launchId.length === 0) {
-            resolvedAdapter = "none"; resolvedAdapterLabel = ""; return
+            resolvedAdapter = "llamaagent"; resolvedAdapterLabel = "LlamaAgent"; return
         }
         const lp = App.profileManager.getLaunchProfile(launchId)
         const harnessId = lp.harnessProfileId ?? ""
-        if (harnessId.length > 0) {
-            const hp = App.profileManager.getHarness(harnessId)
-            resolvedAdapter = hp.adapter ?? "none"
-            // Mostrar el nombre visible del harness (ej. "LlamaAgent"), no el id interno.
-            resolvedAdapterLabel = (hp.name && hp.name.length > 0) ? hp.name : (hp.adapter ?? "")
-        } else {
-            resolvedAdapter = "none"; resolvedAdapterLabel = ""
-        }
+        let a = ""
+        if (harnessId.length > 0)
+            a = App.profileManager.getHarness(harnessId).adapter ?? ""
+        a = (a || "").trim()
+        if (a === "" || a === "none" || a === "opencode")
+            a = "llamaagent"
+        resolvedAdapter = a
+        resolvedAdapterLabel = a === "llamaagent" ? "LlamaAgent" : a
     }
 
     function estimateTokens(text) {
@@ -417,9 +1048,15 @@ Item {
     }
 
     Component.onCompleted: {
+        syncAgentMessageModel()
         tryRestoreSessionsPanel()
-        // Preferir el launch activo (lanzado en "Lanzar"); si no hay, el primero.
-        let target = App.activeLaunchId
+        // Restaurar la última selección explícita de Agente. El launch activo
+        // sólo es fallback para instalaciones que todavía no guardaron esa clave.
+        let target = App.preferredAgentLaunchId()
+        if (!target || target.length === 0)
+            target = App.activeLaunchId
+        if (!target || target.length === 0)
+            target = App.readSetting("lastLaunchId", "")
         if (!target || target.length === 0) {
             const menu = App.profileManager.launchProfilesForMenu()
             if (menu.length > 0) target = menu[0].id ?? ""
@@ -429,6 +1066,7 @@ Item {
             profileCombo.currentIndex = profileCombo.indexOfValue(target)
             resolveHarness(target)
         }
+        restoreCurrentSessionModes()
     }
 
     function markActivity() {
@@ -438,12 +1076,30 @@ Item {
 
     Connections {
         target: App
-        // Cuando se lanza un perfil en "Lanzar", reflejarlo acá.
-        function onActiveLaunchIdChanged() { root.syncToActiveLaunch() }
-        function onAgentMessagesChanged() { root.markActivity() }
+        function syncLocalLaunchSelection() {
+            const target = App.preferredAgentLaunchId()
+            if (!target || target.length === 0 || target === root.selectedLaunchId)
+                return
+            root.selectedLaunchId = target
+            profileCombo.currentIndex = profileCombo.indexOfValue(target)
+            root.resolveHarness(target)
+        }
+        function onActiveLaunchIdChanged() { syncLocalLaunchSelection() }
+        function onServerRunningChanged() { syncLocalLaunchSelection() }
+        function onAgentMessagesChanged() {
+            root.syncAgentMessageModel()
+            root.markActivity()
+        }
+        function onAgentSessionsChanged() { root.restoreCurrentSessionModes() }
+        function onAgentApprovalModeChanged() { root.persistCurrentSessionModes() }
+        function onActiveAgentProfileChanged() { root.persistCurrentSessionModes() }
         function onAgentPendingToolChanged() { root.markActivity() }
         function onAgentLogChanged() { root.markActivity() }
         function onAgentRunningChanged() { root.markActivity() }
+        // El streaming (texto Y args de tool) emite agentStreamingChanged en cada
+        // delta pero NO messagesChanged: sin esto el badge marcaba "Sin actividad"
+        // mientras el modelo generaba una tool grande (parecía colgado).
+        function onAgentStreamingChanged() { root.markActivity() }
     }
 
     Timer {
@@ -506,6 +1162,12 @@ Item {
                     onCurrentValueChanged: {
                         selectedLaunchId = currentValue ?? ""
                         resolveHarness(selectedLaunchId)
+                    }
+                    onActivated: {
+                        if (currentValue) {
+                            App.writeSetting("lastAgentLaunchId", currentValue)
+                            App.writeSetting("lastLaunchId", currentValue)
+                        }
                     }
                 }
 
@@ -594,7 +1256,8 @@ Item {
                 // Indicador de contexto (tokens usados / n_ctx).
                 Rectangle {
                     visible: App.agentContextLimit > 0 && App.agentRunning
-                    implicitWidth: 130; implicitHeight: 26
+                    implicitWidth: App.agentContextPruneEvents > 0 ? 174 : 130
+                    implicitHeight: 26
                     radius: 6
                     color: Theme.inputBg
                     border.color: Theme.borderColor
@@ -611,8 +1274,20 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         text: "ctx " + App.agentContextUsed + "/" + App.agentContextLimit
-                        color: Theme.textSecondary; font { pixelSize: 11; family: "Consolas,monospace" }
+                              + (App.agentContextPruneEvents > 0
+                                 ? " · −" + App.agentContextPruned : "")
+                        color: Theme.textSecondary; font { pixelSize: 11; family: Theme.codeFont }
                     }
+                    MouseArea {
+                        id: contextHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                    }
+                    ToolTip.visible: contextHover.containsMouse
+                    ToolTip.text: "Memoria de trabajo: " + App.agentContextUsed + " tokens"
+                                  + "\nTranscript completo: " + App.agentContextTranscript
+                                  + "\nAhorro acumulado: " + App.agentContextPruned
+                                  + " tokens en " + App.agentContextPruneEvents + " eventos"
                 }
 
                 // Política de aprobación de herramientas.
@@ -647,7 +1322,42 @@ Item {
                     contentItem: Text {
                         text: approvalModeCombo.displayText
                         color: Theme.textPrimary; font.pixelSize: 12
-                        leftPadding: 10; verticalAlignment: Text.AlignVCenter
+                        leftPadding: 10
+                        rightPadding: approvalModeCombo.indicator ? approvalModeCombo.indicator.width + 4 : 10
+                        verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
+                    }
+                }
+                Text {
+                    visible: resolvedAdapter === "llamaagent"
+                    readonly property var sandbox: {
+                        const modeDependency = App.agentApprovalMode
+                        return App.agentSandboxStatus()
+                    }
+                    text: App.agentApprovalMode === "super" ? "⚠ Sin sandbox" : "🛡 Workspace"
+                    color: App.agentApprovalMode === "super" ? Theme.warnText : Theme.textMuted
+                    font.pixelSize: 10
+                    ToolTip.visible: sandboxMA.containsMouse
+                    ToolTip.text: (sandbox.detail ?? "") + "\nSO enforced: "
+                                  + ((sandbox.osEnforced ?? false) ? "sí" : "no")
+                    MouseArea { id: sandboxMA; anchors.fill: parent; hoverEnabled: true }
+                }
+                // Perfil de agente activo (capacidades + directivas). Override vivo
+                // de la sesión; no pisa el del perfil de lanzamiento.
+                LcComboBox {
+                    id: agentProfileCombo
+                    visible: resolvedAdapter === "llamaagent"
+                    implicitWidth: 150
+                    model: App.profileManager.agentProfiles
+                    textRole: "name"; valueRole: "profileId"
+                    currentIndex: Math.max(0, indexOfValue(App.activeAgentProfileId))
+                    onActivated: App.activeAgentProfileId = currentValue
+                    background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
+                    contentItem: Text {
+                        text: "🤖 " + agentProfileCombo.displayText
+                        color: Theme.textPrimary; font.pixelSize: 12
+                        leftPadding: 10
+                        rightPadding: agentProfileCombo.indicator ? agentProfileCombo.indicator.width + 4 : 10
+                        verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
                     }
                 }
                 CheckBox {
@@ -665,6 +1375,25 @@ Item {
                         color: Theme.textPrimary; font.pixelSize: 12
                         leftPadding: agentThinkingCheck.indicator.width + 6
                         verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                LcButton {
+                    text: "🧩 Skills"
+                    visible: resolvedAdapter === "llamaagent"
+                    onClicked: {
+                        root.portableSkillRows = App.portableSkills()
+                        root.selectedPortableSkill = ({})
+                        skillsDialog.open()
+                    }
+                }
+                LcButton {
+                    text: "👥 Sala"
+                    secondary: true
+                    visible: resolvedAdapter === "llamaagent"
+                    onClicked: {
+                        if ((App.agentRoomStore.currentRoomId ?? "").length === 0)
+                            App.createAgentRoom("Sala de " + (App.opencodeSessionTitle || "trabajo"), "")
+                        roomDialog.open()
                     }
                 }
                 LcButton {
@@ -708,6 +1437,16 @@ Item {
                     onClicked: App.openRuntimeLogDir()
                 }
                 LcButton {
+                    text: "🚀 Corridas"
+                    secondary: true
+                    onClicked: managedRunsDialog.open()
+                }
+                LcButton {
+                    text: "📦 Inbox"
+                    secondary: true
+                    onClicked: nativeRunsDialog.open()
+                }
+                LcButton {
                     text: {
                         const _lang = App.langV
                         if (App.agentStarting) return "Iniciando agente..."
@@ -715,7 +1454,15 @@ Item {
                     }
                     danger: App.agentRunning || App.agentStarting
                     enabled: selectedLaunchId.length > 0
-                    onClicked: (App.agentRunning || App.agentStarting) ? App.stopAgent() : App.startAgent(selectedLaunchId)
+                    onClicked: {
+                        if (App.agentRunning || App.agentStarting) {
+                            App.stopAgent()
+                        } else {
+                            App.writeSetting("lastAgentLaunchId", selectedLaunchId)
+                            App.writeSetting("lastLaunchId", selectedLaunchId)
+                            App.startAgent(selectedLaunchId)
+                        }
+                    }
                 }
             }
         }
@@ -746,6 +1493,16 @@ Item {
                 text: (App.langV, App.l("agent.notInstalled"))
                 color: Theme.errorText; font.pixelSize: 12
             }
+        }
+
+        // Aviso de tool-calling del perfil activo (cookbook + chat-template).
+        ToolSupportBanner {
+            Layout.fillWidth: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            Layout.topMargin: 8
+            visible: App.agentRunning && App.activeProfileToolSupport !== "supported"
+            support: App.activeProfileToolSupport
         }
 
         // ── Body ─────────────────────────────────────────────────────────────
@@ -861,7 +1618,7 @@ Item {
                         Layout.fillHeight: true
                         clip: true
                         model: App.agentSessions
-                        ScrollBar.vertical: LcScrollBar { policy: ScrollBar.AsNeeded }
+                        ScrollBar.vertical: LcScrollBar { id: sessionsScrollBar; policy: ScrollBar.AsNeeded }
 
                         section.property: "projectName"
                         section.criteria: ViewSection.FullString
@@ -894,7 +1651,10 @@ Item {
                             }
 
                             RowLayout {
-                                anchors { fill: parent; leftMargin: 8; rightMargin: 6 }
+                                // Reservar ancho del scrollbar cuando está visible para que
+                                // no se superponga con el botón "+".
+                                anchors { fill: parent; leftMargin: 8
+                                          rightMargin: 6 + (sessionsScrollBar.visible ? sessionsScrollBar.width : 0) }
                                 spacing: 4
                                 Text { text: "📁"; font.pixelSize: 10 }
                                 Text {
@@ -948,7 +1708,8 @@ Item {
                                     Layout.fillWidth: true
                                     text: {
                                         const t = modelData.title ?? ""
-                                        return t.length > 0 ? t : "Nueva sesión"
+                                        const branch = (modelData.depth ?? 0) > 0 ? "↳ " : ""
+                                        return branch + (t.length > 0 ? t : "Nueva sesión")
                                     }
                                     color: modelData.id === (App.opencodeSessionId ?? "")
                                            ? Theme.accent : Theme.textPrimary
@@ -959,9 +1720,13 @@ Item {
                                     Layout.fillWidth: true
                                     text: {
                                         const ms = modelData.created ?? 0
+                                        const state = modelData.runtimeState ?? "idle"
+                                        if (state === "running") return "● Trabajando"
+                                        if (state === "queued") return "○ En cola (" + (modelData.queuedCount ?? 0) + ")"
                                         return ms > 0 ? new Date(ms).toLocaleDateString(Qt.locale(), "d MMM yyyy") : ""
                                     }
-                                    color: Theme.textMuted
+                                    color: (modelData.runtimeState ?? "idle") === "running"
+                                           ? Theme.successText : Theme.textMuted
                                     font.pixelSize: 10
                                 }
                             }
@@ -1071,7 +1836,7 @@ Item {
                 Rectangle {
                     anchors.centerIn: parent
                     z: 5
-                    visible: App.agentStarting || (App.agentRunning && (!App.serverRunning || !App.serverReady))
+                    visible: App.thinkingRestarting || App.agentStarting || (App.agentRunning && (!App.backendAvailable || (App.serverRunning && !App.serverReady)))
                     radius: 10
                     color: Theme.surfaceBg
                     border.color: Theme.borderColor
@@ -1094,9 +1859,11 @@ Item {
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: App.agentStarting
-                                ? "Iniciando agente..."
-                                : !App.serverRunning
+                            text: App.thinkingRestarting
+                                ? "Recargando modelo para aplicar el nivel de pensamiento..."
+                                : App.agentStarting
+                                ? (App.hybridStatus.length > 0 ? App.hybridStatus : "Iniciando agente...")
+                                : !App.backendAvailable
                                 ? "Servidor no disponible. Iniciá el modelo en Lanzar."
                                 : "Cargando modelo..."
                             color: Theme.textSecondary; font.pixelSize: 14
@@ -1133,8 +1900,8 @@ Item {
                     // Mantener delegados de arriba medidos: evita que contentHeight
                     // se re-estime al subir (causa del salto/traba hacia arriba).
                     cacheBuffer: 4000
-                    visible: App.agentMessages.length > 0
-                    model: App.agentMessages
+                    visible: agentMessageUiModel.count > 0
+                    model: agentMessageUiModel
                     ScrollBar.vertical: LcScrollBar { policy: ScrollBar.AsNeeded }
 
                     delegate: Item {
@@ -1142,16 +1909,16 @@ Item {
                         width: msgList.width
                         height: (isDiff ? diffCard.height : (isTool ? toolCard.height : bubbleRect.height)) + 8
 
-                        readonly property bool isUser: modelData.role === "user"
-                        readonly property bool isDiff: modelData.role === "diff"
-                        readonly property bool isTool: modelData.role === "toolcall"
+                        readonly property bool isUser: entry.role === "user"
+                        readonly property bool isDiff: entry.role === "diff"
+                        readonly property bool isTool: entry.role === "toolcall"
                         // Durante streaming, esta burbuja usa el texto en vivo
-                        // (App.agentStreamingText) en vez de modelData.content, así
+                        // (App.agentStreamingText) en vez de entry.content, así
                         // sólo este delegate se refresca por token (sin reset de lista).
                         readonly property bool isStreaming: index === App.agentStreamingIndex
                         readonly property string content: isStreaming
                             ? App.agentStreamingText
-                            : (modelData.content ?? "")
+                            : (entry.content ?? "")
                         readonly property int maxInlineChars: 60000
                         readonly property bool isLongContent: content.length > maxInlineChars
                         property bool expandedLongContent: false
@@ -1162,8 +1929,8 @@ Item {
                                 return content.slice(Math.max(0, content.length - maxInlineChars))
                             return content.slice(0, maxInlineChars)
                         }
-                        readonly property bool isTyping: modelData.typing ?? false
-                        readonly property string metaLine: root.formatMeta(modelData)
+                        readonly property bool isTyping: entry.typing ?? false
+                        readonly property string metaLine: root.formatMeta(entry)
                         property bool editing: false
 
                         Rectangle {
@@ -1194,7 +1961,7 @@ Item {
                                     width: parent.width
                                     text: {
                                         if (delegateRoot.isTyping && delegateRoot.visibleContent.length === 0)
-                                            return "⏳ Procesando..."
+                                            return (entry.status ?? "Pensando...") + "  "
                                         if (delegateRoot.isTyping)
                                             return delegateRoot.visibleContent + "▌"
                                         return delegateRoot.visibleContent
@@ -1261,6 +2028,12 @@ Item {
                                     }
                                 }
                                 Text {
+                                    visible: (modelData.parentSessionId ?? "").length > 0
+                                    text: "rama · mensaje " + ((modelData.forkMessageIndex ?? -1) >= 0
+                                                              ? modelData.forkMessageIndex : "final")
+                                    color: Theme.accent; font.pixelSize: 9
+                                }
+                                Text {
                                     visible: delegateRoot.metaLine.length > 0
                                     width: parent.width
                                     text: delegateRoot.metaLine
@@ -1321,6 +2094,21 @@ Item {
                                             onClicked: App.rollbackAgentToMessage(index)
                                         }
                                     }
+                                    Text {
+                                        visible: delegateRoot.isUser && resolvedAdapter === "llamaagent"
+                                                 && !root.hasTypingMessage && !root.waitingApproval
+                                                 && !delegateRoot.editing
+                                        text: "⑂ Bifurcar"
+                                        color: forkMessageMA.containsMouse ? Theme.textPrimary : Theme.textMuted
+                                        font.pixelSize: 10
+                                        MouseArea {
+                                            id: forkMessageMA
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: App.forkAgentAtMessage(index)
+                                        }
+                                    }
                                     // Editar: reescribe el texto (de IA o usuario) y descarta lo posterior.
                                     Text {
                                         visible: !root.hasTypingMessage && !root.waitingApproval && !delegateRoot.editing
@@ -1355,15 +2143,15 @@ Item {
                             radius: 8
                             color: Theme.inputBg
                             border.color: Theme.borderColor
-                            readonly property bool reverted: modelData.reverted ?? false
+                            readonly property bool reverted: entry.reverted ?? false
                             // Diff colapsado por defecto: solo nombre + toggle.
                             property bool expanded: false
                             readonly property int diffLines: {
-                                const d = String(modelData.diff ?? "")
+                                const d = String(entry.diff ?? "")
                                 if (d.length === 0) return 0
                                 return d.split("\n").length
                             }
-                            readonly property string filePath: modelData.absPath ?? modelData.path ?? ""
+                            readonly property string filePath: entry.absPath ?? entry.path ?? ""
 
                             // Click derecho → menú: abrir carpeta contenedora.
                             MouseArea {
@@ -1397,11 +2185,11 @@ Item {
                                     Text { text: "📝"; font.pixelSize: 13 }
                                     Text {
                                         Layout.fillWidth: true
-                                        text: (modelData.path ?? "")
+                                        text: (entry.path ?? "")
                                               + (diffCard.diffLines > 0 ? "  · " + diffCard.diffLines + " líneas" : "")
                                               + (diffCard.reverted ? "  · revertido" : "")
                                         color: diffCard.reverted ? Theme.textMuted : Theme.textPrimary
-                                        font { family: "Consolas,monospace"; pixelSize: 12; bold: true }
+                                        font { family: Theme.codeFont; pixelSize: 12; bold: true }
                                         elide: Text.ElideMiddle
                                         MouseArea {
                                             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -1419,13 +2207,13 @@ Item {
                                         text: "Copiar"; secondary: true
                                         implicitHeight: 24
                                         visible: diffCard.diffLines > 0
-                                        onClicked: App.copyToClipboard(modelData.diff ?? "")
+                                        onClicked: App.copyToClipboard(entry.diff ?? "")
                                     }
                                     LcButton {
                                         text: "Revertir"; secondary: true
                                         visible: !diffCard.reverted
                                         implicitHeight: 24
-                                        onClicked: App.revertAgentEdit(modelData.absPath ?? modelData.path ?? "")
+                                        onClicked: App.revertAgentEdit(entry.absPath ?? entry.path ?? "")
                                     }
                                 }
 
@@ -1445,9 +2233,9 @@ Item {
                                         // Lazy: solo materializar el texto (puede ser de miles de
                                         // líneas) cuando la tarjeta está expandida. Si no, vacío →
                                         // sin layout costoso en cada rebuild del ListView.
-                                        text: diffCard.expanded ? (modelData.diff ?? "") : ""
+                                        text: diffCard.expanded ? (entry.diff ?? "") : ""
                                         color: Theme.textSecondary
-                                        font { family: "Consolas,monospace"; pixelSize: 11 }
+                                        font { family: Theme.codeFont; pixelSize: 11 }
                                         wrapMode: TextEdit.NoWrap
                                         readOnly: true; selectByMouse: true
                                         opacity: diffCard.reverted ? 0.5 : 1.0
@@ -1468,13 +2256,13 @@ Item {
                             border.color: Theme.borderColor
 
                             // run_shell async en ejecución → expandido y "corriendo".
-                            readonly property bool running: modelData.typing ?? false
+                            readonly property bool running: entry.typing ?? false
                             property bool userExpanded: false
                             readonly property bool expanded: running || userExpanded
-                            readonly property bool ok: modelData.ok ?? true
-                            readonly property string toolName: modelData.name ?? ""
-                            readonly property string command: modelData.command ?? ""
-                            readonly property string output: modelData.output ?? ""
+                            readonly property bool ok: entry.ok ?? true
+                            readonly property string toolName: entry.name ?? ""
+                            readonly property string command: entry.command ?? ""
+                            readonly property string output: entry.output ?? ""
                             readonly property bool hasBody: command.length > 0 || output.length > 0
 
                             ColumnLayout {
@@ -1499,7 +2287,7 @@ Item {
                                         text: toolCard.toolName
                                               + (toolCard.command.length > 0 ? "  " + toolCard.command : "")
                                         color: Theme.textPrimary
-                                        font { family: "Consolas,monospace"; pixelSize: 12; bold: true }
+                                        font { family: Theme.codeFont; pixelSize: 12; bold: true }
                                         elide: Text.ElideRight
                                         MouseArea {
                                             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -1521,13 +2309,6 @@ Item {
                                                    : (toolCard.ok ? Theme.textPrimary : "#ffd5d5")
                                             font.pixelSize: 10
                                         }
-                                    }
-                                    LcButton {
-                                        text: toolCard.expanded ? "Ocultar" : "Ver comando"
-                                        secondary: true
-                                        implicitHeight: 24
-                                        visible: toolCard.hasBody
-                                        onClicked: toolCard.userExpanded = !toolCard.expanded
                                     }
                                     LcButton {
                                         text: "Copiar"; secondary: true
@@ -1558,7 +2339,7 @@ Item {
                                                  + toolCard.output)
                                               : ""
                                         color: Theme.textSecondary
-                                        font { family: "Consolas,monospace"; pixelSize: 11 }
+                                        font { family: Theme.codeFont; pixelSize: 11 }
                                         wrapMode: TextEdit.NoWrap
                                         readOnly: true; selectByMouse: true
                                     }
@@ -1574,6 +2355,48 @@ Item {
                     // delegates de altura variable que cambian por token, la
                     // estimación de positionViewAtEnd oscila (salta arriba/abajo).
                     property bool followBottom: true
+                    // QVariantList se reemplaza completo al cambiar un mensaje. Qt
+                    // vacía el ListView durante un frame y fuerza contentY al inicio.
+                    // Recordar que estábamos abajo evita interpretar ese movimiento
+                    // interno como una decisión del usuario.
+                    property bool restoreBottomAfterModelReset: false
+                    property string scrollMutationReason: ""
+                    property real previousContentY: 0
+
+                    function scrollState(extra) {
+                        return JSON.stringify({
+                            y: Number(contentY.toFixed(2)),
+                            previousY: Number(previousContentY.toFixed(2)),
+                            originY: Number(minContentY().toFixed(2)),
+                            maxY: Number(maxContentY().toFixed(2)),
+                            contentHeight: Number(contentHeight.toFixed(2)),
+                            viewportHeight: Number(height.toFixed(2)),
+                            count: count,
+                            followBottom: followBottom,
+                            moving: moving,
+                            dragging: dragging,
+                            typing: root.hasTypingMessage,
+                            mutation: scrollMutationReason.length > 0
+                                      ? scrollMutationReason : "qt/internal",
+                            extra: extra ?? ""
+                        })
+                    }
+
+                    function traceScroll(event, extra) {
+                        App.logAgentUiScroll(event, scrollState(extra))
+                    }
+
+                    function setContentY(reason, value) {
+                        if (!isFinite(value)) {
+                            traceScroll("reject-nonfinite-target", reason + "=" + value)
+                            return
+                        }
+                        if (Math.abs(contentY - value) < 0.01)
+                            return
+                        scrollMutationReason = reason
+                        contentY = value
+                        scrollMutationReason = ""
+                    }
 
                     function minContentY() {
                         return isFinite(originY) ? originY : 0
@@ -1584,24 +2407,42 @@ Item {
                     }
 
                     function scrollToBottom() {
-                        contentY = maxContentY()
+                        // Nunca mover el viewport hacia arriba desde el auto-follow.
+                        // ListView puede informar transitoriamente un contentHeight
+                        // demasiado chico mientras recicla/mide delegates altos; si
+                        // copiamos ese maxY, un refresh normal del QVariantList puede
+                        // mandar la conversación hasta el inicio.
+                        var maxY = maxContentY()
+                        if (contentY < maxY)
+                            setContentY("scrollToBottom", maxY)
                     }
 
                     function normalizeViewport() {
                         var minY = minContentY()
                         var maxY = maxContentY()
                         if (!isFinite(contentY) || contentY < minY) {
-                            contentY = minY
+                            setContentY("normalize:min", minY)
                             return
                         }
                         if (contentY > maxY)
-                            contentY = maxY
+                            setContentY("normalize:max", maxY)
                     }
 
                     // followBottom se actualiza en vivo con cualquier cambio de
                     // posición (flick nativo o rueda animada): si el usuario sube,
                     // dejamos de auto-bajar durante el streaming.
                     onContentYChanged: {
+                        traceScroll("contentYChanged", "")
+                        previousContentY = contentY
+                        if (count === 0) {
+                            if (followBottom)
+                                restoreBottomAfterModelReset = true
+                            return
+                        }
+                        if (restoreBottomAfterModelReset) {
+                            followBottom = true
+                            return
+                        }
                         // Clamp duro cuando no hay streaming. agentRunning no sirve
                         // como condición: el agente queda activo mientras se restaura
                         // una sesión y Qt recalcula varias veces las alturas.
@@ -1614,10 +2455,15 @@ Item {
                         }
                         followBottom = (contentY >= maxY - 2)
                     }
-                    onMovementEnded: followBottom = atYEnd
+                    onMovementStarted: traceScroll("movementStarted", "")
+                    onMovementEnded: {
+                        followBottom = atYEnd
+                        traceScroll("movementEnded", "atYEnd=" + atYEnd)
+                    }
                     // Throttle: durante streaming el contentHeight cambia por token.
                     // Un solo callLater coalescido evita reflows en cascada.
                     onContentHeightChanged: {
+                        traceScroll("contentHeightChanged", "")
                         // Los delegates largos se miden en varias pasadas. Si una
                         // pasada reduce contentHeight, el contentY anterior puede
                         // quedar fuera del rango y Qt muestra un viewport vacío.
@@ -1625,25 +2471,36 @@ Item {
                             normalizeViewport()
                         if (followBottom)
                             bottomTimer.restart()
+                        if (restoreBottomAfterModelReset)
+                            modelResetSettleTimer.restart()
                     }
                     // Sólo re-pegar al fondo si el usuario YA estaba abajo. Si subió
                     // a leer, un mensaje/token nuevo no lo arrastra de vuelta.
                     onCountChanged: {
+                        traceScroll("countChanged", "")
                         // Si el modelo se vacía durante un cambio de backend/sesión,
                         // descartar el offset del historial anterior. De lo contrario
                         // un contentY grande puede quedar fuera del nuevo contenido y
                         // dejar el viewport completamente negro.
                         if (count === 0) {
-                            contentY = minContentY()
+                            restoreBottomAfterModelReset =
+                                    restoreBottomAfterModelReset || followBottom
+                            setContentY("countChanged:empty", minContentY())
                             followBottom = true
                             return
                         }
-                        followBottom = true
+                        if (restoreBottomAfterModelReset)
+                            followBottom = true
                         bottomTimer.restart()
                         viewportSettleTimer.restart()
+                        modelResetSettleTimer.restart()
                     }
                     onModelChanged: {
-                        contentY = minContentY()
+                        traceScroll("modelChanged", "")
+                        // agentMessages es un QVariantList: cada NOTIFY puede hacer
+                        // que QML vea una nueva instancia de modelo aunque sólo haya
+                        // cambiado un mensaje. No reiniciar contentY aquí; el vaciado
+                        // real ya se maneja en onCountChanged.
                         followBottom = true
                         bottomTimer.restart()
                         viewportSettleTimer.restart()
@@ -1651,11 +2508,19 @@ Item {
 
                     Timer {
                         id: bottomTimer
-                        interval: 0
+                        // Debounce ~1 frame: durante streaming el contentHeight cambia
+                        // muchas veces por segundo (uno o más por token). Con interval 0
+                        // cada cambio dispara forceLayout+scroll y, con delegates de
+                        // altura variable que se re-miden en pasadas, el fondo rebota
+                        // (sube/baja). Coalescer la ráfaga en un solo reflow por frame
+                        // elimina el temblor sin latencia perceptible.
+                        interval: 32
                         onTriggered: {
                             if (!msgList.followBottom) return
+                            msgList.traceScroll("bottomTimer:before", "")
                             msgList.forceLayout()
                             msgList.scrollToBottom()
+                            msgList.traceScroll("bottomTimer:after", "")
                         }
                     }
 
@@ -1665,10 +2530,30 @@ Item {
                         id: viewportSettleTimer
                         interval: 120
                         onTriggered: {
+                            msgList.traceScroll("settleTimer:before", "")
                             msgList.forceLayout()
                             msgList.normalizeViewport()
                             if (msgList.followBottom)
                                 msgList.scrollToBottom()
+                            msgList.traceScroll("settleTimer:after", "")
+                        }
+                    }
+
+                    // Se reinicia con cada medición de delegates. Al quedar quieto el
+                    // layout, restaura por última vez el fondo y recién entonces
+                    // vuelve a permitir que contentY determine followBottom.
+                    Timer {
+                        id: modelResetSettleTimer
+                        interval: 180
+                        onTriggered: {
+                            if (!msgList.restoreBottomAfterModelReset)
+                                return
+                            msgList.traceScroll("modelResetSettle:before", "")
+                            msgList.forceLayout()
+                            msgList.scrollToBottom()
+                            msgList.restoreBottomAfterModelReset = false
+                            msgList.followBottom = true
+                            msgList.traceScroll("modelResetSettle:after", "")
                         }
                     }
 
@@ -1682,7 +2567,8 @@ Item {
                             var maxY = msgList.maxContentY()
                             var pixelY = ev.pixelDelta.y
                             var delta = pixelY !== 0 ? pixelY : (ev.angleDelta.y / 120) * 72
-                            msgList.contentY = Math.max(minY, Math.min(maxY, msgList.contentY - delta))
+                            msgList.setContentY("wheel",
+                                                Math.max(minY, Math.min(maxY, msgList.contentY - delta)))
                             ev.accepted = true
                         }
                     }
@@ -1733,6 +2619,53 @@ Item {
                             }
                         }
 
+                        // Banner del guardrail Zero-Autonomy: acción destructiva/irreversible
+                        // frenada aun en modo automático. Sólo visible cuando reason=="destructive".
+                        Rectangle {
+                            Layout.fillWidth: true
+                            visible: (approvalCard.tool.reason ?? "") === "destructive"
+                            color: Qt.rgba(Theme.errorText.r, Theme.errorText.g, Theme.errorText.b, 0.12)
+                            border.color: Theme.errorText; radius: 6
+                            implicitHeight: destructiveWarn.implicitHeight + 12
+                            RowLayout {
+                                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 8 }
+                                spacing: 6
+                                Text { text: "⚠"; font.pixelSize: 14; color: Theme.errorText }
+                                Text {
+                                    id: destructiveWarn
+                                    Layout.fillWidth: true
+                                    text: "Acción destructiva/irreversible: el guardrail exige tu aprobación aunque el modo sea automático."
+                                    color: Theme.errorText; font { pixelSize: 11; bold: true }
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            visible: (approvalCard.tool.reason ?? "") === "external_write"
+                            color: Qt.rgba(Theme.warnText.r, Theme.warnText.g, Theme.warnText.b, 0.12)
+                            border.color: Theme.warnText; radius: 6
+                            implicitHeight: externalWarn.implicitHeight + 12
+                            Text {
+                                id: externalWarn
+                                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 8 }
+                                text: "Escritura externa MCP: se ejecutará exactamente el payload mostrado. La huella y el recibo quedarán auditados."
+                                color: Theme.warnText; font { pixelSize: 11; bold: true }
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: (approvalCard.tool.payloadHash ?? "").length > 0
+                            text: "Payload SHA-256: " + (approvalCard.tool.payloadHash ?? "")
+                                  + "\nCorrelation ID: " + (approvalCard.tool.correlationId ?? "")
+                            color: Theme.textMuted
+                            font { family: Theme.codeFont; pixelSize: 10 }
+                            wrapMode: Text.WrapAnywhere
+                        }
+
                         Rectangle {
                             Layout.fillWidth: true
                             visible: (approvalCard.tool.detail ?? "").length > 0
@@ -1744,7 +2677,7 @@ Item {
                                 anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
                                 text: approvalCard.tool.detail ?? ""
                                 color: Theme.textSecondary
-                                font { family: "Consolas,monospace"; pixelSize: 12 }
+                                font { family: Theme.codeFont; pixelSize: 12 }
                                 wrapMode: TextEdit.WrapAnywhere
                                 readOnly: true; selectByMouse: true
                             }
@@ -1769,7 +2702,7 @@ Item {
                                     width: parent.width
                                     text: approvalCard.tool.diff ?? ""
                                     color: Theme.textSecondary
-                                    font { family: "Consolas,monospace"; pixelSize: 11 }
+                                    font { family: Theme.codeFont; pixelSize: 11 }
                                     wrapMode: TextEdit.NoWrap
                                     readOnly: true; selectByMouse: true
                                 }
@@ -1853,7 +2786,7 @@ Item {
                                 readOnly: true
                                 text: App.agentLog
                                 color: Theme.textSecondary
-                                font { family: "Consolas,monospace"; pixelSize: 12 }
+                                font { family: Theme.codeFont; pixelSize: 12 }
                                 wrapMode: TextArea.WrapAnywhere
                                 background: null
                                 selectByMouse: true
@@ -1869,7 +2802,7 @@ Item {
                                 anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 12 }
                                 text: "native log: " + App.agentNativeLogDir(resolvedAdapter)
                                 color: Theme.textMuted
-                                font { family: "Consolas,monospace"; pixelSize: 10 }
+                                font { family: Theme.codeFont; pixelSize: 10 }
                                 elide: Text.ElideLeft; width: parent.width - 24
                             }
                         }
@@ -1885,7 +2818,12 @@ Item {
         // ── Input bar ────────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            height: inputCol.implicitHeight + 16
+            // Es hijo de ColumnLayout: `height` solo no es una restricción de
+            // layout y puede terminar comprimido por debajo de sus controles,
+            // que luego se dibujan fuera del borde inferior de la ventana.
+            implicitHeight: inputCol.implicitHeight + 16
+            Layout.preferredHeight: implicitHeight
+            Layout.minimumHeight: implicitHeight
             color: Theme.baseBg
             visible: App.agentRunning && !App.agentInTerminal
 
@@ -1894,6 +2832,55 @@ Item {
                 anchors { left: parent.left; right: parent.right
                           verticalCenter: parent.verticalCenter; margins: 8 }
                 spacing: 6
+
+                // Cola visible: mantiene los próximos mensajes a la vista sin
+                // obligar a abrir un menú ni ocultar el texto que se enviará.
+                Column {
+                    width: parent.width
+                    spacing: 4
+                    visible: App.agentQueuedCount > 0
+                    Row {
+                        width: parent.width
+                        Text { text: "Mensajes en cola"; color: Theme.textSecondary; font { pixelSize: 11; bold: true } }
+                        Item { width: Math.max(0, parent.width - queueClearAgent.implicitWidth - 150); height: 1 }
+                        LcButton { id: queueClearAgent; text: "Vaciar cola"; danger: true; onClicked: App.clearAgentQueue() }
+                    }
+                    ScrollView {
+                        width: parent.width
+                        // El alto depende del contador del backend (y no del
+                        // implicitHeight del contenido de ScrollView, que puede
+                        // calcularse como 0 antes de instanciar el Repeater).
+                        height: Math.min(220, Math.max(52, App.agentQueuedCount * 56))
+                        clip: true
+                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                        Column {
+                            id: agentQueueRows
+                            width: parent.width
+                            spacing: 4
+                            Repeater {
+                                model: App.agentQueuedMessages
+                                Rectangle {
+                                    required property int index
+                                    required property string modelData
+                                    width: agentQueueRows.width
+                                    height: 52
+                                    radius: 6; color: Theme.inputBg; border.color: Theme.borderColor
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 6; spacing: 6
+                                        Text { text: (index + 1) + ")"; color: Theme.textMuted; font.bold: true }
+                                        Text { Layout.fillWidth: true; text: modelData; color: Theme.textPrimary
+                                            wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                        LcButton { text: "Previsualizar"; secondary: true
+                                            onClicked: { agentQueueDialog.editIndex = -1; agentQueueDialog.open() } }
+                                        LcButton { text: "Editar"; secondary: true
+                                            onClicked: { agentQueueDialog.editIndex = index; agentQueueDialog.open() } }
+                                        LcButton { text: "Eliminar"; danger: true; onClicked: App.removeAgentQueuedMessage(index) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // Chips de adjuntos pendientes.
                 Flow {
@@ -1928,7 +2915,7 @@ Item {
                     LcButton {
                         text: "📎"
                         secondary: true
-                        enabled: App.serverRunning && App.serverReady && !agentInput.busy
+                        enabled: App.backendAvailable && (App.serverReady || !App.serverRunning) && !agentInput.busy
                         onClicked: {
                             const picked = App.pickAgentAttachments()
                             if (picked && picked.length > 0)
@@ -1936,22 +2923,59 @@ Item {
                         }
                     }
 
-                    LcTextField {
-                        id: agentInput
+                    ScrollView {
+                        id: agentInputFrame
                         Layout.fillWidth: true
-                        enabled: App.serverRunning && App.serverReady
-                        readonly property bool busy: root.hasTypingMessage
-                        placeholderText: (!App.serverRunning)
+                        readonly property real minimumInputHeight: 34
+                        readonly property real maximumInputHeight: Math.max(minimumInputHeight, root.height * 0.5)
+                        Layout.preferredHeight: Math.min(maximumInputHeight,
+                                                         Math.max(minimumInputHeight,
+                                                                  agentInput.contentHeight
+                                                                  + agentInput.topPadding
+                                                                  + agentInput.bottomPadding))
+                        Layout.minimumHeight: minimumInputHeight
+                        Layout.maximumHeight: maximumInputHeight
+                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                        ScrollBar.vertical.policy: agentInput.contentHeight + agentInput.topPadding
+                                                   + agentInput.bottomPadding > height
+                                                   ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                        clip: true
+                        background: Rectangle {
+                            radius: 6
+                            color: Theme.inputBg
+                            border.color: agentInput.activeFocus ? Theme.inputBorderFocus
+                                                                 : Theme.inputBorderColor
+                            border.width: agentInput.activeFocus ? 2 : 1
+                        }
+
+                        TextArea {
+                            id: agentInput
+                            width: agentInputFrame.availableWidth
+                            implicitHeight: Math.max(agentInputFrame.minimumInputHeight,
+                                                     contentHeight + topPadding + bottomPadding)
+                            enabled: App.backendAvailable && (App.serverReady || !App.serverRunning)
+                            readonly property bool busy: root.hasTypingMessage
+                            color: Theme.textPrimary
+                            placeholderTextColor: Theme.textMuted
+                            font.pixelSize: 13
+                            leftPadding: 10
+                            rightPadding: 10
+                            topPadding: 7
+                            bottomPadding: 7
+                            wrapMode: TextArea.WrapAtWordBoundaryOrAnywhere
+                            selectByMouse: true
+                            background: null
+                            placeholderText: (!App.backendAvailable)
                             ? "Servidor no disponible. Iniciá el modelo en Lanzar."
-                            : (!App.serverReady
+                            : (!App.serverReady && App.serverRunning
                                ? "Modelo cargando..."
                                : (busy
                                   ? ("Enter encola · Shift+Enter interrumpe"
                                      + (App.agentQueuedCount > 0 ? "  ·  " + App.agentQueuedCount + " en cola" : ""))
                                   : (App.langV, App.l("agent.input"))))
-                        // @-mentions: recalcular el popup al cambiar texto/cursor.
-                        onTextChanged: root.updateMention()
-                        onCursorPositionChanged: root.updateMention()
+                            // @-mentions: recalcular el popup al cambiar texto/cursor.
+                            onTextChanged: root.updateMention()
+                            onCursorPositionChanged: root.updateMention()
                         // Enter = enviar (idle) o encolar (ocupado). Shift+Enter = interrumpir.
                         // Si el popup de @-mentions está abierto: ↑/↓ navegan, Enter acepta, Esc cierra.
                         Keys.onPressed: (event) => {
@@ -1983,7 +3007,7 @@ Item {
                             if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter) return
                             event.accepted = true
                             const t = text.trim()
-                            if (!App.serverRunning || !App.serverReady) return
+                            if (!App.backendAvailable) return
                             if (event.modifiers & Qt.ShiftModifier) {
                                 if (t.length > 0) { App.steerAgent(t); text = "" }
                                 return
@@ -2018,7 +3042,7 @@ Item {
                                         anchors { left: parent.left; right: parent.right
                                                   verticalCenter: parent.verticalCenter; margins: 8 }
                                         text: "📄 " + modelData
-                                        color: Theme.textPrimary; font { family: "Consolas,monospace"; pixelSize: 11 }
+                                        color: Theme.textPrimary; font { family: Theme.codeFont; pixelSize: 11 }
                                         elide: Text.ElideMiddle
                                     }
                                     MouseArea {
@@ -2030,12 +3054,13 @@ Item {
                                 }
                             }
                         }
+                        }
                     }
                     // Idle: "Enviar" (incluye adjuntos).
                     LcButton {
                         visible: !agentInput.busy
                         text: (App.langV, App.l("agent.send"))
-                        enabled: App.serverRunning && App.serverReady
+                        enabled: App.backendAvailable
                             && (agentInput.text.trim().length > 0 || root.agentAttachments.length > 0)
                         onClicked: root.agentSend()
                     }
@@ -2068,6 +3093,221 @@ Item {
                             if (App.escalateToMaster(t)) agentInput.text = ""
                         }
                     }
+                    // Auditoría read-only del diff: pide métricas y delete-list,
+                    // pero la tool no puede modificar archivos ni reemplaza la
+                    // aprobación humana.
+                    LcButton {
+                        visible: App.agentRunning && !agentInput.busy
+                        secondary: true
+                        text: "🧹 Revisar frugalidad"
+                        onClicked: root.sendAgentNow(
+                            "Revisá el diff actual usando review_overengineering. "
+                            + "Es una auditoría READ-ONLY: no edites ni borres archivos. "
+                            + "Devolvé primero las métricas y después una delete-list "
+                            + "explicable; conservá validaciones, seguridad, tests, "
+                            + "accesibilidad y manejo de errores.", [])
+                    }
+                }
+            }
+        }
+    }
+
+    // La cola es editable: mostrar el texto completo evita perder mensajes antes
+    // de que termine el turno actual, y las acciones operan por índice en backend.
+    LcDialog {
+        id: agentQueueDialog
+        modal: true
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
+        width: Math.min(680, parent.width - 40)
+        height: Math.min(520, parent.height - 40)
+        title: "Mensajes en cola (" + App.agentQueuedCount + ")"
+        property int editIndex: -1
+        footer: RowLayout {
+            width: parent.width
+            LcButton { text: "Vaciar cola"; danger: true; onClicked: App.clearAgentQueue() }
+            Item { Layout.fillWidth: true }
+            LcButton { text: "Cerrar"; secondary: true; onClicked: agentQueueDialog.close() }
+        }
+        contentItem: ListView {
+            id: agentQueueList
+            clip: true
+            spacing: 8
+            model: App.agentQueuedMessages
+            delegate: Rectangle {
+                required property int index
+                required property string modelData
+                width: agentQueueList.width
+                height: queueEditor.visible ? Math.max(118, queueEditor.contentHeight + 58) : preview.implicitHeight + 42
+                radius: 7
+                color: Theme.inputBg
+                border.color: Theme.borderColor
+                property bool editing: agentQueueDialog.editIndex === index
+                Text { id: number; anchors { left: parent.left; top: parent.top; margins: 9 }
+                    text: (index + 1) + "."; color: Theme.textMuted; font.bold: true }
+                Text { id: preview; visible: !parent.editing
+                    anchors { left: number.right; right: controls.left; top: parent.top; margins: 9 }
+                    text: modelData; color: Theme.textPrimary; wrapMode: Text.Wrap; maximumLineCount: 5; elide: Text.ElideRight }
+                TextArea { id: queueEditor; visible: parent.editing
+                    anchors { left: number.right; right: controls.left; top: parent.top; margins: 7 }
+                    text: modelData; color: Theme.textPrimary; wrapMode: TextArea.Wrap
+                    background: Rectangle { color: Theme.baseBg; radius: 4; border.color: Theme.inputBorderColor } }
+                Column {
+                    id: controls
+                    anchors { right: parent.right; top: parent.top; margins: 7 }
+                    spacing: 5
+                    LcButton { text: parent.parent.editing ? "Guardar" : "Editar"; secondary: true
+                        onClicked: { if (parent.parent.editing) { if (App.updateAgentQueuedMessage(index, queueEditor.text)) agentQueueDialog.editIndex = -1 } else agentQueueDialog.editIndex = index } }
+                    LcButton { text: "Eliminar"; danger: true; onClicked: App.removeAgentQueuedMessage(index) }
+                }
+            }
+            Text { anchors.centerIn: parent; visible: App.agentQueuedCount === 0
+                text: "No hay mensajes en cola."; color: Theme.textMuted }
+        }
+        onOpened: if (App.agentQueuedCount === 0) close()
+    }
+
+    // ── Sala multiagente: timeline persistente + presets ────────────────────
+    LcDialog {
+        id: roomDialog
+        modal: true
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
+        width: Math.min(820, parent.width - 40)
+        height: Math.min(680, parent.height - 40)
+        title: "Sala multiagente"
+        footer: null
+        closePolicy: Popup.CloseOnEscape
+        background: Rectangle { color: Theme.popupHeaderBg ?? Theme.baseBg; radius: 10; border.color: Theme.borderColor }
+        contentItem: ColumnLayout {
+            spacing: 10
+            RowLayout {
+                Layout.fillWidth: true
+                LcComboBox {
+                    id: roomCombo
+                    Layout.fillWidth: true
+                    model: App.agentRoomStore.rooms
+                    textRole: "title"
+                    valueRole: "id"
+                    currentIndex: Math.max(0, indexOfValue(App.agentRoomStore.currentRoomId))
+                    onActivated: App.agentRoomStore.currentRoomId = currentValue
+                }
+                LcButton {
+                    text: "+ Nueva"
+                    onClicked: App.createAgentRoom("Sala de trabajo", "")
+                }
+            }
+            Flow {
+                Layout.fillWidth: true
+                spacing: 6
+                Repeater {
+                    model: App.agentRoomStore.currentParticipants
+                    Rectangle {
+                        width: participantText.implicitWidth + 16
+                        height: 25; radius: 12
+                        color: Theme.inputBg; border.color: Theme.borderColor
+                        Text {
+                            id: participantText
+                            anchors.centerIn: parent
+                            text: (modelData.kind === "human" ? "👤 " : "🤖 ")
+                                  + (modelData.name || modelData.id)
+                            color: Theme.textSecondary; font.pixelSize: 11
+                        }
+                    }
+                }
+            }
+            ListView {
+                id: roomTimeline
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 8
+                model: App.agentRoomStore.currentEvents
+                onCountChanged: positionViewAtEnd()
+                delegate: Rectangle {
+                    width: roomTimeline.width
+                    height: roomEventColumn.implicitHeight + 18
+                    radius: 7
+                    color: (modelData.author || "").startsWith("human:")
+                           ? Theme.highlight : Theme.inputBg
+                    border.color: Theme.borderColor
+                    Column {
+                        id: roomEventColumn
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 9 }
+                        spacing: 4
+                        Text {
+                            width: parent.width
+                            text: (modelData.author || "system") + " · " + (modelData.type || "message")
+                            color: Theme.accent; font { pixelSize: 10; bold: true }
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            width: parent.width
+                            text: modelData.content || ""
+                            color: Theme.textPrimary; font.pixelSize: 12
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                LcButton {
+                    text: "/review"
+                    enabled: App.agentRunning && roomGoal.text.trim().length > 0
+                    onClicked: {
+                        if (App.runAgentRoomPreset(App.agentRoomStore.currentRoomId, "review", roomGoal.text))
+                            roomGoal.text = ""
+                    }
+                }
+                LcButton {
+                    text: "/autoprompt"
+                    secondary: true
+                    enabled: App.agentRunning && roomGoal.text.trim().length > 0
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Planificar, construir, revisar, verificar y reparar con gates."
+                    onClicked: {
+                        if (App.runAgentRoomPreset(App.agentRoomStore.currentRoomId, "autoprompt", roomGoal.text))
+                            roomGoal.text = ""
+                    }
+                }
+                LcButton {
+                    text: "/council"; secondary: true
+                    enabled: App.agentRunning && roomGoal.text.trim().length > 0
+                    onClicked: {
+                        if (App.runAgentRoomPreset(App.agentRoomStore.currentRoomId, "council", roomGoal.text))
+                            roomGoal.text = ""
+                    }
+                }
+                LcButton {
+                    text: "/research"; secondary: true
+                    enabled: App.agentRunning && roomGoal.text.trim().length > 0
+                    onClicked: {
+                        if (App.runAgentRoomPreset(App.agentRoomStore.currentRoomId, "research", roomGoal.text))
+                            roomGoal.text = ""
+                    }
+                }
+                LcTextField {
+                    id: roomGoal
+                    Layout.fillWidth: true
+                    placeholderText: "Mensaje, objetivo o @participante…"
+                    onAccepted: {
+                        if (App.sendAgentRoomMessage(App.agentRoomStore.currentRoomId,
+                                                     text, []))
+                            text = ""
+                    }
+                }
+                LcButton {
+                    text: "Enviar"
+                    enabled: App.agentRunning && roomGoal.text.trim().length > 0
+                    onClicked: {
+                        if (App.sendAgentRoomMessage(App.agentRoomStore.currentRoomId,
+                                                     roomGoal.text, []))
+                            roomGoal.text = ""
+                    }
                 }
             }
         }
@@ -2078,14 +3318,20 @@ Item {
         target: App
         function onGitRequiredForSubagents() { gitInstallDialog.open() }
     }
-    Dialog {
+    LcDialog {
         id: gitInstallDialog
         modal: true
         parent: Overlay.overlay
         x: Math.round((parent.width - width) / 2)
         y: Math.round((parent.height - height) / 2)
         width: 460
+        height: 210
+        leftPadding: 20
+        rightPadding: 20
+        topPadding: 16
+        bottomPadding: 16
         title: "Git requerido para subagents"
+        footer: null
         closePolicy: Popup.CloseOnEscape
         background: Rectangle { color: Theme.popupHeaderBg ?? Theme.baseBg; radius: 10; border.color: Theme.borderColor }
         contentItem: ColumnLayout {
@@ -2406,7 +3652,7 @@ Item {
                         id: agentTuningSystem
                         placeholderText: "p.ej. priorizá cambios mínimos, corré tests antes de terminar, no toques archivos de config…"
                         color: Theme.textPrimary; placeholderTextColor: Theme.textMuted
-                        font { family: "Consolas,monospace"; pixelSize: 12 }
+                        font { family: Theme.codeFont; pixelSize: 12 }
                         wrapMode: TextArea.WrapAtWordBoundaryOrAnywhere
                         background: null; padding: 10; selectByMouse: true
                     }
@@ -2441,7 +3687,7 @@ Item {
                         placeholderText: "allow|deny|ask  [read:|write:|shell:]<glob>\n"
                             + "deny **/.env\ndeny write:**/secrets/**\nallow write:src/**\nask shell:rm *"
                         color: Theme.textPrimary; placeholderTextColor: Theme.textMuted
-                        font { family: "Consolas,monospace"; pixelSize: 12 }
+                        font { family: Theme.codeFont; pixelSize: 12 }
                         wrapMode: TextArea.NoWrap
                         background: null; padding: 10; selectByMouse: true
                     }
@@ -2450,6 +3696,93 @@ Item {
             Text {
                 text: "deny = bloquea · allow = auto-aprueba · ask = pide aprobación. kind opcional (read/write/shell)."
                 color: Theme.textMuted; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap
+            }
+        }
+    }
+
+    Dialog {
+        id: skillsDialog
+        modal: true
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
+        width: 680
+        height: 500
+        closePolicy: Popup.CloseOnEscape
+        background: Rectangle {
+            color: Theme.popupBg; radius: 12
+            border.color: Theme.popupBorderColor; border.width: 1
+        }
+        Overlay.modal: Rectangle { color: Theme.overlayColor }
+        header: Rectangle {
+            color: Theme.popupHeaderBg; height: 58; radius: 12
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 12; color: Theme.popupHeaderBg }
+            Column {
+                anchors { left: parent.left; leftMargin: 22; verticalCenter: parent.verticalCenter }
+                Text { text: "Habilidades portables"; color: Theme.textPrimary; font.pixelSize: 15; font.bold: true }
+                Text {
+                    text: "Globales: AppLocalData/skills · Proyecto: .llamacode/skills"
+                    color: Theme.textMuted; font.pixelSize: 11
+                }
+            }
+        }
+        footer: Rectangle {
+            color: Theme.popupHeaderBg; height: 54; radius: 12
+            LcButton {
+                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                text: "Cerrar"; secondary: true; onClicked: skillsDialog.close()
+            }
+        }
+        contentItem: RowLayout {
+            spacing: 10
+            Rectangle {
+                Layout.preferredWidth: 260; Layout.fillHeight: true
+                color: Theme.inputBg; radius: 8; border.color: Theme.borderColor
+                ListView {
+                    anchors.fill: parent; anchors.margins: 4
+                    clip: true; spacing: 3
+                    model: root.portableSkillRows
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: ListView.view.width; height: 58; radius: 6
+                        color: root.selectedPortableSkill.name === modelData.name
+                               ? Theme.highlight : "transparent"
+                        Column {
+                            anchors { fill: parent; margins: 8 }
+                            Text { text: modelData.name; color: Theme.textPrimary; font.bold: true; font.pixelSize: 12 }
+                            Text {
+                                text: modelData.scope + " · " + modelData.description
+                                color: Theme.textMuted; font.pixelSize: 10
+                                width: parent.width; elide: Text.ElideRight
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: root.selectedPortableSkill = App.portableSkill(modelData.name)
+                        }
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        visible: root.portableSkillRows.length === 0
+                        text: "No hay skills instalados"
+                        color: Theme.textMuted; font.pixelSize: 12
+                    }
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true; Layout.fillHeight: true
+                color: Theme.inputBg; radius: 8; border.color: Theme.borderColor
+                ScrollView {
+                    anchors.fill: parent; anchors.margins: 8
+                    TextArea {
+                        readOnly: true; selectByMouse: true
+                        wrapMode: TextArea.WrapAtWordBoundaryOrAnywhere
+                        color: Theme.textPrimary; background: null
+                        font { family: Theme.codeFont; pixelSize: 11 }
+                        text: root.selectedPortableSkill.instructions
+                              || "Seleccioná una habilidad para inspeccionar sus instrucciones."
+                    }
+                }
             }
         }
     }
@@ -2514,7 +3847,7 @@ Item {
                     placeholderText: "Convenciones, comandos de build/test, arquitectura, do/don't del proyecto…"
                     color: Theme.textPrimary
                     placeholderTextColor: Theme.textMuted
-                    font { family: "Consolas,monospace"; pixelSize: 12 }
+                    font { family: Theme.codeFont; pixelSize: 12 }
                     wrapMode: TextArea.WrapAtWordBoundaryOrAnywhere
                     background: null
                     padding: 10

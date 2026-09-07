@@ -1,0 +1,40 @@
+{
+    "agentProfileId": "agent-chat",
+    "agentProfileName": "Chat liviano",
+    "label": "Eval · Snake retro (HTML single-file) por nivel",
+    "mode": "custom",
+    "passes": 1,
+    "profiles": [
+        {
+            "profileId": "5c3d9bda-8810-4331-a770-1c981461fe17",
+            "profileName": "1_Llama.cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ"
+        }
+    ],
+    "startedAt": "2026-06-29T10:47:53",
+    "target": "agent",
+    "tasks": [
+        {
+            "acceptance": {
+                "commands": [
+                ],
+                "expectSubstrings": [
+                    "<canvas",
+                    "<style",
+                    "<script",
+                    "getContext",
+                    "addEventListener",
+                    "keydown",
+                    "score"
+                ],
+                "files": [
+                ]
+            },
+            "category": "coding",
+            "id": "snake-singlefile",
+            "isSpeed": false,
+            "maxTokens": 8000,
+            "prompt": "Creame una página HTML con CSS y JS embebido, con estética retro, que permita jugar al clásico SNAKE donde una viborita se desplaza sobre el plano comiendo manzanas y agrandándose, los assets deben ser simil NES/Family Game/8 bit. Hacele las mejoras que creas necesarias. Entregá UN solo archivo .html autocontenido (sin dependencias externas, sin CDNs)."
+        }
+    ],
+    "timestamp": 1782740873405
+}

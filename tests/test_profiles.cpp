@@ -13,6 +13,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <algorithm>
 #include "core/profiles/ProfileTypes.h"
 #include "core/profiles/ProfileManager.h"
 
@@ -26,6 +27,7 @@ private slots:
     void modelProfile_jsonRoundTrip();
     void runtimePreset_jsonRoundTrip();
     void launchProfile_jsonRoundTrip();
+    void agentProfile_thinkingLeakGuardRoundTripAndDefault();
     void masterConfig_jsonRoundTrip();
     void masterConfig_legacyMigration();
 
@@ -34,8 +36,17 @@ private slots:
     void manager_setBackendCloud();
     void manager_addModelProfile();
     void manager_favoriteAndAlias();
+    void manager_benchmarkQueue();
+    void manager_profileSearchFiltersNameAliasAndId();
+    void manager_tagsAndLastUsed();
+    void manager_profileTemplatesRoundTrip();
+    void manager_harnessArgsEnvRoundTrip();
+    void manager_deprecatedIsProfilesOnly();
     void manager_browserAutomationOverride();
+    void manager_systemProfilesReloadIdempotent();
     void manager_persistsAcrossInstances();
+    void manager_exportImportBundle();
+    void manager_profileChangeHistory();
 
     void migracion_copiaLosPerfilesSiElDestinoEstaVacio();
     void migracion_noPisaLoQueYaHayEnElDestino();
@@ -95,7 +106,9 @@ void ProfilesTests::modelProfile_jsonRoundTrip()
     ModelProfile m;
     m.id = "m1"; m.name = "qwen"; m.modelId = "cat1";
     m.mmprojId = "mm1"; m.draftModelId = "d1";
-    m.specType = "draft-mtp"; m.specDraftNMax = 3; m.specDraftNgl = "all";
+    m.specType = "draft-dspark"; m.specDraftNMax = 3; m.specDraftNMin = 2;
+    m.specDraftAdaptive = true; m.specDraftConfMin = 0.6;
+    m.specDraftNgl = "all";
     m.specDraftTypeK = "q8_0"; m.specDraftTypeV = "q8_0";
     const ModelProfile r = ModelProfile::fromJson(m.toJson());
     QCOMPARE(r.name, m.name);
@@ -104,9 +117,21 @@ void ProfilesTests::modelProfile_jsonRoundTrip()
     QCOMPARE(r.draftModelId, m.draftModelId);
     QCOMPARE(r.specType, m.specType);
     QCOMPARE(r.specDraftNMax, m.specDraftNMax);
+    QCOMPARE(r.specDraftNMin, m.specDraftNMin);
+    QCOMPARE(r.specDraftAdaptive, m.specDraftAdaptive);
+    QCOMPARE(r.specDraftConfMin, m.specDraftConfMin);
     QCOMPARE(r.specDraftNgl, m.specDraftNgl);
     QCOMPARE(r.specDraftTypeK, m.specDraftTypeK);
     QCOMPARE(r.specDraftTypeV, m.specDraftTypeV);
+
+    // Perfiles anteriores no tienen los campos nuevos y deben seguir siendo
+    // speculative fijo, sin activar adaptive por defecto.
+    const ModelProfile legacy = ModelProfile::fromJson(QJsonObject{
+        {QStringLiteral("specType"), QStringLiteral("draft-mtp")},
+        {QStringLiteral("specDraftNMax"), 3}
+    });
+    QCOMPARE(legacy.specDraftNMin, 0);
+    QVERIFY(!legacy.specDraftAdaptive);
 }
 
 void ProfilesTests::runtimePreset_jsonRoundTrip()
@@ -132,18 +157,27 @@ void ProfilesTests::runtimePreset_jsonRoundTrip()
 void ProfilesTests::launchProfile_jsonRoundTrip()
 {
     LaunchProfile l;
-    l.id = "l1"; l.name = "prod"; l.alias = "P"; l.favorite = true;
+    l.id = "l1"; l.name = "prod"; l.alias = "P"; l.best = true; l.favorite = true;
+    l.systemBadge = true; l.benchmark = true; l.deprecated = true;
     l.backendProfileId = "b1"; l.modelProfileId = "m1"; l.runtimePresetId = "r1";
     l.extraArgs = QStringList{"--verbose"};
     MasterFallback mf; mf.type = "cli"; mf.cliName = "claude";
     l.master.fallbacks.append(mf);
     l.powerLimitW = 280;
     l.browserAutomation = "on";
+    l.tags = QStringList{"coding", "local"};
+    l.lastUsed = 123456789;
+    l.plannerProfileId = "planner-maxq";
+    l.hybridMode = "sequential";
     const LaunchProfile r = LaunchProfile::fromJson(l.toJson());
     QCOMPARE(r.browserAutomation, QStringLiteral("on"));
     QCOMPARE(r.name, l.name);
     QCOMPARE(r.alias, l.alias);
+    QCOMPARE(r.best, l.best);
     QCOMPARE(r.favorite, l.favorite);
+    QCOMPARE(r.systemBadge, l.systemBadge);
+    QCOMPARE(r.benchmark, l.benchmark);
+    QCOMPARE(r.deprecated, l.deprecated);
     QCOMPARE(r.backendProfileId, l.backendProfileId);
     QCOMPARE(r.modelProfileId, l.modelProfileId);
     QCOMPARE(r.extraArgs, l.extraArgs);
@@ -151,12 +185,34 @@ void ProfilesTests::launchProfile_jsonRoundTrip()
     QCOMPARE(r.master.fallbacks.first().type, QStringLiteral("cli"));
     QCOMPARE(r.master.fallbacks.first().cliName, QStringLiteral("claude"));
     QCOMPARE(r.powerLimitW, 280);
+    QCOMPARE(r.plannerProfileId, QStringLiteral("planner-maxq"));
+    QCOMPARE(r.hybridMode, QStringLiteral("sequential"));
+    QCOMPARE(r.tags, l.tags);
+    QCOMPARE(r.lastUsed, l.lastUsed);
     // Default (campo ausente) → 0 = sin override.
     LaunchProfile empty;
     QCOMPARE(LaunchProfile::fromJson(empty.toJson()).powerLimitW, 0);
     // browserAutomation ausente → default "inherit".
     QCOMPARE(LaunchProfile::fromJson(empty.toJson()).browserAutomation,
              QStringLiteral("inherit"));
+    QCOMPARE(LaunchProfile::fromJson(QJsonObject{}).hybridMode,
+             QStringLiteral("off"));
+}
+
+void ProfilesTests::agentProfile_thinkingLeakGuardRoundTripAndDefault()
+{
+    AgentProfile profile;
+    profile.id = QStringLiteral("nanbeige-agent");
+    profile.name = QStringLiteral("Nanbeige compat");
+    profile.thinkingLeakGuard = true;
+    const AgentProfile restored = AgentProfile::fromJson(profile.toJson());
+    QVERIFY(restored.thinkingLeakGuard);
+
+    // Perfiles viejos y perfiles nuevos sin opt-in conservan el comportamiento
+    // estándar del template/modelo.
+    QVERIFY(!AgentProfile::fromJson(QJsonObject{}).thinkingLeakGuard);
+    for (const AgentProfile &preset : AgentProfile::systemPresets())
+        QVERIFY(!preset.thinkingLeakGuard);
 }
 
 void ProfilesTests::masterConfig_jsonRoundTrip()
@@ -268,11 +324,14 @@ void ProfilesTests::manager_addModelProfile()
     QVERIFY(!id.isEmpty());
     QCOMPARE(pm.getModelProfile(id).value("modelId").toString(), QStringLiteral("cat1"));
 
-    // setModelSpec persiste la config MTP y getModelProfile la expone.
-    QVERIFY(pm.setModelSpec(id, "draft-mtp", 3, "all", "q8_0", "q8_0"));
+    // setModelSpec persiste la configuración DSpark y getModelProfile la expone.
+    QVERIFY(pm.setModelSpec(id, "draft-dspark", 3, "all", "q8_0", "q8_0", 0.6, 2, true));
     const QVariantMap m = pm.getModelProfile(id);
-    QCOMPARE(m.value("specType").toString(), QStringLiteral("draft-mtp"));
+    QCOMPARE(m.value("specType").toString(), QStringLiteral("draft-dspark"));
     QCOMPARE(m.value("specDraftNMax").toInt(), 3);
+    QCOMPARE(m.value("specDraftNMin").toInt(), 2);
+    QVERIFY(m.value("specDraftAdaptive").toBool());
+    QCOMPARE(m.value("specDraftConfMin").toDouble(), 0.6);
     QCOMPARE(m.value("specDraftTypeK").toString(), QStringLiteral("q8_0"));
 
     QVERIFY(pm.removeModelProfile(id));
@@ -284,16 +343,124 @@ void ProfilesTests::manager_favoriteAndAlias()
     const QString id = pm.addLaunchProfile("L", "b", "m", "r");
     QVERIFY(!id.isEmpty());
     pm.setLaunchFavorite(id, true);
+    QVERIFY(pm.updateLaunchProfile(QVariantMap{{"id", id}, {"best", true}}));
     pm.setLaunchAlias(id, "Alias");
     const QVariantList menu = pm.launchProfilesForMenu();
     QVERIFY(!menu.isEmpty());
-    const QVariantMap top = menu.first().toMap();
-    QCOMPARE(top.value("alias").toString(), QStringLiteral("Alias"));
-    QVERIFY(top.value("favorite").toBool());
+    const auto it = std::find_if(menu.cbegin(), menu.cend(), [&](const QVariant &value) {
+        return value.toMap().value("id").toString() == id;
+    });
+    QVERIFY(it != menu.cend());
+    const QVariantMap row = it->toMap();
+    QCOMPARE(row.value("alias").toString(), QStringLiteral("Alias"));
+    QVERIFY(row.value("favorite").toBool());
     // displayName antepone la estrella a los favoritos y muestra alias + nombre.
-    QCOMPARE(top.value("displayName").toString(), QStringLiteral("★ Alias - 1_L"));
+    QCOMPARE(row.value("displayName").toString(), QStringLiteral("⚡ ★ Alias - 1_L"));
+    QVERIFY(row.value("best").toBool());
     QCOMPARE(pm.getLaunchProfile(id).value("displayName").toString(),
              QStringLiteral("Alias - 1_L"));
+}
+
+void ProfilesTests::manager_benchmarkQueue()
+{
+    ProfileManager pm;
+    const QString id = pm.addLaunchProfile(QStringLiteral("Pendiente"), "b", "m", "r");
+    QVERIFY(!id.isEmpty());
+
+    pm.setLaunchBenchmark(id, true);
+    const QVariantMap queued = pm.getLaunchProfile(id);
+    QVERIFY(queued.value(QStringLiteral("benchmark")).toBool());
+
+    const QVariantList menu = pm.launchProfilesForMenu();
+    QVERIFY(std::any_of(menu.cbegin(), menu.cend(), [&](const QVariant &value) {
+        const QVariantMap row = value.toMap();
+        return row.value(QStringLiteral("id")).toString() == id
+            && row.value(QStringLiteral("benchmark")).toBool()
+            && row.value(QStringLiteral("displayName")).toString().contains(QStringLiteral("🏆"));
+    }));
+
+    {
+        ProfileManager reloaded;
+        QVERIFY(reloaded.getLaunchProfile(id).value(QStringLiteral("benchmark")).toBool());
+    }
+
+    pm.setLaunchBenchmark(id, false);
+    QVERIFY(!pm.getLaunchProfile(id).value(QStringLiteral("benchmark")).toBool());
+}
+
+void ProfilesTests::manager_profileSearchFiltersNameAliasAndId()
+{
+    ProfileManager pm;
+    const QString id = pm.addLaunchProfile(QStringLiteral("Qwen análisis"), {}, {}, {});
+    QVERIFY(!id.isEmpty());
+    pm.setLaunchAlias(id, QStringLiteral("Documentos"));
+
+    const QVariantList byName = pm.launchProfilesForProfilesPage(QStringLiteral("ANÁLISIS"));
+    QVERIFY(std::any_of(byName.cbegin(), byName.cend(), [&](const QVariant &v) {
+        return v.toMap().value(QStringLiteral("id")).toString() == id;
+    }));
+    const QVariantList byAlias = pm.launchProfilesForProfilesPage(QStringLiteral("documentos"));
+    QCOMPARE(byAlias.size(), 1);
+    QCOMPARE(byAlias.first().toMap().value(QStringLiteral("id")).toString(), id);
+    const QVariantList byId = pm.launchProfilesForProfilesPage(id.left(8));
+    QVERIFY(std::any_of(byId.cbegin(), byId.cend(), [&](const QVariant &v) {
+        return v.toMap().value(QStringLiteral("id")).toString() == id;
+    }));
+    QVERIFY(pm.launchProfilesForProfilesPage(QStringLiteral("no existe")).isEmpty());
+}
+
+void ProfilesTests::manager_tagsAndLastUsed()
+{
+    ProfileManager pm;
+    const QString id = pm.addLaunchProfile(QStringLiteral("Tagged"), {}, {}, {});
+    QVERIFY(!id.isEmpty());
+    QVERIFY(pm.updateLaunchProfile(QVariantMap{{"id", id}, {"tags", QStringList{" coding ", "local", "CODING"}}}));
+    const QVariantMap before = pm.getLaunchProfile(id);
+    QCOMPARE(before.value("tags").toStringList(), QStringList({"coding", "local"}));
+    QCOMPARE(before.value("lastUsed").toLongLong(), 0);
+
+    pm.markLaunchUsed(id);
+    const QVariantMap after = pm.getLaunchProfile(id);
+    QVERIFY(after.value("lastUsed").toLongLong() > 0);
+    const QVariantList byTag = pm.launchProfilesForProfilesPage(QStringLiteral("LOCAL"));
+    QVERIFY(std::any_of(byTag.cbegin(), byTag.cend(), [&](const QVariant &value) {
+        return value.toMap().value("id").toString() == id;
+    }));
+}
+
+void ProfilesTests::manager_profileTemplatesRoundTrip()
+{
+    ProfileManager pm;
+    const QString launch = pm.addLaunchProfile(QStringLiteral("Template source"), "be", "mo", "rt");
+    QVERIFY(!launch.isEmpty());
+    QVERIFY(pm.updateLaunchProfile(QVariantMap{{"id", launch}, {"tags", QStringList{"coding"}},
+                                               {"extraArgs", QStringList{"--temp", "0.6"}},
+                                               {"envOverrides", QVariantMap{{"TEST_TEMPLATE", "1"}}}}));
+    const QString tid = pm.saveLaunchAsTemplate(launch, QStringLiteral("Coding local"));
+    QVERIFY(!tid.isEmpty());
+    const QVariantList templates = pm.profileTemplates();
+    QVERIFY(std::any_of(templates.cbegin(), templates.cend(), [&](const QVariant &v) {
+        return v.toMap().value(QStringLiteral("id")).toString() == tid;
+    }));
+    const QString copy = pm.createLaunchFromTemplate(tid, QStringLiteral("From template"));
+    QVERIFY(!copy.isEmpty());
+    const QVariantMap restored = pm.getLaunchProfile(copy);
+    QCOMPARE(restored.value(QStringLiteral("tags")).toStringList(), QStringList{"coding"});
+    const QStringList expectedArgs{"--temp", "0.6"};
+    QCOMPARE(restored.value(QStringLiteral("extraArgs")).toStringList(), expectedArgs);
+    QCOMPARE(restored.value(QStringLiteral("envOverrides")).toMap().value(QStringLiteral("TEST_TEMPLATE")).toString(), QStringLiteral("1"));
+    QVERIFY(pm.removeProfileTemplate(tid));
+}
+
+void ProfilesTests::manager_harnessArgsEnvRoundTrip()
+{
+    ProfileManager pm;
+    const QString id = pm.addHarness(QStringLiteral("Harness"), QStringLiteral("llamaagent"));
+    QVERIFY(pm.updateHarness(QVariantMap{{"id", id}, {"args", QStringList{"--quiet"}},
+                                         {"env", QVariantMap{{"HARNESS_MODE", "test"}}}}));
+    const QVariantMap got = pm.getHarness(id);
+    QCOMPARE(got.value(QStringLiteral("args")).toStringList(), QStringList{"--quiet"});
+    QCOMPARE(got.value(QStringLiteral("env")).toMap().value(QStringLiteral("HARNESS_MODE")).toString(), QStringLiteral("test"));
 }
 
 void ProfilesTests::manager_browserAutomationOverride()
@@ -309,6 +476,48 @@ void ProfilesTests::manager_browserAutomationOverride()
         {"id", id}, {"browserAutomation", "off"}}));
     QCOMPARE(pm.getLaunchProfile(id).value("browserAutomation").toString(),
              QStringLiteral("off"));
+}
+
+void ProfilesTests::manager_deprecatedIsProfilesOnly()
+{
+    ProfileManager pm;
+    const QString id = pm.addLaunchProfile("Deprecated", "b", "m", "r");
+    QVERIFY(!id.isEmpty());
+    QVERIFY(pm.updateLaunchProfile(QVariantMap{{"id", id}, {"deprecated", true},
+                                                {"systemBadge", true}, {"benchmark", true}}));
+    QCOMPARE(pm.getLaunchProfile(id).value("deprecated").toBool(), true);
+    QCOMPARE(pm.getLaunchProfile(id).value("systemBadge").toBool(), true);
+    QCOMPARE(pm.getLaunchProfile(id).value("benchmark").toBool(), true);
+    const QVariantList menu = pm.launchProfilesForMenu();
+    for (const QVariant &v : menu)
+        QVERIFY(v.toMap().value("id").toString() != id);
+    const QVariantList profiles = pm.launchProfilesForProfilesPage();
+    bool found = false;
+    for (const QVariant &v : profiles) {
+        if (v.toMap().value("id").toString() == id) {
+            found = true;
+            QCOMPARE(v.toMap().value("deprecated").toBool(), true);
+            QVERIFY(v.toMap().value("displayName").toString().startsWith(QStringLiteral("⚙ 🏆 ⚠ ")));
+        }
+    }
+    QVERIFY(found);
+}
+
+void ProfilesTests::manager_systemProfilesReloadIdempotent()
+{
+    ProfileManager pm;
+    const int launchCount = pm.launchProfiles()->rowCount();
+    const int modelCount = pm.modelProfiles()->rowCount();
+    const int runtimeCount = pm.runtimePresets()->rowCount();
+    const int backendCount = pm.backendProfiles()->rowCount();
+    const int agentCount = pm.agentProfiles()->rowCount();
+
+    pm.reloadFromDisk();
+    QCOMPARE(pm.launchProfiles()->rowCount(), launchCount);
+    QCOMPARE(pm.modelProfiles()->rowCount(), modelCount);
+    QCOMPARE(pm.runtimePresets()->rowCount(), runtimeCount);
+    QCOMPARE(pm.backendProfiles()->rowCount(), backendCount);
+    QCOMPARE(pm.agentProfiles()->rowCount(), agentCount);
 }
 
 void ProfilesTests::manager_persistsAcrossInstances()
@@ -431,6 +640,45 @@ void ProfilesTests::rutaDePerfiles_imprimeLaRaiz()
     QStandardPaths::setTestModeEnabled(true);
     printf("RAIZ=%s\n", qPrintable(ProfileManager::profilesRoot()));
     fflush(stdout);
+}
+
+void ProfilesTests::manager_exportImportBundle()
+{
+    ProfileManager pm;
+    const QString backendId = pm.addBackend("bundle-backend", "bin-bundle",
+                                            "127.0.0.1", 9191);
+    QVERIFY(!backendId.isEmpty());
+    const QString launchId = pm.addLaunchProfile("bundle-launch", backendId, "model-missing",
+                                                 "runtime-missing");
+    QVERIFY(!launchId.isEmpty());
+    const QString json = pm.exportProfilesBundle();
+    QVERIFY(json.contains(QStringLiteral("schemaVersion")));
+    QVERIFY(json.contains(QStringLiteral("bundle-backend")));
+
+    QVERIFY(pm.removeBackend(backendId));
+    QVERIFY(pm.removeLaunchProfile(launchId));
+    const int imported = pm.importProfilesBundle(json);
+    QVERIFY(imported >= 2);
+    QCOMPARE(pm.getBackend(backendId).value(QStringLiteral("name")).toString(),
+             QStringLiteral("bundle-backend"));
+    QVERIFY(pm.getLaunchProfile(launchId).value(QStringLiteral("name")).toString()
+            .endsWith(QStringLiteral("_bundle-launch")));
+    QCOMPARE(pm.importProfilesBundle(QStringLiteral("not-json")), -1);
+    QCOMPARE(pm.importProfilesBundle(QStringLiteral("{\"schemaVersion\":99}")), -1);
+}
+
+void ProfilesTests::manager_profileChangeHistory()
+{
+    ProfileManager pm;
+    const QString id = pm.addBackend(QStringLiteral("history-a"), QStringLiteral("bin"),
+                                     QStringLiteral("127.0.0.1"), 9911);
+    QVERIFY(!id.isEmpty());
+    QVERIFY(pm.updateBackendPort(id, 9912));
+    const QVariantList history = pm.profileChangeHistory(QStringLiteral("backend"), id, 10);
+    QVERIFY(history.size() >= 2);
+    QCOMPARE(history.first().toMap().value(QStringLiteral("id")).toString(), id);
+    QVERIFY(history.first().toMap().value(QStringLiteral("snapshot")).toMap()
+                .value(QStringLiteral("name")).toString().contains(QStringLiteral("history-a")));
 }
 
 QTEST_MAIN(ProfilesTests)

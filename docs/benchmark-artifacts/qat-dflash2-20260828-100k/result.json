@@ -1,0 +1,178 @@
+{
+  "generatedAt": "2026-08-28T21:20:42.8171159-03:00",
+  "server": "D:\\Models\\llamacpp\\llama.cpp-b10331-cuda12.4\\llama-server.exe",
+  "serverVersion": "version: 10331 (7ba604f1c)",
+  "contextSize": 100000,
+  "maxTokens": 64,
+  "hardware": "2x RTX 3090 24GB; split-mode layer; tensor-split 1,1",
+  "sampling": {
+    "temperature": 0.6,
+    "topP": 0.95,
+    "topK": 20,
+    "minP": 0.0,
+    "repeatPenalty": 1.0,
+    "presencePenalty": 0.0,
+    "seed": 42
+  },
+  "manifest": [
+    {
+      "path": "D:\\Models\\llamacpp\\llama.cpp-b10331-cuda12.4\\llama-server.exe",
+      "bytes": 9216,
+      "lastWriteTimeUtc": "2026-08-09T01:55:22.0000000Z",
+      "sha256": "23f1fa1f7fc673768b10fba736e3bc34ba6ae03187f94c37eb70d9699617ee9d"
+    },
+    {
+      "path": "D:\\Models\\llamacpp\\Qwen3.8-27B-GGUF-Q4_K_M\\Qwen3.8-27B-Q4_K_M.gguf",
+      "bytes": 17106775008,
+      "lastWriteTimeUtc": "2026-08-14T18:30:44.6573687Z",
+      "sha256": "7e78da5d7e3ae28d178121f58646953305f3e5bd3cb46f4a75584e8b6c6fe169"
+    },
+    {
+      "path": "D:\\Models\\llamacpp\\Qwen3.8-27B-DFlash2-GGUF\\Qwen3.8-27B-DFlash2-Q4_K_M.v2.gguf",
+      "bytes": 1143006752,
+      "lastWriteTimeUtc": "2026-08-19T23:19:10.2817546Z",
+      "sha256": "18a380efc9b7ed8d88677fc895f5c11ae170653434ee378f7348f715c14d0594"
+    },
+    {
+      "path": "C:\\Users\\cristian\\Documents\\LlamaCode\\assets\\chat-templates\\qwen38-tools-fixed.jinja",
+      "bytes": 27835,
+      "lastWriteTimeUtc": "2026-08-16T03:13:24.2246756Z",
+      "sha256": "03c3e852d2c349ce306ed9ecd870c83487bf123918843387b179ead1fcce93af"
+    }
+  ],
+  "omissions": [
+    "QAT Q2 main GGUF not present locally",
+    "DFlash2 Q2_K_S-MIX draft not present locally",
+    "MTP omitted: no verified compatible artifact for this standard Qwen3.8 target"
+  ],
+  "summary": [
+    {
+      "mode": "baseline-autoregressive",
+      "quality": "0/4",
+      "medianPromptMs": 152.6,
+      "medianDecodeTps": 36.21,
+      "medianWallSec": 1.976
+    },
+    {
+      "mode": "ngram-mod",
+      "quality": "0/4",
+      "medianPromptMs": 166.3,
+      "medianDecodeTps": 36.28,
+      "medianWallSec": 1.984
+    }
+  ],
+  "runs": [
+    {
+      "mode": "baseline-autoregressive",
+      "rows": [
+        {
+          "mode": "baseline-autoregressive",
+          "task": "last-digit",
+          "ok": false,
+          "wallSec": 1.976,
+          "promptTokens": 40,
+          "promptMs": 152.6,
+          "predictedTokens": 64,
+          "decodeMs": 1769.6,
+          "decodeTps": 36.17,
+          "content": "To compute the last digit of $7^{7^7}$, we need to determine the value of $7^{7^7} \\pmod{10}$.\n\n**Step 1: Analyze the pattern of powers of 7 modulo 10.**\nLet's look at the last digits"
+        },
+        {
+          "mode": "baseline-autoregressive",
+          "task": "mississippi",
+          "ok": false,
+          "wallSec": 1.961,
+          "promptTokens": 38,
+          "promptMs": 142.2,
+          "predictedTokens": 64,
+          "decodeMs": 1766.9,
+          "decodeTps": 36.22,
+          "content": "To find the number of distinct permutations of the word **MISSISSIPPI**, we first analyze the frequency of each letter:\n\n*   Total letters: 11\n*   **M**: 1\n*   **I**: 4\n*   **S**: 4\n*   **P**:"
+        },
+        {
+          "mode": "baseline-autoregressive",
+          "task": "python-output",
+          "ok": false,
+          "wallSec": 1.974,
+          "promptTokens": 45,
+          "promptMs": 151.6,
+          "predictedTokens": 64,
+          "decodeMs": 1767.4,
+          "decodeTps": 36.21,
+          "content": "The expression `range(1, 4)` generates the integers 1, 2, and 3. The list comprehension `[x*x for x in range(1,4)]` iterates through these numbers and squares each one: $1^2 = 1$, $2^2 = 4"
+        },
+        {
+          "mode": "baseline-autoregressive",
+          "task": "code-review",
+          "ok": false,
+          "wallSec": 2.038,
+          "promptTokens": 58,
+          "promptMs": 165.3,
+          "predictedTokens": 64,
+          "decodeMs": 1819.1,
+          "decodeTps": 35.18,
+          "content": "The requirement specifies a robust grouping function that partitions a list of dictionaries by the \"run\" key while maintaining the original insertion order of keys and ensuring the input data remains immutable, explicitly handling the empty input scenario by returning an empty result. The primary edge case to consider is how the function handles dictionaries missing the \"run\""
+        }
+      ],
+      "metrics": "# HELP llamacpp:prompt_tokens_total Number of prompt tokens processed.\n# TYPE llamacpp:prompt_tokens_total counter\nllamacpp:prompt_tokens_total 200\n# HELP llamacpp:prompt_seconds_total Prompt process time\n# TYPE llamacpp:prompt_seconds_total counter\nllamacpp:prompt_seconds_total 0.989\n# HELP llamacpp:tokens_predicted_total Number of generation tokens processed.\n# TYPE llamacpp:tokens_predicted_total counter\nllamacpp:tokens_predicted_total 260\n# HELP llamacpp:tokens_predicted_seconds_total Predict process time\n# TYPE llamacpp:tokens_predicted_seconds_total counter\nllamacpp:tokens_predicted_seconds_total 7.258\n# HELP llamacpp:n_decode_total Total number of llama_decode() calls\n# TYPE llamacpp:n_decode_total counter\nllamacpp:n_decode_total 265\n# HELP llamacpp:n_tokens_max Largest observed n_tokens.\n# TYPE llamacpp:n_tokens_max counter\nllamacpp:n_tokens_max 121\n# HELP llamacpp:spec_decode_num_draft_tokens_total Total draft tokens generated\n# TYPE llamacpp:spec_decode_num_draft_tokens_total counter\nllamacpp:spec_decode_num_draft_tokens_total 0\n# HELP llamacpp:spec_decode_num_accepted_tokens_total Total draft tokens accepted by the target model\n# TYPE llamacpp:spec_decode_num_accepted_tokens_total counter\nllamacpp:spec_decode_num_accepted_tokens_total 0\n# HELP llamacpp:spec_decode_num_drafts_total Total speculative decoding verification steps\n# TYPE llamacpp:spec_decode_num_drafts_total counter\nllamacpp:spec_decode_num_drafts_total 0\n# HELP llamacpp:prompt_tokens_seconds Average prompt throughput in tokens/s.\n# TYPE llamacpp:prompt_tokens_seconds gauge\nllamacpp:prompt_tokens_seconds 202.224\n# HELP llamacpp:predicted_tokens_seconds Average generation throughput in tokens/s.\n# TYPE llamacpp:predicted_tokens_seconds gauge\nllamacpp:predicted_tokens_seconds 35.8225\n# HELP llamacpp:requests_processing Number of requests processing.\n# TYPE llamacpp:requests_processing gauge\nllamacpp:requests_processing 0\n# HELP llamacpp:requests_deferred Number of requests deferred.\n# TYPE llamacpp:requests_deferred gauge\nllamacpp:requests_deferred 0\n# HELP llamacpp:n_busy_slots_per_decode Average number of busy slots per llama_decode() call\n# TYPE llamacpp:n_busy_slots_per_decode gauge\nllamacpp:n_busy_slots_per_decode 1\n\r\n",
+      "stdout": "C:\\Users\\cristian\\Documents\\LlamaCode\\tools\\..\\docs\\benchmark-artifacts\\qat-dflash2-20260828-100k\\baseline-autoregressive.server.stdout.log",
+      "stderr": "C:\\Users\\cristian\\Documents\\LlamaCode\\tools\\..\\docs\\benchmark-artifacts\\qat-dflash2-20260828-100k\\baseline-autoregressive.server.stderr.log"
+    },
+    {
+      "mode": "ngram-mod",
+      "rows": [
+        {
+          "mode": "ngram-mod",
+          "task": "last-digit",
+          "ok": false,
+          "wallSec": 2.204,
+          "promptTokens": 40,
+          "promptMs": 197.6,
+          "predictedTokens": 64,
+          "decodeMs": 1954.7,
+          "decodeTps": 32.74,
+          "content": "To compute the last digit of $7^{7^7}$, we need to determine the value of $7^{7^7} \\pmod{10}$.\n\n**Step 1: Analyze the pattern of powers of 7 modulo 10.**\nLet's look at the last digits"
+        },
+        {
+          "mode": "ngram-mod",
+          "task": "mississippi",
+          "ok": false,
+          "wallSec": 1.961,
+          "promptTokens": 38,
+          "promptMs": 145.5,
+          "predictedTokens": 64,
+          "decodeMs": 1762.2,
+          "decodeTps": 36.32,
+          "content": "To find the number of distinct permutations of the word **MISSISSIPPI**, we first analyze the frequency of each letter:\n\n*   Total letters: 11\n*   **M**: 1\n*   **I**: 4\n*   **S**: 4\n*   **P**:"
+        },
+        {
+          "mode": "ngram-mod",
+          "task": "python-output",
+          "ok": false,
+          "wallSec": 1.967,
+          "promptTokens": 45,
+          "promptMs": 149.1,
+          "predictedTokens": 64,
+          "decodeMs": 1764.4,
+          "decodeTps": 36.27,
+          "content": "The expression `range(1, 4)` generates the integers 1, 2, and 3. The list comprehension `[x*x for x in range(1,4)]` iterates through these numbers and squares each one: $1^2 = 1$, $2^2 = 4"
+        },
+        {
+          "mode": "ngram-mod",
+          "task": "code-review",
+          "ok": false,
+          "wallSec": 1.984,
+          "promptTokens": 58,
+          "promptMs": 166.3,
+          "predictedTokens": 64,
+          "decodeMs": 1764.1,
+          "decodeTps": 36.28,
+          "content": "The requirement specifies a robust grouping function that partitions a list of dictionaries by the \"run\" key while maintaining the original insertion order of keys and ensuring the input data remains immutable, explicitly handling the empty input scenario by returning an empty result. The primary edge case to consider is how the function handles dictionaries missing the \"run\""
+        }
+      ],
+      "metrics": "# HELP llamacpp:prompt_tokens_total Number of prompt tokens processed.\n# TYPE llamacpp:prompt_tokens_total counter\nllamacpp:prompt_tokens_total 200\n# HELP llamacpp:prompt_seconds_total Prompt process time\n# TYPE llamacpp:prompt_seconds_total counter\nllamacpp:prompt_seconds_total 0.905\n# HELP llamacpp:tokens_predicted_total Number of generation tokens processed.\n# TYPE llamacpp:tokens_predicted_total counter\nllamacpp:tokens_predicted_total 260\n# HELP llamacpp:tokens_predicted_seconds_total Predict process time\n# TYPE llamacpp:tokens_predicted_seconds_total counter\nllamacpp:tokens_predicted_seconds_total 7.412\n# HELP llamacpp:n_decode_total Total number of llama_decode() calls\n# TYPE llamacpp:n_decode_total counter\nllamacpp:n_decode_total 265\n# HELP llamacpp:n_tokens_max Largest observed n_tokens.\n# TYPE llamacpp:n_tokens_max counter\nllamacpp:n_tokens_max 121\n# HELP llamacpp:spec_decode_num_draft_tokens_total Total draft tokens generated\n# TYPE llamacpp:spec_decode_num_draft_tokens_total counter\nllamacpp:spec_decode_num_draft_tokens_total 0\n# HELP llamacpp:spec_decode_num_accepted_tokens_total Total draft tokens accepted by the target model\n# TYPE llamacpp:spec_decode_num_accepted_tokens_total counter\nllamacpp:spec_decode_num_accepted_tokens_total 0\n# HELP llamacpp:spec_decode_num_drafts_total Total speculative decoding verification steps\n# TYPE llamacpp:spec_decode_num_drafts_total counter\nllamacpp:spec_decode_num_drafts_total 0\n# HELP llamacpp:prompt_tokens_seconds Average prompt throughput in tokens/s.\n# TYPE llamacpp:prompt_tokens_seconds gauge\nllamacpp:prompt_tokens_seconds 220.994\n# HELP llamacpp:predicted_tokens_seconds Average generation throughput in tokens/s.\n# TYPE llamacpp:predicted_tokens_seconds gauge\nllamacpp:predicted_tokens_seconds 35.0783\n# HELP llamacpp:requests_processing Number of requests processing.\n# TYPE llamacpp:requests_processing gauge\nllamacpp:requests_processing 0\n# HELP llamacpp:requests_deferred Number of requests deferred.\n# TYPE llamacpp:requests_deferred gauge\nllamacpp:requests_deferred 0\n# HELP llamacpp:n_busy_slots_per_decode Average number of busy slots per llama_decode() call\n# TYPE llamacpp:n_busy_slots_per_decode gauge\nllamacpp:n_busy_slots_per_decode 1\n\r\n",
+      "stdout": "C:\\Users\\cristian\\Documents\\LlamaCode\\tools\\..\\docs\\benchmark-artifacts\\qat-dflash2-20260828-100k\\ngram-mod.server.stdout.log",
+      "stderr": "C:\\Users\\cristian\\Documents\\LlamaCode\\tools\\..\\docs\\benchmark-artifacts\\qat-dflash2-20260828-100k\\ngram-mod.server.stderr.log"
+    }
+  ]
+}

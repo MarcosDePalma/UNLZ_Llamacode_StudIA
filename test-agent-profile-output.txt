@@ -1,0 +1,38 @@
+********* Start testing of AgentProfilesTests *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-llp64 shared (dynamic) release build; by MSVC 2022), windows 11
+PASS   : AgentProfilesTests::initTestCase()
+PASS   : AgentProfilesTests::agentProfile_jsonRoundTrip()
+PASS   : AgentProfilesTests::systemPresets_shape()
+PASS   : AgentProfilesTests::presets_levelsRestrictCapabilities()
+PASS   : AgentProfilesTests::directiveCatalog_hasAllKeys()
+PASS   : AgentProfilesTests::setDirectives_gatesSystemPrompt()
+PASS   : AgentProfilesTests::setDirectives_defaultIncludesAll()
+PASS   : AgentProfilesTests::honey_isOptInOnly()
+PASS   : AgentProfilesTests::antiBias_isOptInOnly()
+PASS   : AgentProfilesTests::reviewTool_isCataloguedAndSchemaIsReadOnly()
+PASS   : AgentProfilesTests::mcpEnabled_roundTrips()
+QWARN  : AgentProfilesTests::manager_crudAndPersistence() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+QWARN  : AgentProfilesTests::manager_crudAndPersistence() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+PASS   : AgentProfilesTests::manager_crudAndPersistence()
+QWARN  : AgentProfilesTests::manager_systemPresetsImmutable() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+PASS   : AgentProfilesTests::manager_systemPresetsImmutable()
+QWARN  : AgentProfilesTests::manager_recommendsAndClonesTaskProfile() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+PASS   : AgentProfilesTests::manager_recommendsAndClonesTaskProfile()
+QWARN  : AgentProfilesTests::personaStyle_jsonAndPromptBudget() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+PASS   : AgentProfilesTests::personaStyle_jsonAndPromptBudget()
+QWARN  : AgentProfilesTests::manager_personaStyleCrudAndImport() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+PASS   : AgentProfilesTests::manager_personaStyleCrudAndImport()
+QWARN  : AgentProfilesTests::manager_personaStyleDisabledAndPersonalityNoExamples() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+PASS   : AgentProfilesTests::manager_personaStyleDisabledAndPersonalityNoExamples()
+QWARN  : AgentProfilesTests::manager_personaStyleListsAreTypedAndClearable() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+FAIL!  : AgentProfilesTests::manager_personaStyleListsAreTypedAndClearable() 'std::any_of(personalities.cbegin(), personalities.cend(), [&](const QVariant &v) { return v.toMap().value("profileId").toString() == persona; })' returned FALSE. ()
+C:\Users\cristian\Documents\LlamaCode\tests\test_agent_profiles.cpp(164) : failure location
+QWARN  : AgentProfilesTests::manager_headlessPromptPreviewRanksRelevantExample() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+PASS   : AgentProfilesTests::manager_headlessPromptPreviewRanksRelevantExample()
+QWARN  : AgentProfilesTests::manager_appliesModelAnalysisJsonSafely() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+PASS   : AgentProfilesTests::manager_appliesModelAnalysisJsonSafely()
+QWARN  : AgentProfilesTests::manager_rejectsInvalidImportAndClampsLimits() [ProfileManager] no pude abrir system_profiles: ":/assets/system_profiles.json"
+PASS   : AgentProfilesTests::manager_rejectsInvalidImportAndClampsLimits()
+PASS   : AgentProfilesTests::cleanupTestCase()
+Totals: 21 passed, 1 failed, 0 skipped, 0 blacklisted, 607ms
+********* Finished testing of AgentProfilesTests *********

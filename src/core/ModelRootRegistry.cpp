@@ -1,4 +1,5 @@
 #include "ModelRootRegistry.h"
+#include "OllamaImporter.h"
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -6,6 +7,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QPointer>
+#include <QSet>
 #include <QtConcurrent/QtConcurrentRun>
 
 ModelRootRegistry::ModelRootRegistry(ModelCatalog *catalog, QObject *parent)
@@ -15,11 +17,6 @@ ModelRootRegistry::ModelRootRegistry(ModelCatalog *catalog, QObject *parent)
 {
     load();
 
-    // Auto-scan startup roots
-    for (const auto &r : m_items) {
-        if (r.enabled && r.scanMode == "startup")
-            doScan(r);
-    }
 }
 
 int ModelRootRegistry::rowCount(const QModelIndex &parent) const
@@ -38,6 +35,7 @@ QVariant ModelRootRegistry::data(const QModelIndex &index, int role) const
     case PathRole:     return r.path;
     case LabelRole:    return r.label;
     case ScanModeRole: return r.scanMode;
+    case KindRole:     return r.kind;
     case EnabledRole:  return r.enabled;
     case PriorityRole: return r.priority;
     case TagsRole:     return r.tags;
@@ -53,6 +51,7 @@ QHash<int, QByteArray> ModelRootRegistry::roleNames() const
         {PathRole,     "path"},
         {LabelRole,    "label"},
         {ScanModeRole, "scanMode"},
+        {KindRole,     "kind"},
         {EnabledRole,  "enabled"},
         {PriorityRole, "priority"},
         {TagsRole,     "tags"},
@@ -65,11 +64,22 @@ QString ModelRootRegistry::add(const QString &path, const QString &label,
 {
     ModelRoot r;
     r.id = ModelRoot::generateId();
-    r.path = path;
-    r.label = label.isEmpty() ? QFileInfo(path).fileName() : label;
+
+    // Scheme "ollama://[dir]": ingesta de blobs ya descargados por Ollama. Se
+    // resuelve a un directorio de store físico y se marca kind="ollama" para que
+    // el scanner lea los blobs vía manifests en vez de globbear *.gguf.
+    const QString ollamaDir = OllamaImporter::resolveStoreDir(path);
+    if (!ollamaDir.isEmpty()) {
+        r.kind = "ollama";
+        r.path = ollamaDir;
+        r.label = label.isEmpty() ? QStringLiteral("Ollama") : label;
+    } else {
+        r.path = path;
+        r.label = label.isEmpty() ? QFileInfo(path).fileName() : label;
+    }
     r.scanMode = scanMode.isEmpty() ? "manual" : scanMode;
     r.tags = tags;
-    r.isOnline = QFileInfo::exists(path);
+    r.isOnline = QFileInfo::exists(r.path);
     r.enabled = true;
     r.priority = m_items.size();
 
@@ -139,6 +149,13 @@ void ModelRootRegistry::scanAll()
         if (r.enabled) doScan(r);
 }
 
+void ModelRootRegistry::scanStartupRoots()
+{
+    for (const auto &r : m_items)
+        if (r.enabled && r.scanMode == QLatin1String("startup"))
+            doScan(r);
+}
+
 void ModelRootRegistry::refresh()
 {
     for (int i = 0; i < m_items.size(); ++i) {
@@ -160,7 +177,7 @@ QVariantMap ModelRootRegistry::get(const QString &id) const
     const ModelRoot &r = m_items.at(idx);
     return {
         {"id", r.id}, {"path", r.path}, {"label", r.label},
-        {"scanMode", r.scanMode}, {"enabled", r.enabled},
+        {"scanMode", r.scanMode}, {"kind", r.kind}, {"enabled", r.enabled},
         {"priority", r.priority}, {"tags", r.tags}, {"isOnline", r.isOnline}
     };
 }
@@ -215,15 +232,16 @@ void ModelRootRegistry::doScan(const ModelRoot &root)
     const QString rootId = root.id;
     const ModelRoot rootCopy = root;
     ModelCatalog *catalog = m_catalog;
+    const QList<CatalogModel> cached = catalog->allForRoot(root.id);
     QPointer<ModelRootRegistry> self(this);
 
     m_scanning = true;
     emit scanningChanged();
     emit scanStarted(rootId);
 
-    (void)QtConcurrent::run([self, rootCopy, rootId, catalog]() {
+    (void)QtConcurrent::run([self, rootCopy, rootId, catalog, cached]() {
         GGUFScanner scanner;
-        QList<CatalogModel> found = scanner.scan(rootCopy);
+        QList<CatalogModel> found = scanner.scan(rootCopy, cached);
 
         if (!self)
             return;
@@ -232,6 +250,13 @@ void ModelRootRegistry::doScan(const ModelRoot &root)
             if (!self)
                 return;
             catalog->addBatch(found);
+            // Lo que el scan ya no vio en disco deja de estar disponible: si no,
+            // un modelo borrado o movido sigue apareciendo en la UI y en los
+            // perfiles que lo referencian.
+            QSet<QString> present;
+            present.reserve(found.size());
+            for (const CatalogModel &m : found) present.insert(m.id);
+            catalog->reconcileRoot(rootId, present);
             self->m_scanning = false;
             emit self->scanningChanged();
             emit self->scanFinished(rootId, found.size());

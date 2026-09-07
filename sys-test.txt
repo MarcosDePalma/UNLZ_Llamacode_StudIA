@@ -1,0 +1,50 @@
+********* Start testing of SystemProfilesTests *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-llp64 shared (dynamic) release build; by MSVC 2022), windows 11
+PASS   : SystemProfilesTests::initTestCase()
+FAIL!  : SystemProfilesTests::manager_loadsSystemProfiles() Compared values are not the same
+   Actual   (sys): 77
+   Expected (68) : 68
+C:\Users\cristian\Documents\LlamaCode\tests\test_system_profiles.cpp(103) : failure location
+PASS   : SystemProfilesTests::manager_systemNotPersisted()
+PASS   : SystemProfilesTests::manager_immutable()
+PASS   : SystemProfilesTests::manager_duplicateMakesEditableCopy()
+PASS   : SystemProfilesTests::manager_duplicatePreservesLaunchLinkage()
+PASS   : SystemProfilesTests::manager_modelIdIsDeterministic()
+PASS   : SystemProfilesTests::manager_fastGemmaDflashWired()
+FAIL!  : SystemProfilesTests::manager_systemProfilesAvoidAccidentalVisionAndMtp() 'model.value("mmprojId").toString().isEmpty()' returned FALSE. (sys-bench-48-bigbang-base carga mmproj sin ser perfil de visión)
+C:\Users\cristian\Documents\LlamaCode\tests\test_system_profiles.cpp(253) : failure location
+PASS   : SystemProfilesTests::bundle_draftMtpAlwaysDeclaresDraftModel()
+PASS   : SystemProfilesTests::bundle_gemma4TemplateKeepsLlamaCppMarkers()
+PASS   : SystemProfilesTests::manager_smallProfilesAreConservative()
+PASS   : SystemProfilesTests::manager_defaultCodingProfileUsesKatCoder()
+PASS   : SystemProfilesTests::manager_16gbCodingProfileUsesBenchmarkedKatCoder()
+PASS   : SystemProfilesTests::manager_24gbPremiumPromotesThinkingCapAndKeepsMaxCtx()
+QINFO  : SystemProfilesTests::controller_recommendsClosestTier() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_recommendsClosestTier()
+QINFO  : SystemProfilesTests::controller_recommendedTierIncludesDisplayName() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_recommendedTierIncludesDisplayName()
+QINFO  : SystemProfilesTests::controller_recommendsCpuWhenNoGpu() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_recommendsCpuWhenNoGpu()
+QINFO  : SystemProfilesTests::controller_noneWhenBelowMinimum() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_noneWhenBelowMinimum()
+QINFO  : SystemProfilesTests::controller_showcase8gbOffersGemmaAndQwen() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_showcase8gbOffersGemmaAndQwen()
+QINFO  : SystemProfilesTests::controller_showcase24gbUnchanged() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_showcase24gbUnchanged()
+QINFO  : SystemProfilesTests::controller_showcaseEmptyWhenNoSiblings() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_showcaseEmptyWhenNoSiblings()
+QINFO  : SystemProfilesTests::bundle_lagunaIsOptInAndHardwareGated() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::bundle_lagunaIsOptInAndHardwareGated()
+PASS   : SystemProfilesTests::bundle_ultraQAndHybridAreWiredAndOptIn()
+FAIL!  : SystemProfilesTests::bundle_miniMaxIsOptInAndMemoryGated() '!profile.isEmpty()' returned FALSE. (falta el perfil experimental MiniMax M2.7)
+C:\Users\cristian\Documents\LlamaCode\tests\test_system_profiles.cpp(643) : failure location
+PASS   : SystemProfilesTests::bundle_ultraQ48gbIsDualGpuVariantOfUltraQ()
+QINFO  : SystemProfilesTests::controller_launchMenuGatesByTotalVramAcrossGpus() LlmGateway: escuchando en http://0.0.0.0:8088
+QWARN  : SystemProfilesTests::controller_launchMenuGatesByTotalVramAcrossGpus() LlmGateway: no pude escuchar en 0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_launchMenuGatesByTotalVramAcrossGpus()
+PASS   : SystemProfilesTests::bundle_48gbFamilyIsBenchmarkableAndDualGpu()
+QINFO  : SystemProfilesTests::controller_duplicateBakesResolvedBinary() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_duplicateBakesResolvedBinary()
+PASS   : SystemProfilesTests::cleanupTestCase()
+Totals: 27 passed, 3 failed, 0 skipped, 0 blacklisted, 2167ms
+********* Finished testing of SystemProfilesTests *********

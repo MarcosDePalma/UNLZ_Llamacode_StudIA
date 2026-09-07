@@ -1,0 +1,115 @@
+{
+    "acceptance": [
+        {
+            "name": "<canvas",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "<style",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "<script",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "getContext",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "addEventListener",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "keydown",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "score",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        }
+    ],
+    "agentFiles": [
+        ".llamacode/agent_events.jsonl",
+        "snake_retro.html"
+    ],
+    "agentMetrics": [
+        {
+            "elapsedMs": 1507,
+            "tokens": 54,
+            "tps": 36.9058920256619,
+            "ttft_ms": 12726
+        },
+        {
+            "elapsedMs": 141938,
+            "tokens": 6952,
+            "tps": 47.73868404691702,
+            "ttft_ms": 639
+        },
+        {
+            "elapsedMs": 1366,
+            "tokens": 45,
+            "tps": 34.185307154984784,
+            "ttft_ms": 11037
+        },
+        {
+            "elapsedMs": 6840,
+            "tokens": 277,
+            "tps": 40.84978163800841,
+            "ttft_ms": 957
+        }
+    ],
+    "agentProfileId": "agent-intermedio",
+    "agentProfileName": "Intermedio",
+    "avgTps": 39.919916216393034,
+    "avgTtftMs": 6339.75,
+    "benchmarkName": "Eval · Snake retro (HTML single-file) por nivel",
+    "elapsedSec": 181.382,
+    "failed": false,
+    "finalScore": 7,
+    "finalTotal": 7,
+    "firstAttemptScore": 7,
+    "firstAttemptTotal": 7,
+    "id": "2c24031f-44af-4d0d-a603-3d9eea977728",
+    "mode": "custom",
+    "pass": 1,
+    "passedAfterRepair": false,
+    "passesTotal": 1,
+    "profileId": "5c3d9bda-8810-4331-a770-1c981461fe17",
+    "profileName": "1_Llama.cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ",
+    "qualityScore": 7,
+    "qualityTotal": 7,
+    "ramMb": 25059.8515625,
+    "repairAttempts": 0,
+    "response": "Archivo creado exitosamente. **`snake_retro.html`** (19.3 KB) — un solo archivo HTML autocontenido sin dependencias externas.\n\n**Características del juego:**\n\n- **Estética NES/8-bit**: paleta de colores retro, fuente monospace, efecto CRT (scanlines), grid de fondo estilo checkerboard\n- **Viborita con ojos** que miran en la dirección del movimiento, cuerpo con gradiente verde y patrón pixelado\n- **Manzanas** estilo pixel art con tallo y hoja\n- **Bonus amarillo** (estrella) que aparece aleatoriamente y vale 3 puntos, con temporizador\n- **Sistema de niveles**: cada 5 manzanas sube de nivel y aumenta la velocidad\n- **Efectos**: partículas al comer, screen shake al morir, flash blanco al comer, parpadeo del bonus\n- **Sonidos** generados con Web Audio API (sin archivos): comer, bonus, muerte, subida de nivel\n- **High score** persistente con localStorage\n- **Controles**: flechas / WASD, swipe en móvil, D-pad táctil\n- **Pause** con tecla P\n- **Overlay** de inicio / game over\n\nNo requiere compilación — se abre directamente en cualquier navegador moderno.",
+    "runDir": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152707",
+    "runLabel": "Eval · Snake retro (HTML single-file) por nivel",
+    "target": "agent",
+    "timeToFirstAttempt": 181.382,
+    "timedOut": false,
+    "timestamp": 1782757818050,
+    "totalTime": 181.382,
+    "vramMb": 23834,
+    "workspace": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152707/1_Llama_cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ__ws"
+}

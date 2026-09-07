@@ -1,0 +1,53 @@
+********* Start testing of SystemProfilesTests *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-llp64 shared (dynamic) release build; by MSVC 2022), windows 11
+PASS   : SystemProfilesTests::initTestCase()
+PASS   : SystemProfilesTests::manager_loadsSystemProfiles()
+PASS   : SystemProfilesTests::manager_systemNotPersisted()
+PASS   : SystemProfilesTests::manager_immutable()
+PASS   : SystemProfilesTests::manager_duplicateMakesEditableCopy()
+PASS   : SystemProfilesTests::manager_duplicatePreservesLaunchLinkage()
+PASS   : SystemProfilesTests::manager_modelIdIsDeterministic()
+PASS   : SystemProfilesTests::manager_fastGemmaDflashWired()
+PASS   : SystemProfilesTests::manager_systemProfilesAvoidAccidentalVisionAndMtp()
+PASS   : SystemProfilesTests::bundle_draftMtpAlwaysDeclaresDraftModel()
+PASS   : SystemProfilesTests::bundle_gemma4TemplateKeepsLlamaCppMarkers()
+PASS   : SystemProfilesTests::bundle_lagunaTemplateIsAppliedToBothProfiles()
+PASS   : SystemProfilesTests::manager_smallProfilesAreConservative()
+PASS   : SystemProfilesTests::manager_defaultCodingProfileUsesKatCoder()
+PASS   : SystemProfilesTests::manager_16gbCodingProfileUsesBenchmarkedKatCoder()
+PASS   : SystemProfilesTests::manager_24gbPremiumPromotesThinkingCapAndKeepsMaxCtx()
+PASS   : SystemProfilesTests::bundle_qwen38VariantsAreMtpVisionAndTemplated()
+FAIL!  : SystemProfilesTests::bundle_bigBangDisablesCrashyFlashAttention() Compared values are not the same
+   Actual   (runtime.value(QStringLiteral("kv")).toString()): ""
+   Expected (QStringLiteral("q8_0"))                        : "q8_0"
+C:\Users\cristian\Documents\LlamaCode\tests\test_system_profiles.cpp(1520) : failure location
+PASS   : SystemProfilesTests::bundle_bestProfilesUseRequestedCategoryNames()
+QINFO  : SystemProfilesTests::controller_recommendsClosestTier() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_recommendsClosestTier()
+QINFO  : SystemProfilesTests::controller_recommendedTierIncludesDisplayName() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_recommendedTierIncludesDisplayName()
+QINFO  : SystemProfilesTests::controller_recommendsCpuWhenNoGpu() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_recommendsCpuWhenNoGpu()
+QINFO  : SystemProfilesTests::controller_noneWhenBelowMinimum() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_noneWhenBelowMinimum()
+QINFO  : SystemProfilesTests::controller_showcase8gbOffersGemmaAndQwen() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_showcase8gbOffersGemmaAndQwen()
+QINFO  : SystemProfilesTests::controller_showcase24gbUnchanged() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_showcase24gbUnchanged()
+QINFO  : SystemProfilesTests::controller_showcaseEmptyWhenNoSiblings() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_showcaseEmptyWhenNoSiblings()
+QINFO  : SystemProfilesTests::bundle_lagunaIsOptInAndHardwareGated() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::bundle_lagunaIsOptInAndHardwareGated()
+PASS   : SystemProfilesTests::bundle_ultraQAndHybridAreWiredAndOptIn()
+QINFO  : SystemProfilesTests::bundle_miniMaxIsOptInAndMemoryGated() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::bundle_miniMaxIsOptInAndMemoryGated()
+PASS   : SystemProfilesTests::bundle_ultraQ48gbIsDualGpuVariantOfUltraQ()
+QINFO  : SystemProfilesTests::controller_launchMenuGatesByTotalVramAcrossGpus() LlmGateway: escuchando en http://0.0.0.0:8088
+QWARN  : SystemProfilesTests::controller_launchMenuGatesByTotalVramAcrossGpus() LlmGateway: no pude escuchar en 0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_launchMenuGatesByTotalVramAcrossGpus()
+PASS   : SystemProfilesTests::bundle_48gbFamilyIsBenchmarkableAndDualGpu()
+QINFO  : SystemProfilesTests::controller_duplicateBakesResolvedBinary() LlmGateway: escuchando en http://0.0.0.0:8088
+PASS   : SystemProfilesTests::controller_duplicateBakesResolvedBinary()
+PASS   : SystemProfilesTests::cleanupTestCase()
+Totals: 33 passed, 1 failed, 0 skipped, 0 blacklisted, 5522ms
+********* Finished testing of SystemProfilesTests *********

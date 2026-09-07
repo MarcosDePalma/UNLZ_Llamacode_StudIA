@@ -17,6 +17,7 @@ public:
         PathRole,
         LabelRole,
         ScanModeRole,
+        KindRole,
         EnabledRole,
         PriorityRole,
         TagsRole,
@@ -40,6 +41,9 @@ public:
                             int priority, const QStringList &tags);
     Q_INVOKABLE void scan(const QString &id);
     Q_INVOKABLE void scanAll();
+    // Escanea sólo roots configurados para iniciar automáticamente. Se llama
+    // después del primer pintado, no durante la construcción del controlador.
+    void scanStartupRoots();
     Q_INVOKABLE void refresh();
     Q_INVOKABLE QVariantMap get(const QString &id) const;
 

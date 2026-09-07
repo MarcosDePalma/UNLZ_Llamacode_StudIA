@@ -1,4 +1,6 @@
 #include "RawChatBackend.h"
+#include "AgentLifecycle.h"
+#include "ReasoningWire.h"
 #include "core/DocumentExtractor.h"
 #include <QDateTime>
 #include <QDir>
@@ -17,6 +19,46 @@ static int estimateTokens(const QString &text)
     const int n = text.trimmed().size();
     if (n <= 0) return 0;
     return (n + 3) / 4; // aproximación simple chars/4
+}
+
+QString RawChatBackend::designerSystemPrompt()
+{
+    return QStringLiteral(
+        "Sos un asistente con foco en DISEÑO Y VISUALIZACIÓN. Cuando la respuesta "
+        "se entienda mejor visual, NO la describas en prosa: generala como artifact "
+        "que la UI rinde inline.\n"
+        "- Diagramas (flujos, secuencia, arquitectura, gantt, ER, estados): bloque "
+        "```mermaid con sintaxis Mermaid válida.\n"
+        "- Gráficos, mockups de UI, iconos, ilustraciones, charts: bloque ```svg "
+        "con un SVG completo y autocontenido (sin scripts ni refs de red).\n"
+        "Cerrá siempre el bloque (```). Acompañá con 1-2 líneas de texto, no más. "
+        "Si el pedido es puramente textual (código, explicación), respondé normal.");
+}
+
+QJsonArray RawChatBackend::buildSystemPreamble(bool thinkingEnabled, bool designerPersona,
+                                               const QString &systemExtra)
+{
+    QJsonArray msgs;
+    if (!systemExtra.trimmed().isEmpty()) {
+        msgs.append(QJsonObject{
+            {QStringLiteral("role"), QStringLiteral("system")},
+            {QStringLiteral("content"), systemExtra.trimmed()}
+        });
+    }
+    if (designerPersona) {
+        msgs.append(QJsonObject{
+            {QStringLiteral("role"), QStringLiteral("system")},
+            {QStringLiteral("content"), designerSystemPrompt()}
+        });
+    }
+    if (!thinkingEnabled) {
+        msgs.append(QJsonObject{
+            {QStringLiteral("role"), QStringLiteral("system")},
+            {QStringLiteral("content"),
+             QStringLiteral("Responde solo con la respuesta final. No incluyas razonamiento interno ni etiquetas <think> o </think>.")}
+        });
+    }
+    return msgs;
 }
 
 // Quita bloques <think>...</think> (razonamiento) del texto antes de reenviarlo
@@ -114,7 +156,18 @@ void RawChatBackend::start(const AgentContext &ctx)
     emit logAppended(QStringLiteral("[raw backend ready]\n"));
     if (m_sessionId.isEmpty())
         createSession(ctx.cwd);
+    emitSessionLifecycle();
     emit runningChanged();
+}
+
+void RawChatBackend::emitSessionLifecycle()
+{
+    if (m_sessionId.isEmpty() || m_sessionId == m_lifecycleSessionId) return;
+    m_lifecycleSessionId = m_sessionId;
+    emit agentLifecycleEvent(AgentLifecycle::sessionStart(
+        m_sessionId, m_projectDir, m_correlationId,
+        m_ctx.harnessProfileId.isEmpty() ? m_ctx.launchProfileId : m_ctx.harnessProfileId,
+        QStringLiteral("raw"), 1));
 }
 
 void RawChatBackend::stop()
@@ -128,6 +181,7 @@ void RawChatBackend::stop()
     saveCurrentMessages();
     persistAll();
     m_running = false;
+    m_lifecycleSessionId.clear();
     m_curAsstIdx = -1;
     emit runningChanged();
 }
@@ -135,6 +189,47 @@ void RawChatBackend::stop()
 void RawChatBackend::createSession(const QString &projectDir)
 {
     createSession(projectDir, projectDir.isEmpty() ? QStringLiteral("(sin proyecto)") : QFileInfo(projectDir).fileName(), projectDir);
+}
+
+QVariantMap RawChatBackend::sampling() const
+{
+    return m_sessionSampling.value(m_sessionId, QVariantMap{
+        {QStringLiteral("temperature"), -1.0},
+        {QStringLiteral("topP"), -1.0},
+        {QStringLiteral("topK"), -1},
+        {QStringLiteral("minP"), -1.0},
+        {QStringLiteral("repeatPenalty"), -1.0}
+    });
+}
+
+void RawChatBackend::setSampling(const QVariantMap &value)
+{
+    if (m_sessionId.isEmpty()) return;
+    QVariantMap normalized = sampling();
+    for (const QString &key : {QStringLiteral("temperature"), QStringLiteral("topP"),
+                               QStringLiteral("topK"), QStringLiteral("minP"),
+                               QStringLiteral("repeatPenalty")}) {
+        if (!value.contains(key)) continue;
+        const double v = value.value(key).toDouble();
+        if (key == QLatin1String("temperature"))
+            normalized[key] = (v >= 0.0 && v <= 2.0) ? v : -1.0;
+        else if (key == QLatin1String("topP") || key == QLatin1String("minP"))
+            normalized[key] = (v >= 0.0 && v <= 1.0) ? v : -1.0;
+        else if (key == QLatin1String("repeatPenalty"))
+            normalized[key] = (v >= 0.0 && v <= 2.0) ? v : -1.0;
+        else
+            normalized[key] = value.value(key).toInt() >= 0
+                ? qMin(value.value(key).toInt(), 1000) : -1;
+    }
+    m_sessionSampling[m_sessionId] = normalized;
+    persistSession(m_sessionId);
+}
+
+void RawChatBackend::setSampling(double temperature, double topP, int topK)
+{
+    setSampling(QVariantMap{{QStringLiteral("temperature"), temperature},
+                            {QStringLiteral("topP"), topP},
+                            {QStringLiteral("topK"), topK}});
 }
 
 void RawChatBackend::createSession(const QString &projectId, const QString &projectName, const QString &projectDir)
@@ -158,10 +253,39 @@ void RawChatBackend::createSession(const QString &projectId, const QString &proj
     m_messages.clear();
     m_curAsstIdx = -1;
     if (!m_msgQueue.isEmpty()) { m_msgQueue.clear(); emit queueChanged(); }
+    // Crear una sesión y dejarla sin usar no debe acumular basura en el panel:
+    // las sesiones vacías anteriores se descartan al crear la nueva.
+    pruneEmptySessions(id);
     persistIndex();
     persistSession(id);
     emit sessionsChanged();
     emit messagesChanged();
+    emitSessionLifecycle();
+}
+
+void RawChatBackend::pruneEmptySessions(const QString &keepId)
+{
+    QStringList doomed;
+    for (const QVariant &v : std::as_const(m_sessions)) {
+        const QString id = v.toMap().value(QStringLiteral("id")).toString();
+        if (id.isEmpty() || id == keepId) continue;
+        if (id == m_sessionId) continue;   // la activa se descarta recién al dejarla
+        if (!m_sessionMessages.value(id).isEmpty()) continue;
+        doomed << id;
+    }
+    if (doomed.isEmpty()) return;
+    for (const QString &id : std::as_const(doomed)) {
+        for (int i = 0; i < m_sessions.size(); ++i) {
+            if (m_sessions[i].toMap().value(QStringLiteral("id")).toString() == id) {
+                m_sessions.removeAt(i);
+                break;
+            }
+        }
+        m_sessionMessages.remove(id);
+        removeSessionFile(id);
+    }
+    persistIndex();
+    emit sessionsChanged();
 }
 
 void RawChatBackend::setCurrentSession(const QString &sessionId)
@@ -180,6 +304,7 @@ void RawChatBackend::setCurrentSession(const QString &sessionId)
             break;
         }
     }
+    pruneEmptySessions(sessionId);
     emit sessionsChanged();
     emit messagesChanged();
 }
@@ -327,6 +452,11 @@ void RawChatBackend::sendMessage(const QString &text)
     if (m_sessionId.isEmpty())
         createSession(m_projectDir);
 
+    m_correlationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    emitSessionLifecycle();
+    emit agentLifecycleEvent(AgentLifecycle::promptSubmit(
+        m_sessionId, m_projectDir, m_correlationId, trimmed, attachments.size()));
+
     // Contenido para mostrar: texto + chips de adjuntos.
     QString display = trimmed;
     for (const QString &p : attachments)
@@ -368,14 +498,7 @@ void RawChatBackend::sendMessage(const QString &text)
     emit sessionsChanged();
     emit messagesChanged();
 
-    QJsonArray reqMsgs;
-    if (!m_thinkingEnabled) {
-        reqMsgs.append(QJsonObject{
-            {QStringLiteral("role"), QStringLiteral("system")},
-            {QStringLiteral("content"),
-             QStringLiteral("Responde solo con la respuesta final. No incluyas razonamiento interno ni etiquetas <think> o </think>.")}
-        });
-    }
+    QJsonArray reqMsgs = buildSystemPreamble(m_thinkingEnabled, m_personaDesigner, m_systemExtra);
     int lastUserIdx = -1;
     for (int i = 0; i < m_messages.size(); ++i) {
         if (m_messages[i].toMap().value(QStringLiteral("role")).toString() == QLatin1String("user"))
@@ -449,9 +572,33 @@ void RawChatBackend::sendMessage(const QString &text)
     //  - reasoning_budget: per-request, NO depende del chat template. 0 = sin thinking, -1 = ilimitado.
     //  - chat_template_kwargs.enable_thinking: switch oficial Qwen3 (requiere --jinja + template que lo soporte).
     payload.insert(QStringLiteral("reasoning_budget"), m_thinkingEnabled ? -1 : 0);
-    QJsonObject tmplKw;
-    tmplKw.insert(QStringLiteral("enable_thinking"), m_thinkingEnabled);
-    payload.insert(QStringLiteral("chat_template_kwargs"), tmplKw);
+    payload.insert(QStringLiteral("chat_template_kwargs"),
+                   ReasoningWire::templateKwargs(m_thinkingEnabled, false,
+                                                 m_reasoningEffort));
+    const QVariantMap sample = sampling();
+    const double temperature = sample.value(QStringLiteral("temperature"), -1.0).toDouble();
+    const double topP = sample.value(QStringLiteral("topP"), -1.0).toDouble();
+    const int topK = sample.value(QStringLiteral("topK"), -1).toInt();
+    const double minP = sample.value(QStringLiteral("minP"), -1.0).toDouble();
+    const double repeatPenalty = sample.value(QStringLiteral("repeatPenalty"), -1.0).toDouble();
+    if (temperature >= 0.0) payload.insert(QStringLiteral("temperature"), temperature);
+    if (topP >= 0.0) payload.insert(QStringLiteral("top_p"), topP);
+    if (topK >= 0) payload.insert(QStringLiteral("top_k"), topK);
+    if (minP >= 0.0) payload.insert(QStringLiteral("min_p"), minP);
+    if (repeatPenalty >= 0.0) payload.insert(QStringLiteral("repeat_penalty"), repeatPenalty);
+
+    // Salida estructurada (GBNF grammar o JSON schema). Passthrough a llama-server.
+    if (!m_grammar.trimmed().isEmpty()) {
+        payload.insert(QStringLiteral("grammar"), m_grammar);
+    } else if (!m_jsonSchema.trimmed().isEmpty()) {
+        const QJsonDocument sd = QJsonDocument::fromJson(m_jsonSchema.toUtf8());
+        if (sd.isObject()) {
+            payload.insert(QStringLiteral("response_format"), QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("json_schema")},
+                {QStringLiteral("json_schema"), QJsonObject{{QStringLiteral("schema"), sd.object()}}}
+            });
+        }
+    }
 
     m_sseBuf.clear();
     m_reasonBuf.clear();
@@ -477,6 +624,15 @@ void RawChatBackend::sendMessage(const QString &text)
             const QString reasoning = delta.value(QStringLiteral("reasoning_content")).toString();
             const QString chunk = delta.value(QStringLiteral("content")).toString();
             if (reasoning.isEmpty() && chunk.isEmpty()) continue;
+            if (m_curAsstIdx >= 0 && m_curAsstIdx < m_messages.size()) {
+                QVariantMap first = m_messages[m_curAsstIdx].toMap();
+                if (!first.contains(QStringLiteral("firstTokenMs"))) {
+                    const qint64 started = static_cast<qint64>(first.value(QStringLiteral("createdAt")).toDouble());
+                    first[QStringLiteral("firstTokenMs")] = static_cast<int>(qMax<qint64>(0,
+                        QDateTime::currentMSecsSinceEpoch() - started));
+                    m_messages[m_curAsstIdx] = first;
+                }
+            }
             if (m_thinkingEnabled)
                 m_reasonBuf += reasoning;
             m_answerBuf += chunk;
@@ -519,19 +675,22 @@ void RawChatBackend::sendMessage(const QString &text)
         if (m_curAsstIdx >= 0 && m_curAsstIdx < m_messages.size()) {
             QVariantMap asst = m_messages[m_curAsstIdx].toMap();
             asst[QStringLiteral("typing")] = false;
-            if (!ok && asst.value(QStringLiteral("content")).toString().isEmpty())
+            if (!ok) {
+                asst[QStringLiteral("failed")] = true;
+                asst[QStringLiteral("failureMessage")] = err;
                 asst[QStringLiteral("content")] = QStringLiteral("[error: %1]").arg(err);
+            }
             if (!m_thinkingEnabled)
                 asst[QStringLiteral("content")] = stripThinkForOutput(asst.value(QStringLiteral("content")).toString());
             const qint64 doneAt = QDateTime::currentMSecsSinceEpoch();
             const qint64 startedAt = static_cast<qint64>(asst.value(QStringLiteral("createdAt")).toDouble());
             const qint64 elapsedMs = qMax<qint64>(0, doneAt - startedAt);
             const QString finalText = asst.value(QStringLiteral("content")).toString();
-            const int toks = estimateTokens(finalText);
+            const int toks = ok ? estimateTokens(finalText) : 0;
             asst[QStringLiteral("completedAt")] = static_cast<double>(doneAt);
             asst[QStringLiteral("tokens")] = toks;
             asst[QStringLiteral("elapsedMs")] = static_cast<int>(elapsedMs);
-            asst[QStringLiteral("tps")] = (elapsedMs > 0 && toks > 0)
+            asst[QStringLiteral("tps")] = (ok && elapsedMs > 0 && toks > 0)
                 ? (1000.0 * static_cast<double>(toks) / static_cast<double>(elapsedMs))
                 : 0.0;
             m_messages[m_curAsstIdx] = asst;
@@ -541,6 +700,10 @@ void RawChatBackend::sendMessage(const QString &text)
         if (!ok && !m_stopping)
             emit errorOccurred(QStringLiteral("raw chat error: %1").arg(err));
         m_curAsstIdx = -1;
+        // Mantener el mismo contrato que LlamaAgentBackend: incluso una respuesta
+        // SSE válida sin contenido (sólo `data: [DONE]`) cierra el turno. Tasks,
+        // workflows y la cola no deben inferir finalización por texto generado.
+        emit turnFinished();
         // Respuesta cerrada → enviar el próximo encolado (async para no anidar).
         if (!m_msgQueue.isEmpty())
             QMetaObject::invokeMethod(this, "flushQueue", Qt::QueuedConnection);
@@ -608,6 +771,24 @@ void RawChatBackend::clearQueue()
     if (m_msgQueue.isEmpty()) return;
     m_msgQueue.clear();
     emit queueChanged();
+}
+
+bool RawChatBackend::updateQueuedMessage(int index, const QString &text)
+{
+    const QString updated = text.trimmed();
+    if (index < 0 || index >= m_msgQueue.size() || updated.isEmpty()) return false;
+    if (m_msgQueue[index] == updated) return true;
+    m_msgQueue[index] = updated;
+    emit queueChanged();
+    return true;
+}
+
+bool RawChatBackend::removeQueuedMessage(int index)
+{
+    if (index < 0 || index >= m_msgQueue.size()) return false;
+    m_msgQueue.removeAt(index);
+    emit queueChanged();
+    return true;
 }
 
 bool RawChatBackend::updateSessionProject(const QString &sessionId, const QString &projectId,
@@ -684,6 +865,7 @@ void RawChatBackend::loadFromDisk()
             const QJsonObject obj = QJsonDocument::fromJson(sf.readAll()).object();
             sf.close();
             const QJsonArray m = obj.value(QStringLiteral("messages")).toArray();
+            m_sessionSampling.insert(sid, obj.value(QStringLiteral("sampling")).toObject().toVariantMap());
             for (const QJsonValue &mv : m) {
                 const QJsonObject mo = mv.toObject();
                 QVariantMap mm = mo.toVariantMap();
@@ -693,6 +875,9 @@ void RawChatBackend::loadFromDisk()
         }
         m_sessionMessages.insert(sid, msgs);
     }
+
+    // Sesiones vacías que quedaron de corridas anteriores: no sobreviven al arranque.
+    pruneEmptySessions(QString());
 
     if (!m_sessions.isEmpty()) {
         const QVariantMap s0 = m_sessions.first().toMap();
@@ -737,6 +922,8 @@ void RawChatBackend::persistSession(const QString &sessionId) const
     obj[QStringLiteral("id")] = sessionId;
     obj[QStringLiteral("title")] = sess.value(QStringLiteral("title")).toString();
     obj[QStringLiteral("messages")] = msgs;
+    obj[QStringLiteral("sampling")] = QJsonObject::fromVariantMap(
+        m_sessionSampling.value(sessionId, sampling()));
     QFile f(sessionFilePath(sessionId));
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         f.write(QJsonDocument(obj).toJson());

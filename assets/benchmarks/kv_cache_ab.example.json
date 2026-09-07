@@ -1,0 +1,35 @@
+{
+  "schema": "llamacode-kv-cache-ab-config-v1",
+  "serverExe": "C:/path/to/llama-server",
+  "modelPath": "C:/path/to/model.gguf",
+  "commonArgs": [
+    "--ctx-size", "131072",
+    "--flash-attn", "on",
+    "--metrics",
+    "--no-warmup",
+    "--parallel", "1"
+  ],
+  "variants": [
+    {
+      "id": "q8-kv",
+      "args": ["--cache-type-k", "q8_0", "--cache-type-v", "q8_0"],
+      "env": {}
+    },
+    {
+      "id": "fraqtl-compressed-kv",
+      "serverExe": "C:/path/to/llama-server-fraqtl",
+      "args": [
+        "--fraqtl-kv",
+        "--fraqtl-eigenbasis", "C:/path/to/v-sidecar",
+        "--fraqtl-kv-protect", "32",
+        "--fraqtl-k-eigenbasis", "C:/path/to/k-sidecar",
+        "--fraqtl-sink-tokens", "0",
+        "--fraqtl-residual-window", "0"
+      ],
+      "env": {
+        "FRAQTL_MEMBRANE": "1",
+        "FRAQTL_MEMBRANE_EXCLUSIVE": "1"
+      }
+    }
+  ]
+}

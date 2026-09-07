@@ -1,0 +1,9 @@
+module LlamaCode
+singleton App 1.0 App.qml
+singleton Theme 1.0 Theme.qml
+LcDialog 1.0 LcDialog.qml
+LcButton 1.0 LcButton.qml
+LcTextField 1.0 LcTextField.qml
+LcComboBox 1.0 LcComboBox.qml
+LcSwitch 1.0 LcSwitch.qml
+PageHeader 1.0 PageHeader.qml

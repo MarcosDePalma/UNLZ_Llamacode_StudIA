@@ -7,7 +7,43 @@ Item {
     id: root
 
     property string selectedLaunchId: ""
+    property string launchSearch: ""
+    property string launchTags: ""
+    // Perfil de SISTEMA seleccionado: inmutable (solo lectura). Se puede duplicar
+    // para editar, pero no guardar/borrar/renombrar el original.
+    readonly property bool selectedIsSystem:
+        selectedLaunchId.length > 0 && App.profileManager.isSystemLaunch(selectedLaunchId)
     property string backendId: ""
+    // El backend no tiene binario fijado (binaryId ""). El combo no puede mostrar
+    // "vacío" —cae a index 0—, así que lo recordamos aparte para no guardar el
+    // primer binario de la lista como si el usuario lo hubiera elegido.
+    property bool backendBinaryUnset: false
+    // Mismo problema con los modelos: si el id guardado no está en el catálogo, el
+    // combo cae al primer gguf de la lista. Guardamos el id original acá para
+    // preservarlo en vez de pisar el perfil con un modelo que nadie eligió.
+    property string modelMainUnresolved: ""
+    property string modelMmprojUnresolved: ""
+    property string modelDraftUnresolved: ""
+
+    // Posiciona un combo de modelo en `id`. Devuelve "" si pudo representarlo, o el
+    // propio `id` si no está en la lista (combo en index 0, valor a preservar).
+    function bindModelCombo(combo, id) {
+        const idx = combo.indexOfValue(id)
+        combo.currentIndex = Math.max(0, idx)
+        return (id.length > 0 && idx < 0) ? id : ""
+    }
+
+    // Id a persistir: el del combo, salvo que el guardado no se haya podido
+    // representar — ahí se conserva el original en vez de pisarlo.
+    function effectiveModelId() {
+        return modelMainUnresolved.length > 0 ? modelMainUnresolved : (modelMain.currentValue ?? "")
+    }
+    function effectiveMmprojId() {
+        return modelMmprojUnresolved.length > 0 ? modelMmprojUnresolved : (modelMmproj.currentValue ?? "")
+    }
+    function effectiveDraftId() {
+        return modelDraftUnresolved.length > 0 ? modelDraftUnresolved : (modelDraft.currentValue ?? "")
+    }
     property string modelProfileId: ""
     property string runtimeId: ""
     property string backendNameCurrent: ""
@@ -16,10 +52,36 @@ Item {
     property bool mmprojEnabled: false
     property bool draftEnabled: false
     property bool mtpEnabled: false
+    property string specTypeCurrent: "draft-mtp"
+    property bool launchBest: false       // BEST (rayo), insignia curada del catálogo
     property bool launchFavorite: false   // favorito del perfil de lanzamiento
+    property bool launchBenchmark: false // candidato pendiente para benchmark
+    property bool launchDeprecated: false // visible sólo en esta página administrativa
     property bool smokeTestRunning: false
-    property string harnessAdapter: "none"
+    // Política: siempre LlamaAgent. Sin selector de harness; sin "none"/"opencode".
+    property string harnessAdapter: "llamaagent"
     property string harnessProfileId: ""
+    // Perfil de agente por defecto de este launch (capacidades + directivas).
+    property string agentProfileId: ""
+    property string plannerProfileId: ""
+    property string hybridMode: "off"
+
+    // ── Salud de perfiles (health-check) ──────────────────────────
+    // Lista de issues {severity,launchId,entity,code,message,fix} de todos los
+    // launches. Se refresca al entrar y ante cambios de la lista de launches.
+    property var healthIssues: []
+    property int healthErrors: 0
+    property int healthWarnings: 0
+    function refreshHealth() {
+        healthIssues = App.profileHealth()
+        const s = App.profileHealthSummary()
+        healthErrors = s.errors ?? 0
+        healthWarnings = s.warnings ?? 0
+    }
+    function launchName(id) {
+        const lp = App.profileManager.getLaunchProfile(id)
+        return (lp && lp.name && lp.name.length > 0) ? lp.name : id
+    }
 
     // ── Maestro (supervisor): cadena de fallbacks ─────────────────
     property string masterEscalation: "manual"  // manual | auto | both
@@ -124,6 +186,33 @@ Item {
         return false
     }
 
+    // Los perfiles de sistema históricos guardan MTP en `launch.mtp.args`,
+    // que llega como extraArgs, mientras que los perfiles editables nuevos lo
+    // guardan en ModelProfile. Leer ambos formatos permite editar/duplicar
+    // Qwen3.8 sin perder adaptive ni mostrar sus flags como texto manual.
+    function rawArgValue(rawArgs, flag) {
+        for (let i = 0; i + 1 < rawArgs.length; ++i)
+            if (rawArgs[i] === flag) return rawArgs[i + 1]
+        return ""
+    }
+
+    function rawHasFlag(rawArgs, flag) {
+        for (let i = 0; i < rawArgs.length; ++i)
+            if (rawArgs[i] === flag) return true
+        return false
+    }
+
+    function rawDraftSpecType(rawArgs) {
+        const value = (rawArgValue(rawArgs, "--spec-type") ?? "").toLowerCase()
+        const types = value.split(/[,|]/)
+        for (let i = 0; i < types.length; ++i) {
+            const t = types[i].trim()
+            if (t === "draft-dspark") return "draft-dspark"
+            if (t === "draft-mtp") return "draft-mtp"
+        }
+        return ""
+    }
+
     function extractManualArgs(rawArgs) {
         const pairFlags = {
             "--alias": true, "--n-predict": true, "--cache-type-v": true, "--temp": true,
@@ -131,12 +220,32 @@ Item {
             "--repeat-penalty": true, "--presence-penalty": true,
             "--cache-ram": true, "--cache-reuse": true
         }
+        // Estos flags son administrados por el editor cuando el launch trae
+        // MTP/DFlash crudo desde un perfil de sistema. No sacar
+        // --spec-draft-model: un draft externo sigue siendo un argumento
+        // manual válido y debe conservarse.
+        const specPairFlags = {
+            "--spec-draft-n-max": true, "--spec-draft-n-min": true,
+            "--spec-draft-conf-min": true, "--spec-draft-ngl": true,
+            "--spec-draft-type-k": true, "--spec-draft-type-v": true
+        }
         const boolFlags = { "--no-context-shift": true, "--context-shift": true, "--metrics": true, "--no-warmup": true }
+        const rawSpecValue = (rawArgValue(rawArgs, "--spec-type") ?? "").toLowerCase()
+        const rawSpecParts = rawSpecValue.split(/[,|]/).map(s => s.trim()).filter(s => s.length > 0)
+        // Si hay ngram-mod u otro spec combinado, conservar el --spec-type
+        // completo: al guardar, el argumento raw queda después del bloque
+        // estructurado y mantiene la combinación histórica intacta.
+        const managedDraftSpec = rawSpecParts.length === 1
+            && (rawSpecParts[0] === "draft-mtp" || rawSpecParts[0] === "draft-dspark")
+        const draftSpec = rawDraftSpecType(rawArgs).length > 0
         const out = []
         for (let i = 0; i < rawArgs.length; ++i) {
             const cur = rawArgs[i]
             if (pairFlags[cur]) { i += 1; continue }
             if (boolFlags[cur]) continue
+            if (draftSpec && managedDraftSpec && cur === "--spec-type") { i += 1; continue }
+            if (draftSpec && cur === "--spec-draft-adaptive") continue
+            if (draftSpec && managedDraftSpec && specPairFlags[cur]) { i += 1; continue }
             out.push(cur)
         }
         return out
@@ -193,7 +302,7 @@ Item {
         let host = '127.0.0.1', port = 8080, modelPath = ''
         let ctx = 4096, batch = 512, ubatch = 512, threads = -1, gpuLayers = -1
         let flashAttn = false, useMmap = true, useMlock = false, contBatch = true
-        let parallel = 1, cacheType = 'f16'
+        let parallel = 1, cacheType = 'q8_0'
         const extra = []
 
         while (i < tokens.length) {
@@ -247,31 +356,11 @@ Item {
 
     function duplicateProfile() {
         if (!selectedLaunchId || selectedLaunchId.length === 0) return
-        const lp = App.profileManager.getLaunchProfile(selectedLaunchId)
-        const bp = App.profileManager.getBackend(lp.backendProfileId ?? "")
-        const mp = App.profileManager.getModelProfile(lp.modelProfileId ?? "")
-        const rt = App.profileManager.getRuntimePreset(lp.runtimePresetId ?? "")
-
-        const bId = App.profileManager.addBackend(bp.name ?? "Backend", bp.binaryId ?? "", bp.host ?? "127.0.0.1", bp.port ?? 8080)
-        const mId = App.profileManager.addModelProfile(mp.name ?? "Model", mp.modelId ?? "", mp.mmprojId ?? "", mp.draftModelId ?? "")
-        const rId = App.profileManager.addRuntimePreset(rt.name ?? "Runtime", rt.ctx ?? 4096, rt.batch ?? 512, rt.gpuLayers ?? -1, rt.flashAttention ?? false, rt.contBatching ?? true)
-        App.profileManager.updateRuntimePreset({
-            "id": rId, "name": rt.name ?? "Runtime",
-            "ctx": rt.ctx ?? 4096, "batch": rt.batch ?? 512, "ubatch": rt.ubatch ?? 512,
-            "threads": rt.threads ?? -1, "gpuLayers": rt.gpuLayers ?? -1,
-            "flashAttention": rt.flashAttention ?? false, "mmap": rt.mmap ?? true,
-            "mlock": rt.mlock ?? false, "contBatching": rt.contBatching ?? true,
-            "cacheType": rt.cacheType ?? "f16", "parallelSlots": rt.parallelSlots ?? 1
-        })
-
-        const lId = App.profileManager.addLaunchProfile((lp.name ?? "Perfil") + " (copia)", bId, mId, rId)
-        App.profileManager.updateLaunchProfile({
-            "id": lId, "name": (lp.name ?? "Perfil") + " (copia)",
-            "backendProfileId": bId, "modelProfileId": mId, "runtimePresetId": rId,
-            "harnessProfileId": lp.harnessProfileId ?? "",
-            "extraArgs": lp.extraArgs ?? [], "envOverrides": lp.envOverrides ?? {}
-        })
-        selectProfile(lId)
+        // Clon profundo (incl. perfiles de sistema → copia editable de usuario).
+        // Vía AppController, no ProfileManager: la copia de un perfil de sistema
+        // necesita que se le fije el binario que el original resolvía por política.
+        const lId = App.duplicateLaunchProfile(selectedLaunchId)
+        if (lId && lId.length > 0) selectProfile(lId)
     }
 
     function loadLaunch() {
@@ -283,18 +372,20 @@ Item {
         modelProfileId = lp.modelProfileId ?? ""
         runtimeId = lp.runtimePresetId ?? ""
         harnessProfileId = lp.harnessProfileId ?? ""
-        if (harnessProfileId.length > 0) {
-            const hp = App.profileManager.getHarness(harnessProfileId)
-            harnessAdapter = hp.adapter ?? "none"
-        } else {
-            harnessAdapter = "none"
-        }
+        agentProfileId = lp.agentProfileId ?? ""
+        agentProfileCombo.currentIndex = Math.max(0, agentProfileCombo.indexOfValue(agentProfileId))
+        // Siempre LlamaAgent: perfiles viejos con "none"/"opencode" se normalizan.
+        harnessAdapter = "llamaagent"
         const rawExtra = (lp.extraArgs ?? [])
         manualExtraArgsArea.text = formatArgsForDisplay(extractManualArgs(rawExtra))
 
         // Alias (display) opcional + favorito del perfil.
+        root.launchBest = (lp.best === true)
         root.launchFavorite = (lp.favorite === true)
+        root.launchBenchmark = (lp.benchmark === true)
+        root.launchDeprecated = (lp.deprecated === true)
         profileAliasField.text = lp.alias ?? ""
+        profileTagsField.text = (lp.tags ?? []).join(", ")
         powerLimitField.text = ((lp.powerLimitW ?? 0) > 0) ? (lp.powerLimitW).toString() : ""
         browserAutoCombo.currentIndex = Math.max(0, browserAutoCombo.indexOfValue(lp.browserAutomation ?? "inherit"))
 
@@ -302,7 +393,9 @@ Item {
         backendNameCurrent = bp.name ?? ""
         backendHost.text = bp.host ?? "127.0.0.1"
         backendPort.text = (bp.port ?? 8080).toString()
-        backendBinary.currentIndex = Math.max(0, backendBinary.indexOfValue(bp.binaryId ?? ""))
+        const bpBinaryId = bp.binaryId ?? ""
+        backendBinaryUnset = (bpBinaryId.length === 0)
+        backendBinary.currentIndex = Math.max(0, backendBinary.indexOfValue(bpBinaryId))
         backendKind.currentIndex = Math.max(0, backendKind.indexOfValue(bp.kind ?? "local"))
         cloudBaseUrl.text = bp.cloudBaseUrl ?? ""
         cloudKeyRef.text = bp.cloudKeyRef ?? ""
@@ -312,14 +405,35 @@ Item {
 
         const mp = App.profileManager.getModelProfile(modelProfileId)
         modelNameCurrent = mp.name ?? ""
-        modelMain.currentIndex = Math.max(0, modelMain.indexOfValue(mp.modelId ?? ""))
+        // Un id que el combo no puede representar (no está en el catálogo, o la fila
+        // quedó no disponible) NO debe caer al índice 0: eso muestra el primer gguf
+        // de la lista como si fuera el del perfil, y al guardar lo escribe de verdad.
+        // Recordamos el id original y lo preservamos al guardar.
+        modelMainUnresolved  = bindModelCombo(modelMain,   mp.modelId ?? "")
         mmprojEnabled = (mp.mmprojId ?? "").length > 0
-        modelMmproj.currentIndex = Math.max(0, modelMmproj.indexOfValue(mp.mmprojId ?? ""))
+        modelMmprojUnresolved = bindModelCombo(modelMmproj, mp.mmprojId ?? "")
         draftEnabled = (mp.draftModelId ?? "").length > 0
-        modelDraft.currentIndex = Math.max(0, modelDraft.indexOfValue(mp.draftModelId ?? ""))
-        mtpEnabled = (mp.specType ?? "") === "draft-mtp"
-        specNMaxField.text = ((mp.specDraftNMax ?? 0) || 0).toString()
-        specKvType.currentIndex = Math.max(0, specKvType.find(mp.specDraftTypeK ?? ""))
+        modelDraftUnresolved  = bindModelCombo(modelDraft,  mp.draftModelId ?? "")
+        const storedSpecType = mp.specType ?? ""
+        const rawSpecType = rawDraftSpecType(rawExtra)
+        const resolvedSpecType = (storedSpecType === "draft-mtp" || storedSpecType === "draft-dspark")
+            ? storedSpecType : rawSpecType
+        const rawNMax = parseInt(rawArgValue(rawExtra, "--spec-draft-n-max")) || 0
+        const rawNMin = parseInt(rawArgValue(rawExtra, "--spec-draft-n-min")) || 0
+        const rawConfMin = parseFloat(rawArgValue(rawExtra, "--spec-draft-conf-min")) || 0
+        const rawTypeK = rawArgValue(rawExtra, "--spec-draft-type-k") ?? ""
+        mtpEnabled = resolvedSpecType === "draft-mtp" || resolvedSpecType === "draft-dspark"
+        specTypeCurrent = resolvedSpecType === "draft-dspark" ? "draft-dspark" : "draft-mtp"
+        specNMaxField.text = (((mp.specDraftNMax ?? 0) || 0) > 0 ? mp.specDraftNMax : rawNMax).toString()
+        specNMinField.text = (((mp.specDraftNMin ?? 0) || 0) > 0 ? mp.specDraftNMin : rawNMin).toString()
+        specAdaptiveCheck.checked = mp.specDraftAdaptive === true
+            || rawHasFlag(rawExtra, "--spec-draft-adaptive")
+        const confMin = ((mp.specDraftConfMin ?? 0) || 0) > 0 ? mp.specDraftConfMin : rawConfMin
+        specDraftConfMinField.text = confMin > 0 ? Number(confMin).toFixed(3) : ""
+        specTypeCombo.currentIndex = Math.max(0, specTypeCombo.model.indexOf(specTypeCurrent))
+        const storedTypeK = mp.specDraftTypeK ?? ""
+        specKvType.currentIndex = Math.max(0, specKvType.model.indexOf(
+            storedTypeK.length > 0 ? storedTypeK : rawTypeK))
 
         const rt = App.profileManager.getRuntimePreset(runtimeId)
         runtimeNameCurrent = rt.name ?? ""
@@ -329,7 +443,8 @@ Item {
         threadsField.text = (rt.threads ?? -1).toString()
         gpuLayersField.text = (rt.gpuLayers ?? -1).toString()
         parallelSlotsField.text = (rt.parallelSlots ?? 1).toString()
-        cacheTypeField.text = rt.cacheType ?? "f16"
+            cacheTypeField.text = rt.cacheType ?? "q8_0"
+        tensorOverridesField.text = (rt.tensorOverrides ?? []).join(", ")
         flashAttnCheck.checked = rt.flashAttention ?? false
         mmapCheck.checked = rt.mmap ?? true
         mlockCheck.checked = rt.mlock ?? false
@@ -365,6 +480,8 @@ Item {
         masterEscalation = mc.escalation ?? "manual"
         masterAutoAfterFails = mc.autoAfterFails ?? 3
         masterChainLoad(mc.fallbacks ?? [])
+        plannerProfileId = lp.plannerProfileId ?? ""
+        hybridMode = lp.hybridMode ?? "off"
         refreshMasterCliStatus(false)
 
         // Refresca vista previa del comando para el perfil cargado
@@ -398,16 +515,21 @@ Item {
     // Recalcula la vista previa del comando con los valores actuales del editor (sin guardar).
     function recomputePreview() {
         if (!selectedLaunchId || selectedLaunchId.length === 0) return
-        const binId = backendBinary.currentValue ?? ""
+        const binId = backendBinaryUnset ? "" : (backendBinary.currentValue ?? "")
         App.computeEffectiveProfilePreview(selectedLaunchId, {
             "host": backendHost.text,
             "port": parseInt(backendPort.text) || 8080,
             "binaryId": binId,
-            "modelId": modelMain.currentValue ?? "",
-            "mmprojId": mmprojEnabled ? (modelMmproj.currentValue ?? "") : "",
-            "draftModelId": draftEnabled ? (modelDraft.currentValue ?? "") : "",
-            "specType": (draftEnabled && mtpEnabled) ? "draft-mtp" : "",
-            "specDraftNMax": (draftEnabled && mtpEnabled) ? (parseInt(specNMaxField.text) || 0) : 0,
+            "modelId": effectiveModelId(),
+            "mmprojId": mmprojEnabled ? effectiveMmprojId() : "",
+            "draftModelId": draftEnabled ? effectiveDraftId() : "",
+            "specType": mtpEnabled ? specTypeCurrent : "",
+            "specDraftNMax": mtpEnabled ? (parseInt(specNMaxField.text) || 0) : 0,
+            "specDraftNMin": mtpEnabled && specAdaptiveCheck.checked
+                ? Math.max(0, parseInt(specNMinField.text) || 0) : 0,
+            "specDraftAdaptive": mtpEnabled && specAdaptiveCheck.checked,
+            "specDraftConfMin": mtpEnabled && specTypeCurrent === "draft-dspark"
+                ? Math.max(0, Math.min(1, parseFloat(specDraftConfMinField.text) || 0)) : 0,
             "specDraftNgl": (draftEnabled && mtpEnabled) ? "all" : "",
             "specDraftTypeK": (draftEnabled && mtpEnabled) ? (specKvType.currentText ?? "") : "",
             "specDraftTypeV": (draftEnabled && mtpEnabled) ? (specKvType.currentText ?? "") : "",
@@ -422,6 +544,7 @@ Item {
             "contBatching": contBatchCheck.checked,
             "cacheType": cacheTypeField.text,
             "parallelSlots": parseInt(parallelSlotsField.text) || 1,
+            "tensorOverrides": tensorOverridesField.text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 0),
             "extraArgs": collectExtraArgs(binId)
         })
     }
@@ -439,7 +562,7 @@ Item {
         } catch (e) { envOverrides = {} }
 
         // Backend: update if exists, create if not
-        const binaryId = backendBinary.currentValue ?? ""
+        const binaryId = backendBinaryUnset ? "" : (backendBinary.currentValue ?? "")
         let effectiveBid = backendId
         if (!App.profileManager.updateBackend(effectiveBid, backendNameCurrent, binaryId, backendHost.text, parseInt(backendPort.text), [])) {
             effectiveBid = App.profileManager.addBackend(
@@ -455,9 +578,9 @@ Item {
             App.setSecret(cloudKeyRef.text, cloudKeyValue.text)
 
         // Model: update if exists, create if not
-        const mainModelId  = modelMain.currentValue  ?? ""
-        const mmprojId     = mmprojEnabled  ? (modelMmproj.currentValue ?? "") : ""
-        const draftModelId = draftEnabled   ? (modelDraft.currentValue  ?? "") : ""
+        const mainModelId  = effectiveModelId()
+        const mmprojId     = mmprojEnabled  ? effectiveMmprojId() : ""
+        const draftModelId = draftEnabled   ? effectiveDraftId()  : ""
         let effectiveMid = modelProfileId
         if (!App.profileManager.updateModelProfile(effectiveMid, modelNameCurrent, mainModelId, mmprojId, draftModelId)) {
             effectiveMid = App.profileManager.addModelProfile(
@@ -466,15 +589,22 @@ Item {
             if (!effectiveMid || effectiveMid.length === 0) { App.serverError("No se pudo crear Model Profile."); return }
             modelProfileId = effectiveMid
         }
-        // Speculative decoding / MTP (sólo aplica con draft model).
-        const specOn = draftEnabled && mtpEnabled
+        // MTP admite draft separado o cabezal autocontenido en el GGUF principal.
+        const specOn = mtpEnabled
+        const specType = specOn ? specTypeCurrent : ""
+        const confMin = specOn && specType === "draft-dspark"
+            ? Math.max(0, Math.min(1, parseFloat(specDraftConfMinField.text) || 0)) : 0
         App.profileManager.setModelSpec(
             effectiveMid,
-            specOn ? "draft-mtp" : "",
+            specType,
             specOn ? (parseInt(specNMaxField.text) || 0) : 0,
             specOn ? "all" : "",
             specOn ? (specKvType.currentText ?? "") : "",
-            specOn ? (specKvType.currentText ?? "") : "")
+            specOn ? (specKvType.currentText ?? "") : "",
+            confMin,
+            specOn && specAdaptiveCheck.checked
+                ? Math.max(0, parseInt(specNMinField.text) || 0) : 0,
+            specOn && specAdaptiveCheck.checked)
 
         // Runtime: update if exists, create if not
         let effectiveRid = runtimeId
@@ -485,7 +615,8 @@ Item {
             "gpuLayers": parseInt(gpuLayersField.text), "flashAttention": flashAttnCheck.checked,
             "mmap": mmapCheck.checked, "mlock": mlockCheck.checked,
             "contBatching": contBatchCheck.checked, "cacheType": cacheTypeField.text,
-            "parallelSlots": parseInt(parallelSlotsField.text)
+            "parallelSlots": parseInt(parallelSlotsField.text),
+            "tensorOverrides": tensorOverridesField.text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 0)
         }
         if (!App.profileManager.updateRuntimePreset(rtData)) {
             effectiveRid = App.profileManager.addRuntimePreset(
@@ -520,11 +651,17 @@ Item {
         const lpOk = App.profileManager.updateLaunchProfile({
             "id": selectedLaunchId, "name": launchName,
             "alias": profileAliasField.text.trim(), "favorite": root.launchFavorite,
+            "benchmark": root.launchBenchmark,
+            "tags": profileTagsField.text.split(",").map(function(tag) { return tag.trim() }).filter(function(tag) { return tag.length > 0 }),
+            "deprecated": root.launchDeprecated,
             "powerLimitW": parseInt(powerLimitField.text) || 0,
             "browserAutomation": browserAutoCombo.currentValue ?? "inherit",
             "backendProfileId": effectiveBid, "modelProfileId": effectiveMid,
             "runtimePresetId": effectiveRid, "extraArgs": rebuiltArgs, "envOverrides": envOverrides,
             "harnessProfileId": resolvedHarnessId,
+            "agentProfileId": agentProfileCombo.currentValue ?? "",
+            "plannerProfileId": hybridMode === "off" ? "" : plannerProfileId,
+            "hybridMode": hybridMode,
             "master": {
                 "fallbacks": masterChainToArray(),
                 "escalation": masterEscalation,
@@ -593,30 +730,126 @@ Item {
                 anchors { left: parent.left; right: parent.right; top: parent.top }
                 spacing: 12
 
+                Component.onCompleted: root.refreshHealth()
+                Connections {
+                    target: App.profileManager
+                    function onLaunchesChanged() { root.refreshHealth() }
+                    function onProfilesReloaded() { root.refreshHealth() }
+                }
+
+                // ── Banner de salud de perfiles ──
+                Rectangle {
+                    id: healthBanner
+                    Layout.fillWidth: true
+                    radius: 8
+                    readonly property bool healthy: root.healthIssues.length === 0
+                    color: healthy ? Theme.surfaceBg
+                         : (root.healthErrors > 0 ? Qt.rgba(Theme.errorText.r, Theme.errorText.g, Theme.errorText.b, 0.08)
+                                                  : Qt.rgba(Theme.warnText.r, Theme.warnText.g, Theme.warnText.b, 0.08))
+                    border.color: healthy ? Theme.borderColor
+                         : (root.healthErrors > 0 ? Theme.errorText : Theme.warnText)
+                    implicitHeight: healthCol.implicitHeight + 20
+
+                    ColumnLayout {
+                        id: healthCol
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 8
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Text {
+                                text: healthBanner.healthy ? "✓" : (root.healthErrors > 0 ? "✕" : "!")
+                                color: healthBanner.healthy ? Theme.successText
+                                     : (root.healthErrors > 0 ? Theme.errorText : Theme.warnText)
+                                font.pixelSize: 16; font.bold: true
+                            }
+                            Text {
+                                text: healthBanner.healthy
+                                    ? "Todos los perfiles están sanos"
+                                    : (root.healthErrors + " error(es), " + root.healthWarnings + " aviso(s)")
+                                color: Theme.textPrimary; font.pixelSize: 14; font.bold: true
+                            }
+                            Item { Layout.fillWidth: true }
+                            LcButton {
+                                text: "Revisar salud"
+                                onClicked: root.refreshHealth()
+                            }
+                        }
+
+                        Repeater {
+                            model: root.healthIssues
+                            delegate: RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignTop
+                                    width: 8; height: 8; radius: 4
+                                    y: 5
+                                    color: modelData.severity === "error" ? Theme.errorText : Theme.warnText
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.launchName(modelData.launchId) + " — " + modelData.message
+                                        color: Theme.textPrimary; font.pixelSize: 13
+                                        wrapMode: Text.WordWrap
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "→ " + modelData.fix
+                                        color: Theme.textSecondary; font.pixelSize: 12
+                                        wrapMode: Text.WordWrap
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Rectangle {
                     Layout.fillWidth: true
                     color: Theme.surfaceBg
                     border.color: Theme.borderColor
                     radius: 8
-                    implicitHeight: topRow.implicitHeight + 20
+                    implicitHeight: topCol.implicitHeight + 20
 
-                    RowLayout {
-                        id: topRow
+                    ColumnLayout {
+                        id: topCol
                         anchors.fill: parent
                         anchors.margins: 10
                         spacing: 10
 
+                        RowLayout {
+                        id: topRow
+                        Layout.fillWidth: true
+                        spacing: 10
+
                         Text { text: (App.langV, App.l("launch.profile")); color: Theme.textSecondary; font.pixelSize: 13 }
+                        LcTextField {
+                            id: launchSearchField
+                            Layout.preferredWidth: 210
+                            placeholderText: "Buscar perfil…"
+                            text: root.launchSearch
+                            onTextChanged: {
+                                root.launchSearch = text
+                                launchCombo.launchMenu = App.profileManager.launchProfilesForProfilesPage(root.launchSearch)
+                            }
+                        }
                         LcComboBox {
                             id: launchCombo
                             Layout.fillWidth: true
                             // Menú ordenado: favoritos (★) arriba; displayName = alias - name.
-                            property var launchMenu: App.profileManager.launchProfilesForMenu()
+                            property var launchMenu: App.profileManager.launchProfilesForProfilesPage(root.launchSearch)
                             Connections {
                                 target: App.profileManager
                                 function onLaunchesChanged() {
                                     const sel = launchCombo.currentValue
-                                    launchCombo.launchMenu = App.profileManager.launchProfilesForMenu()
+                                    launchCombo.launchMenu = App.profileManager.launchProfilesForProfilesPage(root.launchSearch)
                                     const i = launchCombo.indexOfValue(sel)
                                     if (i >= 0) launchCombo.currentIndex = i
                                 }
@@ -635,7 +868,7 @@ Item {
                         LcButton {
                             text: root.launchFavorite ? "★" : "☆"
                             secondary: true
-                            enabled: selectedLaunchId.length > 0
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem
                             ToolTip.visible: hovered
                             ToolTip.text: root.launchFavorite ? "Quitar de favoritos" : "Marcar favorito"
                             onClicked: {
@@ -643,36 +876,93 @@ Item {
                                 App.profileManager.setLaunchFavorite(selectedLaunchId, root.launchFavorite)
                             }
                         }
+                        // 🏆: candidato pendiente. Se puede armar la cola desde
+                        // Perfiles y luego cargar todos juntos en Benchmark.
+                        LcButton {
+                            text: root.launchBenchmark ? "✓ Para benchmark" : "＋ Para benchmark"
+                            secondary: true
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem
+                            ToolTip.visible: hovered
+                            ToolTip.text: root.launchBenchmark
+                                ? "Quitar de la cola de perfiles pendientes"
+                                : "Marcar para benchmarkear más tarde"
+                            onClicked: {
+                                root.launchBenchmark = !root.launchBenchmark
+                                App.profileManager.setLaunchBenchmark(selectedLaunchId, root.launchBenchmark)
+                            }
+                        }
+                        // BEST (⚡): distintivo curado; los perfiles BEST son de solo lectura.
+                        LcButton {
+                            iconSource: "qrc:/qt/qml/LlamaCode/assets/best_bolt.svg"
+                            text: ""
+                            visible: root.launchBest
+                            enabled: false
+                            secondary: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: "BEST: perfil recomendado"
+                        }
+                        // Deprecated (⚠): queda visible sólo en Perfiles y se
+                        // excluye de Lanzar, Agente, Benchmark y demás selectores.
+                        LcButton {
+                            text: root.launchDeprecated ? "⚠" : "✓"
+                            secondary: true
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem
+                            ToolTip.visible: hovered
+                            ToolTip.text: root.launchDeprecated
+                                ? "Reactivar perfil operativo"
+                                : "Marcar como deprecated (ocultar de selectores)"
+                            onClicked: {
+                                root.launchDeprecated = !root.launchDeprecated
+                                App.profileManager.updateLaunchProfile({
+                                    "id": selectedLaunchId,
+                                    "deprecated": root.launchDeprecated
+                                })
+                            }
+                        }
                         // Alias opcional (prioridad sobre el nombre en los dropdowns).
                         LcTextField {
                             id: profileAliasField
                             Layout.preferredWidth: 160
                             placeholderText: "Alias (opcional)"
-                            enabled: selectedLaunchId.length > 0
-                            onEditingFinished: if (selectedLaunchId.length > 0)
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem
+                            onEditingFinished: if (selectedLaunchId.length > 0 && !selectedIsSystem)
                                 App.profileManager.setLaunchAlias(selectedLaunchId, text.trim())
                         }
+                        LcTextField {
+                            id: profileTagsField
+                            Layout.preferredWidth: 190
+                            placeholderText: "Etiquetas (coma)"
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem
+                            onEditingFinished: if (selectedLaunchId.length > 0 && !selectedIsSystem)
+                                App.profileManager.setLaunchTags(selectedLaunchId,
+                                    text.split(",").map(function(tag) { return tag.trim() }).filter(function(tag) { return tag.length > 0 }))
+                        }
+                        }
+
+                        Flow {
+                        Layout.fillWidth: true
+                        spacing: 8
                         LcButton {
                             text: {
                                 const _lang = App.langV
                                 return smokeTestRunning ? App.l("profiles.smokeTesting") : App.l("profiles.smokeTest")
                             }
                             secondary: true
-                            enabled: selectedLaunchId.length > 0 && !smokeTestRunning && !App.serverRunning
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem && !smokeTestRunning && !App.serverRunning
                             onClicked: { saveAll(); smokeTestRunning = true; App.smokeTestServer(selectedLaunchId) }
                         }
                         LcButton {
                             text: App.autoTuneRunning ? "Tuning…" : "Auto-tune"
                             secondary: true
-                            enabled: selectedLaunchId.length > 0 && !App.serverRunning && !App.autoTuneRunning
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem && !App.serverRunning && !App.autoTuneRunning
                             ToolTip.visible: hovered
-                            ToolTip.text: "Optimiza ngl/batch/flash-attn/cache-type maximizando tok/s sin degradar calidad. Usa PPL si encuentra llama-perplexity. Crea un perfil nuevo \"-tuned\""
+                            ToolTip.text: "Optimiza ngl/batch/flash-attn/cache-type maximizando tok/s sin degradar calidad. Usa PPL si encuentra llama-perplexity. Crea un perfil nuevo \"Opti - …\". Para elegir PP vs TG y comparar contra el perfil actual, usá la sección Tuner"
                             onClicked: { saveAll(); App.startAutoTune(selectedLaunchId, 24, 0.6, 256, "auto") }
                         }
                         LcButton {
                             text: "Tune CPU"
                             secondary: true
-                            enabled: selectedLaunchId.length > 0 && !App.serverRunning && !App.autoTuneRunning
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem && !App.serverRunning && !App.autoTuneRunning
                             ToolTip.visible: hovered
                             ToolTip.text: "Fuerza -ngl 0 y optimiza threads/batch/ubatch/cache para inferencia CPU-only"
                             onClicked: { saveAll(); App.startAutoTune(selectedLaunchId, 24, 0.6, 256, "cpu") }
@@ -692,7 +982,7 @@ Item {
                         }
                         LcButton {
                             text: (App.langV, App.l("profiles.rename")); secondary: true
-                            enabled: selectedLaunchId.length > 0
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem
                             onClicked: {
                                 const lp = App.profileManager.getLaunchProfile(selectedLaunchId)
                                 renameField.text = lp.name ?? ""
@@ -700,14 +990,25 @@ Item {
                             }
                         }
                         LcButton { text: (App.langV, App.l("profiles.cancel")); secondary: true; onClicked: loadLaunch() }
-                        LcButton { text: (App.langV, App.l("profiles.save")); onClicked: saveAll() }
+                        LcButton { text: (App.langV, App.l("profiles.save")); enabled: !selectedIsSystem; onClicked: saveAll() }
                         LcButton {
                             text: (App.langV, App.l("profiles.delete"))
                             danger: true
-                            enabled: selectedLaunchId.length > 0
+                            enabled: selectedLaunchId.length > 0 && !selectedIsSystem
                             onClicked: deleteDialog.open()
                         }
+                        }
                     }
+                }
+
+                // Aviso: perfil de SISTEMA (solo lectura). Duplicar para editar.
+                Text {
+                    visible: selectedIsSystem
+                    Layout.fillWidth: true
+                    text: "🔒 Perfil de sistema (solo lectura). Usá \"" + App.l("profiles.duplicate") + "\" para crear una copia editable."
+                    color: Theme.textSecondary
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
                 }
 
                 // Estado del auto-tune (progreso + mejor config aplicada).
@@ -771,7 +1072,7 @@ Item {
                                     readOnly: true
                                     text: smokeTestResultDialog.output
                                     color: smokeTestResultDialog.passed ? Theme.successText : Theme.errorText
-                                    font { family: "Consolas,monospace"; pixelSize: 11 }
+                                    font { family: Theme.codeFont; pixelSize: 11 }
                                     wrapMode: TextArea.WrapAnywhere
                                     background: null
                                 }
@@ -907,7 +1208,7 @@ Item {
                                     placeholderText: "./llama-server --model /ruta/al/modelo.gguf --ctx-size 8192 --port 8080 --n-gpu-layers 99 --flash-attn"
                                     color: Theme.textPrimary
                                     placeholderTextColor: Theme.textMuted
-                                    font { family: "Consolas,monospace"; pixelSize: 12 }
+                                    font { family: Theme.codeFont; pixelSize: 12 }
                                     wrapMode: TextArea.WrapAnywhere
                                     background: null
                                     padding: 10
@@ -957,6 +1258,10 @@ Item {
                             visible: !backendGrid.cloud
                             model: App.binaryRegistry
                             textRole: "displayLabel"; valueRole: "binId"
+                            // Elegir explícitamente = deja de estar "sin fijar".
+                            onActivated: root.backendBinaryUnset = false
+                            displayText: root.backendBinaryUnset
+                                ? "(automático — sin fijar)" : currentText
                             background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
                             contentItem: Text { text: backendBinary.displayText; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
                         }
@@ -1007,8 +1312,14 @@ Item {
                             id: modelMain
                             Layout.fillWidth: true
                             model: App.modelCatalog; textRole: "fileName"; valueRole: "modelId"
-                            background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
-                            contentItem: Text { text: modelMain.displayText; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
+                            onActivated: root.modelMainUnresolved = ""
+                            displayText: root.modelMainUnresolved.length > 0
+                                ? "(no está en el catálogo — elegí uno)" : currentText
+                            background: Rectangle { color: Theme.inputBg; radius: 6
+                                border.color: root.modelMainUnresolved.length > 0 ? Theme.errorBorder : Theme.borderColor }
+                            contentItem: Text { text: modelMain.displayText
+                                color: root.modelMainUnresolved.length > 0 ? Theme.errorText : Theme.textPrimary
+                                font.pixelSize: 13; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
                         }
 
                         CheckBox { id: mmprojCheck; checked: mmprojEnabled; onCheckedChanged: mmprojEnabled = checked; padding: 0 }
@@ -1018,6 +1329,9 @@ Item {
                             Layout.fillWidth: true
                             enabled: mmprojEnabled; opacity: mmprojEnabled ? 1.0 : 0.4
                             model: App.modelCatalog; textRole: "fileName"; valueRole: "modelId"
+                            onActivated: root.modelMmprojUnresolved = ""
+                            displayText: root.modelMmprojUnresolved.length > 0
+                                ? "(no está en el catálogo — elegí uno)" : currentText
                             background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
                             contentItem: Text { text: modelMmproj.displayText; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
                         }
@@ -1029,24 +1343,74 @@ Item {
                             Layout.fillWidth: true
                             enabled: draftEnabled; opacity: draftEnabled ? 1.0 : 0.4
                             model: App.modelCatalog; textRole: "fileName"; valueRole: "modelId"
+                            onActivated: root.modelDraftUnresolved = ""
+                            displayText: root.modelDraftUnresolved.length > 0
+                                ? "(no está en el catálogo — elegí uno)" : currentText
                             background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
                             contentItem: Text { text: modelDraft.displayText; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
                         }
+                        Item { Layout.fillWidth: true; implicitHeight: 1 }
 
-                        // ── Speculative decoding / MTP (sólo con draft model) ──
-                        CheckBox { id: mtpCheck; checked: mtpEnabled; enabled: draftEnabled; onCheckedChanged: mtpEnabled = checked; padding: 0 }
-                        Text { text: "MTP (draft-mtp)"; color: (draftEnabled && mtpEnabled) ? Theme.textSecondary : Theme.textMuted; font.pixelSize: 12 }
+                        // ── Speculative decoding / MTP / DSpark ──
+                        CheckBox { id: mtpCheck; checked: mtpEnabled; onCheckedChanged: mtpEnabled = checked; padding: 0 }
+                        Text { text: draftEnabled
+                                    ? (specTypeCurrent === "draft-dspark" ? "DSpark" : "MTP (draft-mtp)")
+                                    : "MTP autocontenido";
+                               color: mtpEnabled ? Theme.textSecondary : Theme.textMuted; font.pixelSize: 12 }
+                        LcComboBox {
+                            id: specTypeCombo
+                            Layout.fillWidth: true
+                            enabled: draftEnabled && mtpEnabled
+                            opacity: enabled ? 1.0 : 0.4
+                            model: ["draft-mtp", "draft-dspark"]
+                            onActivated: { specTypeCurrent = currentText; recomputePreview() }
+                            background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
+                            contentItem: Text { text: specTypeCombo.displayText; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
+                        }
                         Item { Layout.fillWidth: true; implicitHeight: 1 }
 
                         Item { implicitWidth: 20 }
-                        Text { text: "spec n-max"; color: (draftEnabled && mtpEnabled) ? Theme.textSecondary : Theme.textMuted; font.pixelSize: 12 }
+                        Text { text: "spec n-max"; color: mtpEnabled ? Theme.textSecondary : Theme.textMuted; font.pixelSize: 12 }
                         LcTextField {
                             id: specNMaxField
                             Layout.fillWidth: true
-                            enabled: draftEnabled && mtpEnabled; opacity: enabled ? 1.0 : 0.4
+                            enabled: mtpEnabled; opacity: enabled ? 1.0 : 0.4
                             inputMethodHints: Qt.ImhDigitsOnly
                             placeholderText: "0 = default"
                         }
+                        Item { Layout.fillWidth: true; implicitHeight: 1 }
+
+                        Item { implicitWidth: 20 }
+                        CheckBox {
+                            id: specAdaptiveCheck
+                            text: "adaptive"
+                            checked: false
+                            enabled: mtpEnabled
+                            opacity: enabled ? 1.0 : 0.4
+                            padding: 0
+                            onCheckedChanged: recomputePreview()
+                        }
+                        Text { text: "n-min"; color: (mtpEnabled && specAdaptiveCheck.checked) ? Theme.textSecondary : Theme.textMuted; font.pixelSize: 12 }
+                        LcTextField {
+                            id: specNMinField
+                            Layout.fillWidth: true
+                            enabled: mtpEnabled && specAdaptiveCheck.checked
+                            opacity: enabled ? 1.0 : 0.4
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            placeholderText: "3 recomendado"
+                            onTextChanged: recomputePreview()
+                        }
+
+                        Item { implicitWidth: 20 }
+                        Text { text: "conf-min"; color: (mtpEnabled && specTypeCurrent === "draft-dspark") ? Theme.textSecondary : Theme.textMuted; font.pixelSize: 12 }
+                        LcTextField {
+                            id: specDraftConfMinField
+                            Layout.fillWidth: true
+                            enabled: mtpEnabled && specTypeCurrent === "draft-dspark"; opacity: enabled ? 1.0 : 0.4
+                            inputMethodHints: Qt.ImhFormattedNumbersOnly
+                            placeholderText: "0 = desactivado"
+                        }
+                        Item { Layout.fillWidth: true; implicitHeight: 1 }
 
                         Item { implicitWidth: 20 }
                         Text { text: "draft KV"; color: (draftEnabled && mtpEnabled) ? Theme.textSecondary : Theme.textMuted; font.pixelSize: 12 }
@@ -1054,7 +1418,7 @@ Item {
                             id: specKvType
                             Layout.fillWidth: true
                             enabled: draftEnabled && mtpEnabled; opacity: enabled ? 1.0 : 0.4
-                            model: ["", "f16", "q8_0"]
+                            model: ["", "q8_0"]
                             background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
                             contentItem: Text { text: specKvType.displayText; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
                         }
@@ -1073,7 +1437,23 @@ Item {
                         columns: 4; rowSpacing: 8; columnSpacing: 10
 
                         Text { text: "ctx"; color: Theme.textSecondary; font.pixelSize: 12 }
-                        LcTextField { id: ctxField; Layout.fillWidth: true; inputMethodHints: Qt.ImhDigitsOnly }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            LcTextField { id: ctxField; Layout.fillWidth: true; inputMethodHints: Qt.ImhDigitsOnly }
+                            LcButton {
+                                text: "Sugerir"
+                                secondary: true
+                                enabled: modelMain.currentValue !== undefined && modelMain.currentValue !== ""
+                                onClicked: {
+                                    const m = App.modelCatalog.get(modelMain.currentValue)
+                                    const trained = Number(m.trainedContext || 0)
+                                    if (trained > 0)
+                                        ctxField.text = String(Math.min(trained, 32768))
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Usa hasta 32k sin superar el contexto entrenado del GGUF. No se aplica automáticamente."
+                            }
+                        }
                         Text { text: "batch"; color: Theme.textSecondary; font.pixelSize: 12 }
                         LcTextField { id: batchField; Layout.fillWidth: true; inputMethodHints: Qt.ImhDigitsOnly }
                         Text { text: "ubatch"; color: Theme.textSecondary; font.pixelSize: 12 }
@@ -1086,6 +1466,11 @@ Item {
                         LcTextField { id: parallelSlotsField; Layout.fillWidth: true; inputMethodHints: Qt.ImhDigitsOnly }
                         Text { text: "cacheType"; color: Theme.textSecondary; font.pixelSize: 12 }
                         LcTextField { id: cacheTypeField; Layout.fillWidth: true }
+                        Text { text: "tensorOverrides"; color: Theme.textSecondary; font.pixelSize: 12 }
+                        LcTextField {
+                            id: tensorOverridesField; Layout.fillWidth: true
+                            placeholderText: "ffn_.*=Q4_K, attn_.*=Q8_0"
+                        }
                     }
                 }
 
@@ -1160,7 +1545,11 @@ Item {
                     CheckBox { id: noWarmupCheck; text: "no-warmup"; contentItem: Text { text: parent.text; color: Theme.textSecondary; leftPadding: parent.indicator.width + 6 } }
                 }
 
-                // ── Harness ──────────────────────────────────────────────────
+                // ── Agente ───────────────────────────────────────────────────
+                // Política: todo perfil usa el agente nativo LlamaAgent. No hay
+                // selector de harness (se quitaron "Ninguno" y "Opencode"). Si el
+                // usuario no quiere agente, usa el modo Chat. LlamaAgent es backend
+                // interno (sin binario), así que siempre está disponible.
                 Rectangle {
                     Layout.fillWidth: true
                     color: Theme.surfaceBg
@@ -1173,125 +1562,60 @@ Item {
                         anchors { fill: parent; margins: 12 }
                         spacing: 10
 
-                        Text {
-                            text: (App.langV, App.l("harness.title"))
-                            color: Theme.textSecondary
-                            font.pixelSize: 12
-                        }
-
-                        // Selección por tarjetas (sin dropdown).
-
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
-
-                            Repeater {
-                                model: [
-                                    { adapter: "none",      label: (App.langV, App.l("harness.none")),  icon: "—" },
-                                    { adapter: "opencode",  label: "Opencode",   icon: "🔮" },
-                                    { adapter: "llamaagent", label: "LlamaAgent", icon: "🛠" },
-                                    // Ocultos por ahora — reactivar agregando al modelo:
-                                    // { adapter: "raw",       label: "Raw Chat",   icon: "💬" },
-                                    // { adapter: "smallcode", label: "Smallcode",  icon: "🧩" },
-                                    // { adapter: "pi",        label: "Pi",         icon: "🥧" },
-                                ]
-
-                                delegate: Rectangle {
+                            spacing: 10
+                            Text { text: "🛠"; font.pixelSize: 18 }
+                            ColumnLayout {
+                                spacing: 2
+                                Layout.fillWidth: true
+                                Text {
+                                    text: "Agente: LlamaAgent"
+                                    color: Theme.textPrimary
+                                    font { pixelSize: 13; bold: true }
+                                }
+                                Text {
+                                    text: "Agente nativo, siempre activo. Para usar sin agente, abrí el modo Chat."
+                                    color: Theme.textMuted
+                                    font.pixelSize: 11
+                                    wrapMode: Text.WordWrap
                                     Layout.fillWidth: true
-                                    height: modelData.adapter === "none" ? 52 : 82
-                                    radius: 8
-                                    color: harnessAdapter === modelData.adapter ? Theme.highlight : Theme.inputBg
-                                    border.color: harnessAdapter === modelData.adapter ? Theme.accent : Theme.borderColor
-                                    border.width: harnessAdapter === modelData.adapter ? 2 : 1
-                                    clip: true
-
-                                    // install status for non-none options
-                                    readonly property bool isInstalled: modelData.adapter === "none"
-                                        ? true
-                                        : (App.harnessCheckV, App.isHarnessInstalled(modelData.adapter))
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: harnessAdapter = modelData.adapter
-                                    }
-
-                                    ColumnLayout {
-                                        anchors { fill: parent; margins: 8 }
-                                        spacing: 4
-
-                                        Row {
-                                            spacing: 6
-                                            Layout.fillWidth: true
-                                            Text { text: modelData.icon; font.pixelSize: 16 }
-                                            Text {
-                                                text: modelData.label
-                                                color: Theme.textPrimary
-                                                font { pixelSize: 13; bold: true }
-                                                anchors.verticalCenter: parent.verticalCenter
-                                            }
-                                        }
-
-                                        // install status row (non-none only)
-                                        RowLayout {
-                                            visible: modelData.adapter !== "none"
-                                            Layout.fillWidth: true
-                                            spacing: 6
-
-                                            Rectangle {
-                                                width: 7; height: 7; radius: 4
-                                                color: parent.visible
-                                                    ? (isInstalled ? Theme.successText : Theme.errorText)
-                                                    : "transparent"
-                                            }
-                                            Text {
-                                                text: {
-                                                    const _lang = App.langV
-                                                    if (!parent.visible) return ""
-                                                    return isInstalled
-                                                        ? App.l("harness.installed")
-                                                        : App.l("harness.notInstalled")
-                                                }
-                                                color: isInstalled ? Theme.successText : Theme.textMuted
-                                                font.pixelSize: 11
-                                                Layout.fillWidth: true
-                                            }
-
-                                            LcButton {
-                                                visible: modelData.adapter !== "none" && !isInstalled
-                                                text: {
-                                                    const _lang = App.langV
-                                                    return App.installingHarness
-                                                        ? App.l("harness.installing")
-                                                        : App.l("harness.install")
-                                                }
-                                                enabled: !App.installingHarness
-                                                onClicked: App.installHarness(modelData.adapter)
-                                                implicitHeight: 26
-                                            }
-                                        }
-                                    }
+                                }
+                            }
+                            Row {
+                                spacing: 6
+                                Rectangle { width: 7; height: 7; radius: 4; color: Theme.successText; anchors.verticalCenter: parent.verticalCenter }
+                                Text {
+                                    text: (App.langV, App.l("harness.installed"))
+                                    color: Theme.successText
+                                    font.pixelSize: 11
+                                    anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
                         }
 
-                        // install status message
-                        Text {
-                            visible: App.harnessInstallStatus.length > 0
-                            text: App.harnessInstallStatus
-                            color: Theme.textMuted
-                            font.pixelSize: 11
+                        // Perfil de agente por defecto (capacidades + directivas).
+                        RowLayout {
                             Layout.fillWidth: true
-                            wrapMode: Text.WrapAnywhere
-                        }
-
-                        Connections {
-                            target: App
-                            function onHarnessInstallFinished(success, adapter, message) {
-                                if (success && harnessAdapter === adapter) {
-                                    // auto-save on successful install
-                                    saveAll()
-                                }
+                            spacing: 10
+                            Text {
+                                text: "Perfil de agente"
+                                color: Theme.textSecondary
+                                font.pixelSize: 12
+                                Layout.preferredWidth: 110
+                            }
+                            LcComboBox {
+                                id: agentProfileCombo
+                                Layout.fillWidth: true
+                                model: App.profileManager.agentProfiles
+                                textRole: "name"; valueRole: "profileId"
+                                background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
+                                contentItem: Text { text: agentProfileCombo.displayText; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
+                            }
+                            Text {
+                                text: "Se editan en Ajustes › Perfiles de agente"
+                                color: Theme.textMuted
+                                font.pixelSize: 10
                             }
                         }
                     }
@@ -1316,6 +1640,42 @@ Item {
                                 color: Theme.textPrimary
                                 wrapMode: TextArea.WrapAtWordBoundaryOrAnywhere
                                 background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
+                            }
+                        }
+                    }
+                }
+
+                // ── Modo híbrido ─────────────────────────────────────────────
+                Rectangle {
+                    Layout.fillWidth: true
+                    color: Theme.surfaceBg; border.color: Theme.borderColor; radius: 8
+                    implicitHeight: hybridCol.implicitHeight + 20
+                    ColumnLayout {
+                        id: hybridCol
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        spacing: 8
+                        Text { text: "Modo híbrido — Planificador + ejecutor"; color: Theme.textSecondary; font { pixelSize: 12; bold: true } }
+                        Text {
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap
+                            text: "En cada request, el perfil elegido arma un plan detallado y este perfil lo ejecuta. Secuencial permite compartir GPU y puerto."
+                            color: Theme.textMuted; font.pixelSize: 11
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: 10
+                            LcComboBox {
+                                id: hybridModeCombo; Layout.preferredWidth: 180
+                                model: [{text:"Desactivado", value:"off"}, {text:"Secuencial", value:"sequential"}, {text:"Concurrente", value:"concurrent"}]
+                                textRole: "text"; valueRole: "value"
+                                currentIndex: Math.max(0, indexOfValue(root.hybridMode))
+                                onActivated: root.hybridMode = currentValue
+                            }
+                            LcComboBox {
+                                id: plannerProfileCombo; Layout.fillWidth: true
+                                enabled: root.hybridMode !== "off"
+                                model: App.profileManager.launchProfilesForMenu()
+                                textRole: "displayName"; valueRole: "id"
+                                currentIndex: Math.max(0, indexOfValue(root.plannerProfileId))
+                                onActivated: root.plannerProfileId = currentValue
                             }
                         }
                     }

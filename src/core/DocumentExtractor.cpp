@@ -234,6 +234,11 @@ bool isImage(const QString &path)
     return imageExts().contains(QFileInfo(path).suffix().toLower());
 }
 
+bool isRich(const QString &path)
+{
+    return richExts().contains(QFileInfo(path).suffix().toLower());
+}
+
 QString extract(const QString &path, QString *err)
 {
     if (err) err->clear();

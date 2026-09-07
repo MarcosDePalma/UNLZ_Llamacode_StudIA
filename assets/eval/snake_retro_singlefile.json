@@ -1,0 +1,21 @@
+{
+  "name": "Snake retro (HTML single-file) por nivel",
+  "description": "Tarea creativa AUTOCONTENIDA: un único HTML con CSS+JS embebido que corre el Snake clásico con estética NES/8-bit. Ideal para comparar NIVELES de agente: no requiere repo, búsqueda, web ni MCP, así que el nivel mínimo (Chat liviano) debería ganar en foco/tiempo y los niveles altos tienden a sobre-ingeniería (tests, archivos extra, tools irrelevantes). Acceptance = substrings que deben aparecer en el HTML generado (o en el resumen del agente). El '*' de mejoras se evalúa por las opcionales.",
+  "tasks": [
+    {
+      "id": "snake-singlefile",
+      "category": "coding",
+      "weight": 3,
+      "prompt": "Creame una página HTML con CSS y JS embebido, con estética retro, que permita jugar al clásico SNAKE donde una viborita se desplaza sobre el plano comiendo manzanas y agrandándose, los assets deben ser simil NES/Family Game/8 bit. Hacele las mejoras que creas necesarias. Entregá UN solo archivo .html autocontenido (sin dependencias externas, sin CDNs).",
+      "acceptance": [
+        "<canvas",
+        "<style",
+        "<script",
+        "getContext",
+        "addEventListener",
+        "keydown",
+        "score"
+      ]
+    }
+  ]
+}

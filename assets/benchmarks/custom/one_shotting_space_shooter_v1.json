@@ -1,0 +1,27 @@
+{
+  "id": "one_shotting_space_shooter_v1",
+  "bundledVersion": 1,
+  "name": "One-shotting · Space shooter",
+  "description": "Benchmark creativo de horizonte largo para construir un juego espacial arcade completo con un único prompt inicial y sin intervención humana.",
+  "source": "bundled",
+  "protocolVersion": 1,
+  "recommendedPasses": 1,
+  "evaluation": {
+    "kind": "one-shotting",
+    "humanIntervention": false,
+    "gate": "No editar manualmente el workspace entre el prompt inicial y la evaluación final."
+  },
+  "prompts": [
+    {
+      "id": "space_shooter",
+      "category": "one-shotting/frontend-game",
+      "isSpeed": false,
+      "maxTokens": 16000,
+      "prompt": "Build a complete and highly polished browser-based space shooter directly inside this folder. The game must be fully playable and feel like a finished arcade game rather than a prototype. You may choose any technology, architecture, rendering approach, or libraries, but it must run locally in a web browser. Prioritize exceptional visual quality and game feel: cohesive art direction, environments, attractive ships and enemies, weapons, explosions, particles, lighting, effects, transitions, animations and UI. Do not rely on visual assets that cannot be meaningfully inspected; prefer graphics and effects created and controlled programmatically with canvas, SVG or CSS. The player must fight increasingly challenging waves, acquire meaningful weapon or power-up upgrades, face varied enemies and a major encounter or boss, and have clear progression, defeat and restart flows. Make the important creative and technical decisions yourself. Test the game thoroughly, fix problems, and deliver the strongest finished experience you can. Do not ask for clarification or wait for human intervention. Leave a README.md with instructions to run and controls.",
+      "acceptance": {
+        "files": ["README.md"],
+        "expectSubstrings": ["canvas", "requestanimationframe", "enemy", "boss", "power", "restart"]
+      }
+    }
+  ]
+}

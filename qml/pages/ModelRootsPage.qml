@@ -109,6 +109,24 @@ Item {
                 background: Rectangle { color: Theme.inputBg; radius: 6; border.color: Theme.borderColor }
                 contentItem: Text { text: scanCombo.displayText; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 10; verticalAlignment: Text.AlignVCenter }
             }
+
+            // Ingesta de modelos ya descargados por Ollama (reusa los blobs GGUF,
+            // sin re-descargar). Sólo visible si hay un store detectable.
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                visible: App.ollamaStoreAvailable()
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    text: "Ollama detectado — importar modelos existentes"
+                    color: Theme.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap
+                }
+                LcButton {
+                    text: "Importar de Ollama"; secondary: true
+                    onClicked: { App.importOllamaModels(""); addDlg.close() }
+                }
+            }
         }
 
         FolderDialog {
@@ -134,6 +152,71 @@ Item {
                 return App.rootRegistry.scanning ? App.l("models.scanning") : App.l("models.addAction")
             }
             onActionClicked: if (!App.rootRegistry.scanning) addDlg.open()
+        }
+
+        // ── Perfiles de sistema recomendados para esta computadora ──
+        // Mismo auto-instalador rápido que el asistente (baja modelos+binarios).
+        Rectangle {
+            id: recCard
+            Layout.fillWidth: true
+            Layout.preferredHeight: recCol.implicitHeight + 24
+            readonly property var showcase: (App.hardwareSummary, App.recommendedShowcase())
+            readonly property var sysPick: (App.hardwareSummary, App.recommendedSystemProfile())
+            visible: showcase.length > 0 || (sysPick.launchId ?? "").length > 0
+            radius: 8
+            color: Theme.surfaceBg
+            border.color: Theme.accent
+
+            ColumnLayout {
+                id: recCol
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 6
+                Text {
+                    text: "★ Perfiles recomendados para tu computadora"
+                    color: Theme.textPrimary
+                    font { pixelSize: 14; bold: true }
+                }
+                Repeater {
+                    model: recCard.showcase
+                    Text {
+                        Layout.fillWidth: true
+                        text: "• " + (modelData.displayName || "")
+                        color: Theme.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap
+                    }
+                }
+                Text {
+                    visible: recCard.showcase.length === 0
+                    Layout.fillWidth: true
+                    text: (recCard.sysPick.displayName ?? "")
+                    color: Theme.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    spacing: 10
+                    LcButton {
+                        visible: recCard.showcase.length > 0
+                        text: "Instalar ambos"
+                        enabled: !App.modelDownloadRunning
+                        onClicked: App.acceptShowcase()
+                    }
+                    Repeater {
+                        model: recCard.showcase
+                        LcButton {
+                            text: "Sólo " + (modelData.label || modelData.displayName || ""); secondary: true
+                            enabled: !App.modelDownloadRunning && (modelData.launchId || "").length > 0
+                            onClicked: App.acceptShowcaseOne(modelData.launchId)
+                        }
+                    }
+                    LcButton {
+                        visible: recCard.showcase.length === 0
+                        text: "Instalar y usar"
+                        enabled: !App.modelDownloadRunning && (recCard.sysPick.launchId ?? "").length > 0
+                        onClicked: App.installAndUseSystemProfile(recCard.sysPick.launchId)
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -454,6 +537,21 @@ Item {
                             spacing: 6
                             Text { text: isOnline ? "●" : "○"; font.pixelSize: 10; color: isOnline ? Theme.successText : Theme.errorText }
                             Text { text: label; font.pixelSize: 14; font.bold: true; color: Theme.textPrimary }
+                            // Chip que distingue un store de Ollama de una carpeta normal.
+                            Rectangle {
+                                visible: kind === "ollama"
+                                anchors.verticalCenter: parent.verticalCenter
+                                radius: 4
+                                color: Theme.accent
+                                width: ollamaTag.implicitWidth + 10
+                                height: ollamaTag.implicitHeight + 4
+                                Text {
+                                    id: ollamaTag
+                                    anchors.centerIn: parent
+                                    text: "Ollama"; font.pixelSize: 9; font.bold: true
+                                    color: Theme.baseBg
+                                }
+                            }
                         }
                         Text { width: rootList.width - 32; text: path; font.pixelSize: 11; color: Theme.textMuted; elide: Text.ElideMiddle }
                         Text { text: scanMode; font.pixelSize: 10; color: Theme.textMuted }
@@ -646,6 +744,14 @@ Item {
                                         font.pixelSize: 11; color: Theme.textMuted
                                     }
                                     Text { text: sizeLabel; font.pixelSize: 11; color: Theme.textMuted }
+                                    Text {
+                                        visible: trainedContext > 0
+                                        text: (architecture || "GGUF") + " · ctx entrenado "
+                                              + (trainedContext >= 1024
+                                                 ? Math.round(trainedContext / 1024) + "k"
+                                                 : trainedContext)
+                                        font.pixelSize: 11; color: Theme.textMuted
+                                    }
                                     // Gemma QAT q4_0 crudo: degradado en llama.cpp; preferir UD-Q4_K_XL.
                                     Text {
                                         visible: {
@@ -660,6 +766,25 @@ Item {
                                         font.pixelSize: 11; color: Theme.warnText
                                     }
                                 }
+                            }
+                        }
+
+                        Row {
+                            anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
+                            spacing: 4
+                            LcButton {
+                                text: isVision ? "👁✓" : "👁"
+                                secondary: true
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Marcar compatibilidad de visión manualmente"
+                                onClicked: App.modelCatalog.setManualCompatibility(modelId, !isVision, isDraft)
+                            }
+                            LcButton {
+                                text: isDraft ? "⚡✓" : "⚡"
+                                secondary: true
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Marcar compatibilidad draft manualmente"
+                                onClicked: App.modelCatalog.setManualCompatibility(modelId, isVision, !isDraft)
                             }
                         }
 

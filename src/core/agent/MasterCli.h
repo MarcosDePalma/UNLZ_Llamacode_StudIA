@@ -5,8 +5,8 @@
 #include <QHash>
 
 // Detección y metadata de CLIs "maestro" (claude code / codex) usados como
-// supervisor del agente local. Sólo detección + comando de instalación; la
-// ejecución real vive en AgentToolRunner (tool ask_teacher, modo cli).
+// supervisor del agente local. La detección también expone capacidades; la
+// ejecución pasa por ManagedAgentRunStore desde AgentToolRunner (tool ask_teacher).
 class MasterCli : public QObject
 {
     Q_OBJECT

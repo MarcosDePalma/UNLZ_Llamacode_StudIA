@@ -1,6 +1,7 @@
 # Build directories
 /build/
 /build_tests/
+/.buildlock/
 /build2/
 /cmake-build-*/
 /out/
@@ -86,6 +87,13 @@ result.txt
 # tuner selftest build artifacts
 build_tuner/
 tuner_selftest.exe
+
+# Verify skill build workspace (artefactos, no fuente)
+/build_workspace_verify/
+
+# Build trees de sesiones paralelas (worktree/agentes) y bytecode del SDK
+/build_core_codex/
+/build_tests_autoprompt/
 
 # Python bytecode (tools/studia y demas scripts)
 __pycache__/

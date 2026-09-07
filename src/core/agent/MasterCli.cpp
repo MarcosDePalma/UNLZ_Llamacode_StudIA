@@ -36,6 +36,8 @@ QVariantMap MasterCli::status(const QString &name, bool force)
     out[QStringLiteral("installed")]      = false;
     out[QStringLiteral("version")]        = QString();
     out[QStringLiteral("path")]           = QString();
+    out[QStringLiteral("probeOk")]        = false;
+    out[QStringLiteral("capabilities")]   = QStringList();
 
     // Resolver binario en PATH (Windows agrega .cmd/.exe automáticamente).
     QString exe = QStandardPaths::findExecutable(name);
@@ -61,6 +63,28 @@ QVariantMap MasterCli::status(const QString &name, bool force)
     out[QStringLiteral("path")]      = exe;
     out[QStringLiteral("version")]   = version.isEmpty()
         ? QStringLiteral("instalado") : version;
+
+    // La UI y el supervisor pueden advertir cuando un wrapper/versión no
+    // expone el contrato esperado, sin asumir que todo binario con ese nombre
+    // es compatible. Nunca se ejecutan acciones de escritura en este probe.
+    QProcess help;
+    QStringList capabilities;
+    help.start(exe, {QStringLiteral("--help")});
+    if (help.waitForStarted(3000) && help.waitForFinished(8000)) {
+        const QString raw = QString::fromUtf8(help.readAllStandardOutput())
+                          + QString::fromUtf8(help.readAllStandardError());
+        if (!raw.trimmed().isEmpty()) {
+            out[QStringLiteral("probeOk")] = true;
+            const QStringList markers = name == QLatin1String("claude")
+                ? QStringList{QStringLiteral("-p"), QStringLiteral("--permission-mode"),
+                              QStringLiteral("--model")}
+                : QStringList{QStringLiteral("exec"), QStringLiteral("--model"),
+                              QStringLiteral("--full-auto")};
+            for (const QString &marker : markers)
+                if (raw.contains(marker)) capabilities << marker;
+        }
+    }
+    out[QStringLiteral("capabilities")] = capabilities;
 
     m_cache.insert(name, out);
     return out;

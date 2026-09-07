@@ -17,6 +17,7 @@ private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     void isImage_byExtension();
+    void isRich_byExtension();
     void extract_plainText();
     void extract_codeFile();
     void extract_imageReturnsEmpty();
@@ -40,6 +41,19 @@ void DocExtractorTests::isImage_byExtension()
     QVERIFY(DocumentExtractor::isImage("foto.PNG"));
     QVERIFY(DocumentExtractor::isImage("x.jpeg"));
     QVERIFY(!DocumentExtractor::isImage("notas.txt"));
+}
+
+// isRich decide a qué archivos el indexador del RAG híbrido le paga la extracción
+// (include_docs). Código y texto plano NO son ricos: se leen directo.
+void DocExtractorTests::isRich_byExtension()
+{
+    QVERIFY(DocumentExtractor::isRich("manual.PDF"));
+    QVERIFY(DocumentExtractor::isRich("spec.docx"));
+    QVERIFY(DocumentExtractor::isRich("hoja.xlsx"));
+    QVERIFY(DocumentExtractor::isRich("pagina.html"));
+    QVERIFY(!DocumentExtractor::isRich("main.cpp"));
+    QVERIFY(!DocumentExtractor::isRich("notas.md"));
+    QVERIFY(!DocumentExtractor::isRich("foto.png"));
 }
 
 void DocExtractorTests::extract_plainText()

@@ -1,0 +1,15 @@
+0.00.134.622 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.379.429 W srv  llama_server: -----------------
+0.00.379.434 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.379.435 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.379.435 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.379.435 W srv  llama_server: -----------------
+0.00.396.663 I srv    load_model: loading model 'D:\Models\llamacpp\DeepSeek-V4-Flash-0731-UD-IQ3_S\DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf'
+0.01.659.368 E ggml_backend_cpu_buffer_type_alloc_buffer: failed to allocate buffer of size 109117186048
+0.01.659.380 E alloc_tensor_range: failed to allocate CUDA_Host buffer of size 109117186048
+0.01.750.178 E llama_model_load: error loading model: unable to allocate CUDA_Host buffer
+0.01.750.186 E llama_model_load_from_file_impl: failed to load model
+0.01.750.189 E cmn  common_init_: failed to load model 'D:\Models\llamacpp\DeepSeek-V4-Flash-0731-UD-IQ3_S\DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf'
+0.01.750.192 E srv    load_model: failed to load model, 'D:\Models\llamacpp\DeepSeek-V4-Flash-0731-UD-IQ3_S\DeepSeek-V4-Flash-0731-UD-IQ3_S-00001-of-00004.gguf'
+0.01.751.170 I srv    operator(): operator(): cleaning up before exit...
+0.01.753.289 E srv  llama_server: exiting due to model loading error

@@ -1,0 +1,97 @@
+{
+    "acceptance": [
+        {
+            "name": "<canvas",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "<style",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "<script",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "getContext",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "addEventListener",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "keydown",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        },
+        {
+            "name": "score",
+            "output": "Texto presente en la respuesta o archivos generados.",
+            "passed": true,
+            "taskId": "snake-singlefile",
+            "type": "substring"
+        }
+    ],
+    "agentFiles": [
+        ".llamacode/agent_events.jsonl",
+        "snake_retro.html"
+    ],
+    "agentMetrics": [
+        {
+            "elapsedMs": 6184,
+            "tokens": 248,
+            "tps": 40.350476428488214,
+            "ttft_ms": 20107
+        }
+    ],
+    "agentProfileId": "agent-basico",
+    "agentProfileName": "Básico",
+    "avgTps": 40.350476428488214,
+    "avgTtftMs": 20107,
+    "benchmarkName": "Eval · Snake retro (HTML single-file) por nivel",
+    "elapsedSec": 147.918,
+    "failed": false,
+    "finalScore": 7,
+    "finalTotal": 7,
+    "firstAttemptScore": 7,
+    "firstAttemptTotal": 7,
+    "id": "9b3aa9d5-d0fa-4b34-9505-6892e099d887",
+    "mode": "custom",
+    "pass": 1,
+    "passedAfterRepair": false,
+    "passesTotal": 1,
+    "profileId": "5c3d9bda-8810-4331-a770-1c981461fe17",
+    "profileName": "1_Llama.cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ",
+    "qualityScore": 7,
+    "qualityTotal": 7,
+    "ramMb": 24978.2109375,
+    "repairAttempts": 0,
+    "response": "Creé el archivo **`snake_retro.html`** — un único archivo HTML autocontenido con CSS y JS embebido. Incluye:\n\n- **Estética retro NES/8-bit**: grid de fondo, scanlines, viñeta CRT, paleta de colores retro\n- **Snake clásico**: la viborita come manzanas rojas (con tallo y hojita estilo pixel art) y se agranda\n- **Bonus food**: aparece aleatoriamente una estrella amarilla que vale 50 pts y desaparece si no la atrapás a tiempo\n- **SFX con Web Audio API**: sonidos 8-bit de comer, morir, iniciar y bonus (sin archivos externos)\n- **Partículas**: explosiones de píxeles al comer o morir\n- **Screen shake** al morir\n- **High score** persistente con `localStorage`\n- **Controles**: flechas/WASD, swipe en táctil, y D-pad virtual en móvil\n- **Pause** con P/⏸\n- **Velocidad progresiva**: se acelera conforme sube el score\n\nNo se necesita compilar, abrilo directo en el navegador.",
+    "runDir": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152415",
+    "runLabel": "Eval · Snake retro (HTML single-file) por nivel",
+    "target": "agent",
+    "timeToFirstAttempt": 147.918,
+    "timedOut": false,
+    "timestamp": 1782757611964,
+    "totalTime": 147.918,
+    "vramMb": 23870,
+    "workspace": "C:/Users/cristian/AppData/Local/LlamaCode/LlamaCode/benchmark-runs/Eval_Snake_retro_HTML_single-file_por_ni_20260629_152415/1_Llama_cpp_Qwen_27b_Q4XS_262k_Q4kv_MTP_NGRAM_MMPROJ__ws"
+}

@@ -47,7 +47,7 @@
 
 - [ ] `LlamaProcessManager` dedicado (extraer de `AppController`)
 - [x] Logs en vivo stdout/stderr (en AppController + AgentPage Vista terminal)
-- [x] Filtros de log por nivel (`serverLogByLevel(level)` invokable: all/error/warn/stderr/stdout/lifecycle/health/diag; falta combo en UI)
+- [x] Filtros de log por nivel (`serverLogByLevel(level)` invokable: all/error/warn/stderr/stdout/lifecycle/health/diag + combo en UI)
 - [x] Detecciones automáticas por regex en log (`detectServerLogPatterns`: OOM, port busy, modelo cargado, arg inválido, load fail, context-shift → señal `serverDiagnostic(level,msg)`)
 - [x] Botón copiar comando
 
@@ -62,8 +62,8 @@
 ## P1 - Endpoint health
 
 - [x] `GET /health` polling post-start (`startHealthPolling`, intervalo 2s, set `serverReady` al 200)
-- [ ] `POST /v1/chat/completions` test prompt mínimo (existe smoke-test en benchmark, no en arranque)
-- [ ] Medir latencia first-token
+- [x] `POST /v1/chat/completions` test prompt mínimo (smoke HTTP aislado en `test_backends_net`)
+- [x] Medir latencia first-token (campo `firstTokenMs` por respuesta de chat raw)
 - [x] UI de estado: iniciando / listo / error (`serverReady`/`serverStopping`/`serverError`)
 
 ## P2 - UX de perfiles (parcial)
@@ -72,18 +72,18 @@
 - [x] Renombrar perfil
 - [x] Eliminar perfil
 - [x] **Importar perfil desde argumentos CLI** (parsea --host, --port, --model, --ctx-size, --batch-size, --ubatch-size, --threads, --n-gpu-layers, --flash-attn, --no-mmap, --mlock, --parallel, --cache-type-k)
-- [ ] Plantillas de perfil
-- [ ] Etiquetas y búsqueda por perfil
-- [ ] Favoritos y último usado
-- [ ] Export/Import de perfiles completos (JSON)
-- [ ] Historial de cambios por perfil
+- [x] Plantillas de perfil reutilizables (guardar/aplicar/eliminar vía `ProfileManager`, con referencias, args, env y tags)
+- [x] Búsqueda por nombre, alias, id o etiquetas en la pantalla de perfiles
+- [x] Favoritos y orden de favoritos en menús; último usado se conserva mediante el perfil activo persistido
+- [x] Export/Import de perfiles completos (bundle JSON, ids y referencias preservados)
+- [x] Historial de cambios por perfil (`profileChangeHistory`, JSONL append-only y test headless)
 
 ## P2 - Model Catalog avanzado
 
-- [ ] Dedupe por hash SHA256 (diferido, opt-in)
-- [ ] Filtros por familia/quant/tamaño/root (UI)
-- [ ] Marcar compatibilidad vision/draft manualmente
-- [ ] Asociación rápida modelo → perfil
+- [x] Dedupe por hash SHA256 para binarios; los modelos conservan ids estables y metadatos cacheados
+- [x] Filtros por familia/vision/root (UI); cuantización y tamaño quedan visibles en las tarjetas del catálogo
+- [x] Marcar compatibilidad vision/draft manualmente (UI + API headless, persistido fuera del scanner)
+- [x] Asociación rápida modelo → perfil desde ProfilesPage
 
 ## P3 - Harness opencode ✅
 
@@ -99,8 +99,8 @@
 - [x] Actualización de título de sesión en tiempo real vía SSE `session.updated`
 - [x] Limpieza de sesión/SSE al detener agente
 - [ ] `AiderCliAdapter`
-- [ ] Templates args/env por harness
-- [ ] Adjuntar archivos al mensaje (phase 2 de agente)
+- [x] Templates args/env por harness (persistidos en `HarnessProfile` y expuestos por `ProfileManager`)
+- [x] Adjuntar archivos al mensaje (texto, documentos e imágenes con filtro de visión)
 
 ## P4 - Chat integrado ✅
 
@@ -114,9 +114,9 @@
 - [x] Nueva sesión desde UI
 - [x] Stop de generación con guardado
 - [x] Indicador "⏳ Procesando..." + cursor `▌`
-- [ ] Sampling configurable por sesión (temp, top-p, etc.) — requiere plumbing en `RawChatBackend` (persistir en session JSON + pasar al payload)
+- [x] Sampling configurable por sesión (temperature/top-p/top-k, persistencia JSON, payload y panel ChatPage)
 - [x] Export conversación (Markdown/JSON) (`exportChatSession(id,format)` + items en menú contextual de ChatPage)
-- [x] Búsqueda en historial (`searchChatHistory(query)` invokable: matchea título + contenido, devuelve snippet; falta panel de búsqueda en UI)
+- [x] Búsqueda en historial (`searchChatHistory(query)` invokable: matchea título + contenido, devuelve snippet + panel de búsqueda en UI)
 
 ## P5 - Built-in agent nativo ✅ (`LlamaAgentBackend`, loop ReAct)
 
@@ -135,51 +135,55 @@
 
 ## P6 - Benchmarking
 
-- [ ] `BenchmarkRunner`: lanza perfiles en secuencia vía `AppController`, parámetros fijos (temp 0, seed fijo)
-- [ ] `BenchmarkSession`: entidad con métricas por perfil (RAM, VRAM, t/s prompt eval, t/s gen, tiempo total, scores)
-- [ ] Modo **Corta**: 5 prompts × 256 tokens, score 0–2, ~30 s
-- [ ] Modo **Completa**: 15 prompts × 512 tokens, score 0–5, 1–5 min
-- [ ] Editor de prompts por categoría (razonamiento, código, pericial, extracción, contexto largo)
-- [ ] Scoring manual post-corrida desde UI (o automático vía juez LLM)
-- [ ] Persistencia en JSON (`benchmarks/{timestamp}.json`)
-- [ ] `BenchmarkPage.qml`: tabla comparativa con columnas ordenables y filtros
-- [ ] Exportar resultados a CSV
-- [ ] Selección multi-perfil para comparar en una misma corrida
-- [ ] Calidad relativa normalizada contra perfil baseline
+- [x] `BenchmarkRunner`: `runBenchmarkInternal` lanza perfiles en secuencia vía `AppController`
+- [x] `BenchmarkSession`: resultados JSON por perfil con RAM/VRAM, t/s, tiempos y scores
+- [x] Modo **Corta** y **Completa** con suites estándar y scoring de aceptación
+- [x] Editor/importador de prompts personalizados y suites por categoría
+- [x] Scoring post-corrida y re-scoring sin repetir inferencia
+- [x] Persistencia en JSON (`benchmarks/{timestamp}/...`)
+- [x] `BenchmarkPage.qml`: tabla comparativa con columnas ordenables y filtros
+- [x] Exportar resultados a CSV desde la UI y `AppController::exportBenchmarkResultsCsv`
+- [x] Selección multi-perfil y cola de benchmarks personalizados
+- [x] Calidad relativa y comparación contra baseline en `comparison.json`
 
 ## Calidad
 
 Target de tests: `cmake -B build_tests -DBUILD_TESTS=ON` → `LlamaCodeTests` (Qt Test). `tests/test_core.cpp`. 17/17 pasan.
 
-- [ ] Tests `BinaryRegistry`
-- [ ] Tests `ModelRootRegistry`
+- [x] Tests `BinaryRegistry` (add/get/update/remove, hash y persistencia en `test_registries`)
+- [x] Tests `ModelRootRegistry`
 - [x] Tests `EffectiveProfileBuilder` (host/port, drop flag no soportado, modelo faltante = blocking)
 - [x] Tests `GGUFScanner` (inferencia familia/quant/vision/draft)
-- [ ] Tests `AppController` chat session CRUD
+- [x] Tests `AppController` chat session CRUD
 
 ## Pendientes deferidos (jun-2026) — backend/infra listo, falta lo anotado
 
 - [ ] **LlamaProcessManager dedicado** — extraer ciclo de vida de proceso de `AppController` a clase propia. Refactor arquitectónico grande, alto riesgo, bajo ROI ahora. No empezado.
-- [ ] **Sampling por sesión (chat)** — temp/top-p/top-k por sesión. Plumbing: persistir en session JSON + pasar al payload de `RawChatBackend::runCompletion`. UI: panel en ChatPage.
-- [ ] **Panel UI de búsqueda en historial** — invokable `searchChatHistory(query)` ya existe; falta campo de búsqueda + lista de resultados (snippet→switchChatSession) en ChatPage.
-- [ ] **Combo UI de filtro de log por nivel** — invokable `serverLogByLevel(level)` ya existe; falta selector (all/error/warn/stderr/stdout/lifecycle/health/diag) en la vista de log del server.
-- [ ] **Banner UI de `serverDiagnostic`** — señal emitida (OOM/port-busy/load-fail/…); falta mostrarla como aviso no-bloqueante en la UI.
+- [x] **ControlApi `reqId` estable** — acepta `reqId` por body/query/header (`x-req-id`/`reqid`), lo genera si falta y lo devuelve en respuestas/errores. Falta propagar ese id a logs de Tasks/agente/benchmark.
+- [x] **Scheduler de operaciones auxiliares** — `AuxiliaryJobScheduler` separa del `TaskScheduler` cron una cola interna por clases de trabajo, prioridad, recurso ocupado, cancelación y snapshot consultable. Está expuesto como subobjeto observable de `AppController` y es invocable por `ControlApi` para encolar, iniciar, completar/cancelar y consultar trabajos reales.
+- [x] **Sampling por sesión (chat)** — temperature/top-p/top-k/min-p/repeat penalty, persistencia JSON, payload, medición first-token y panel en ChatPage.
+- [x] **Panel UI de búsqueda en historial** — campo de búsqueda + resultados (snippet y `switchChatSession`) en ChatPage.
+- [x] **Combo UI de filtro de log por nivel** — selector all/error/warn/stderr/stdout/lifecycle/health/diag en LaunchPage.
+- [x] **Banner UI de `serverDiagnostic`** — aviso no bloqueante en la vista de log del servidor.
 - [ ] **Verificación GUI e2e de subagents con LLM vivo** — requiere server+modelo corriendo. Plumbing git/worktree/merge/abort ya validado; falta corrida real con el modelo manejando `task`.
-- [ ] **Tests `BinaryRegistry`** — infra Qt Test ya montada (`BUILD_TESTS=ON`); agregar casos.
-- [ ] **Tests `ModelRootRegistry`** — idem.
-- [ ] **Tests `AppController` chat session CRUD** — idem (new/switch/delete/move/rename + persistencia index.json).
+- [x] **Tests `BinaryRegistry`** — add/get/update/remove, hash y persistencia en `test_registries`.
+- [x] **Tests `ModelRootRegistry`** — add/remove, escaneo GGUF, persistencia y Ollama en `test_registries`.
+- [x] **Tests `AppController` chat session CRUD** — sesiones raw, cola, rename/delete/move y persistencia en `test_backends_net`/`test_appcontroller`.
 
 ## Memoria estilo Thoth/GraphRAG (provenance+forget+grafo+consolidación ✅, commits c099c4d/42b1084/76c1003)
 
-- [ ] **Gate de calidad sobre lo consolidado** — `consolidateMemory()` guarda hechos durables del transcript sin filtro. Reusar `verify_claims` para descartar/bajar confidence de los no acreditados contra repo+memoria antes de persistir. Hacerlo si aparece ruido en `.llamacode/memory.jsonl`.
-- [ ] **Grafo inferido automático** — que la consolidación además emita `link`s al knowledge graph (`GraphStore`) inferidos de los tool-calls reales (módulo→archivo tocado, decisión→bug). Hoy `graph link` es 100% manual.
+- [x] **Evidencia durable del grafo** — `SourceRef` con ruta/rango/SHA-256,
+  `query packet`, `graph doctor`, `KnowledgePacket` acotado y política opt-in del
+  `HarnessSpec`; el reindexado post-escritura funciona también fuera de Debug.
+- [x] **Gate de calidad sobre lo consolidado** — `consolidateMemory()` reutiliza la verificación de `verify_claims`: descarta inferencias sin respaldo y baja confidence cuando la evidencia es parcial antes de persistir.
+- [x] **Grafo inferido automático** — los `write_file`/`edit_file` exitosos registran módulo→archivo con provenance de tool/sesión; la consolidación conecta decisión→bug sólo cuando comparten vocabulario y mantiene ambos edges como unreviewed.
 
 ## Backend RAG compacto opcional (LEANN)
 
 - [ ] **Evaluar LEANN como sidecar CLI/MCP opcional** — no reemplazar el buscador integrado. Mantener `hybrid_search` actual (BM25 + embeddings + RRF, presupuesto de tokens y expansión por dep-graph) como backend default y fallback sin dependencias externas.
 - [ ] **Abstracción de backend de retrieval** — permitir seleccionar por workspace `builtin` o `leann`, conservando una salida normalizada para que el agente y el empaquetado de contexto no dependan del proveedor del índice.
 - [ ] **Fusión híbrida** — combinar resultados LEANN con BM25 local mediante RRF; no depender exclusivamente del índice vectorial para símbolos, errores y frases exactas.
-- [ ] **Indexación incremental por hash** — asociar archivo/chunk a hash de contenido y recalcular sólo lo agregado o modificado. Evaluar el watcher/Merkle tree de LEANN, pero aplicar la misma invalidación también al caché SQLite integrado.
+- [x] **Indexación incremental por hash** — Project Brain persiste SHA-256 por archivo, reutiliza entradas cuyo tamaño+mtime no cambió y reporta agregados/modificados/eliminados/reutilizados. La invalidación de chunks SQLite sigue siendo una optimización independiente futura.
 - [ ] **Chunking AST ampliado** — evaluar el chunking de LEANN para Python, Java, C# y TypeScript y extenderlo a los lenguajes relevantes de LlamaCode. Preservar metadata de archivo, símbolo y rango de líneas para filtros y citas.
 - [ ] **Criterio de activación** — ofrecer LEANN principalmente para repositorios o colecciones grandes (documentos, chats e historiales), donde el ahorro del índice compense la latencia de recomputación y las dependencias Python/HuggingFace.
 - [ ] **Benchmark antes de integrar** — medir con 10k, 100k y 1M chunks: tamaño del índice, tiempo de build/actualización, búsqueda fría/caliente, recall@k, RAM/VRAM, latencia y comportamiento tras altas/bajas/modificaciones.

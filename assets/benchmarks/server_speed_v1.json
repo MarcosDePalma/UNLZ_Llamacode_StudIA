@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "id": "server-speed-v1",
+  "name": "LlamaCode Server Speed v1",
+  "description": "Corpus determinista para comparar prefill, decode, TTFT, ITL y concurrencia sin puntuar calidad.",
+  "items": [
+    {
+      "id": "chat",
+      "category": "chat",
+      "maxTokens": 128,
+      "prompt": "Respondé en cinco frases breves qué hace que una respuesta de un asistente local sea útil, clara y verificable. No uses viñetas."
+    },
+    {
+      "id": "prose",
+      "category": "prose",
+      "maxTokens": 192,
+      "prompt": "Escribí una explicación técnica breve para una persona no especialista sobre por qué un sistema local puede preferir privacidad, latencia predecible y control de datos frente a una API remota."
+    },
+    {
+      "id": "reasoning",
+      "category": "reasoning",
+      "maxTokens": 160,
+      "prompt": "Un proceso A tarda 7 minutos y un proceso B tarda 11 minutos. Si se ejecutan en paralelo y después hay una verificación de 3 minutos, ¿cuál es el tiempo total? Explicá el razonamiento y terminá con el número de minutos."
+    },
+    {
+      "id": "math",
+      "category": "math",
+      "maxTokens": 128,
+      "prompt": "Calculá 17 × 23 + 19 × 7. Mostrá una cuenta corta y terminá con el resultado entero."
+    },
+    {
+      "id": "code",
+      "category": "code",
+      "maxTokens": 192,
+      "prompt": "Escribí una función Python llamada normalize_names que reciba una lista de nombres, quite espacios externos, descarte cadenas vacías y devuelva los nombres ordenados sin duplicados. Incluí una implementación breve."
+    },
+    {
+      "id": "json",
+      "category": "json",
+      "maxTokens": 128,
+      "prompt": "Devolvé únicamente un objeto JSON válido con las claves \"status\", \"items\" y \"offline\". Usá \"ready\", 3 y true como valores. No agregues markdown ni explicación."
+    },
+    {
+      "id": "summarization",
+      "category": "summarization",
+      "maxTokens": 160,
+      "prompt": "Resumí en cuatro frases: un equipo adoptó modelos locales para mantener los documentos en su red; automatizó pruebas reproducibles; separó velocidad de calidad; y registró hardware, versión, contexto y errores para no comparar resultados incompatibles."
+    },
+    {
+      "id": "file-edit",
+      "category": "file_edit",
+      "maxTokens": 192,
+      "prompt": "Proponé un parche unificado mínimo que agregue validación de entrada a una función llamada parse_config. La validación debe rechazar valores nulos y devolver un error descriptivo. Respondé sólo con el diff."
+    }
+  ],
+  "prefill": {
+    "prompt": "Contexto de trabajo local: el sistema debe preservar una cadena reproducible de modelo, runtime, hardware, contexto y criterios de medición. Cada conclusión debe distinguir datos observados, configuración efectiva y limitaciones. Prepará una respuesta corta sobre el siguiente pedido: ",
+    "depths": [2048, 8192, 16384, 32768, 65536],
+    "maxTokens": 8
+  },
+  "concurrency": {
+    "slots": [1, 2, 4, 8],
+    "requestsPerPoint": 4,
+    "maxTokens": 96
+  }
+}

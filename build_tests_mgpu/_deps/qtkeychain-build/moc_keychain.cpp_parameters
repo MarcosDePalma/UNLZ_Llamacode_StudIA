@@ -1,0 +1,7 @@
+-IC:/Users/cristian/Documents/LlamaCode/build_tests_mgpu/_deps/qtkeychain-build
+-DUSE_CREDENTIAL_STORE=1
+-DWIN32
+--compiler-flavor=msvc
+-o
+C:/Users/cristian/Documents/LlamaCode/build_tests_mgpu/_deps/qtkeychain-build/moc_keychain.cpp
+C:/Users/cristian/Documents/LlamaCode/build_tests_mgpu/_deps/qtkeychain-src/keychain.h

@@ -6,9 +6,15 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include "core/voice/VoiceTypes.h"
+#include "HarnessSpec.h"
 
+// Flag runtime-only en cada struct: perfil de SISTEMA (bundled desde
+// assets/system_profiles.json). Inmutable (no se borra/edita/renombra) y NO se
+// persiste a disco — se reconstruye del bundle en cada arranque. Default false
+// (todo lo que viene del disco es de usuario). No se serializa en toJson/fromJson.
 struct BackendProfile {
     QString id;
+    bool system = false;
     QString name;
     QString binaryId;
     QString host = "127.0.0.1";
@@ -36,16 +42,28 @@ struct BackendProfile {
 
 struct ModelProfile {
     QString id;
+    bool system = false;
     QString name;
     QString modelId;
     QString mmprojId;
     QString draftModelId;
-    // Speculative decoding / MTP (solo aplican si draftModelId != ""). Ver los
-    // flags spec-draft de llama-server. Vacío/0 = no emitir (default del binario).
-    QString specType;          // "" | "draft-mtp" (Gemma4 QAT assistant heads)
+    // Ancla estable al archivo, en paralelo a los ids de catálogo de arriba. Esos
+    // se derivan de la ruta: mover el gguf, o un cambio en cómo el scanner los
+    // mintea, los invalida y el perfil queda apuntando a la nada ("No model
+    // selected"). El stable id se asigna una vez por archivo y no cambia, así que
+    // sirve de respaldo para volver a encontrarlo. 0 = perfil viejo, sin ancla.
+    qint64 modelStableId = 0;
+    qint64 mmprojStableId = 0;
+    qint64 draftStableId = 0;
+    // Speculative decoding / MTP. draft-mtp también puede usar el cabezal embebido
+    // del GGUF principal cuando su filename lo identifica como MTP.
+    QString specType;          // "" | "draft-mtp" | "draft-dspark"
     int     specDraftNMax = 0; // --spec-draft-n-max (0 = no emitir)
+    int     specDraftNMin = 0; // --spec-draft-n-min (0 = default; adaptive)
+    bool    specDraftAdaptive = false; // --spec-draft-adaptive (opt-in)
+    double  specDraftConfMin = 0.0; // --spec-draft-conf-min (0 = desactivado)
     QString specDraftNgl;      // --spec-draft-ngl  ("" | "all" | número de capas)
-    QString specDraftTypeK;    // --spec-draft-type-k ("" | "q8_0" | "f16"...)
+    QString specDraftTypeK;    // --spec-draft-type-k ("" | "q8_0" | "q4_0"...)
     QString specDraftTypeV;    // --spec-draft-type-v
 
     QJsonObject toJson() const;
@@ -55,6 +73,7 @@ struct ModelProfile {
 
 struct RuntimePreset {
     QString id;
+    bool system = false;
     QString name;
     int ctx = 4096;
     int batch = 512;
@@ -65,8 +84,15 @@ struct RuntimePreset {
     bool mmap = true;
     bool mlock = false;
     bool contBatching = true;
-    QString cacheType = "f16";
+    // Política de perfiles: KV K/V puede ser q8_0 o menor; no ofrecer f16
+    // como valor predeterminado para una candidata nueva.
+    QString cacheType = "q8_0";
     int parallelSlots = 1;
+    // Role-aware per-tensor quant. Cada entry = un spec de --override-tensor de
+    // llama.cpp ("<regex>=<type>", ej "ffn_.*=Q4_K"). Mantener attention/output
+    // en alta precisión y bajar sólo MLP → mejor cosine a igual tamaño que un
+    // quant uniforme. Vacío = sin overrides.
+    QStringList tensorOverrides;
 
     QJsonObject toJson() const;
     static RuntimePreset fromJson(const QJsonObject &obj);
@@ -75,6 +101,7 @@ struct RuntimePreset {
 
 struct HarnessProfile {
     QString id;
+    bool system = false;
     QString name;
     QString adapter;  // "none", "opencode", "aider", "llamaagent"
     QStringList args;
@@ -87,6 +114,7 @@ struct HarnessProfile {
 
 struct WorkspaceProfile {
     QString id;
+    bool system = false;
     QString name;
     QString cwd;
     QStringList allowedPaths;
@@ -96,6 +124,79 @@ struct WorkspaceProfile {
     QJsonObject toJson() const;
     static WorkspaceProfile fromJson(const QJsonObject &obj);
     static QString generateId();
+};
+
+// Perfil reutilizable de personalidad o estilo. Es una preferencia de expresión,
+// nunca una fuente de permisos: no puede alterar tools, aprobaciones ni guardrails.
+struct PersonaStyleProfile {
+    QString id;
+    bool system = false;
+    QString name;
+    QString kind = "writing-style"; // personality | writing-style
+    QString description;
+    QString styleCard;
+    QStringList examples;
+    bool enabled = true;
+    int maxExamples = 2;
+    int maxChars = 6000;
+
+    QJsonObject toJson() const;
+    static PersonaStyleProfile fromJson(const QJsonObject &obj);
+    static QString generateId();
+};
+
+// Perfil de Agente: set de capacidades (tools) + directivas (secciones del system
+// prompt) + ajustes (approval/thinking/temperatura/instrucciones extra). Registro
+// global; los LaunchProfile y el modo agente lo referencian por id. Los 4 presets
+// (Básico/Intermedio/Avanzado/Máximo) son de sistema (system=true, inmutables).
+struct AgentProfile {
+    QString id;
+    bool system = false;
+    QString name;
+    QStringList enabledTools;       // nombres de LlamaAgentBackend::toolCatalog() ON
+    QStringList directives;         // claves de directiveCatalog() ON
+    QString approvalMode = "ask";   // auto | ask | manual | super | plan
+    bool thinking = false;
+    double temperature = -1.0;      // -1 = heredar del modelo/perfil
+    QString systemExtra;            // instrucciones extra opcionales
+    QStringList personalityProfileIds;
+    QStringList styleProfileIds;
+    bool injectStyleExamples = true;
+    int styleExampleLimit = 2;
+    int styleContextLimit = 6000;
+    bool mcpEnabled = true;         // false = no inyectar tools MCP (ahorra contexto;
+                                    // las tools MCP NO están en toolCatalog, así que
+                                    // enabledTools no las puede apagar — esto sí)
+    bool thinkingLeakGuard = false; // compatibilidad opt-in: no preservar thinking
+                                    // previo y cortar colas tras </think> huérfano
+    int progressCredits = 8;        // presupuesto elástico inicial de acciones
+    int progressMaxCredits = 16;    // techo al renovar por evidencia nueva
+    int progressReplanAfter = 3;    // acciones estancadas antes de replantear
+    int progressStopAfter = 5;      // estancadas posteriores antes de cerrar
+    int quickToolTimeoutSec = 15;   // watchdog para tools locales rápidas
+
+    // HARNESS MODULAR: composición declarativa (ver HarnessSpec.h). Opcional:
+    // un perfil sin spec (todos los guardados antes de la feature) se sigue
+    // leyendo igual y toSpec() lo deriva de los campos de arriba. Cuando hay
+    // spec, los campos legacy se siguen escribiendo derivados de él para que una
+    // versión anterior del app pueda leer el archivo sin romperse.
+    HarnessSpec spec;
+    bool hasSpec = false;
+    QString extendsId;              // preset/perfil base del que hereda el spec
+
+    // Spec efectivo de este perfil: el declarado, o el derivado de los campos
+    // legacy. Puro → testeable sin ProfileManager.
+    HarnessSpec toSpec() const;
+    // Vuelca un spec a los campos legacy (compatibilidad de lectura hacia atrás).
+    void applySpecToLegacyFields(const HarnessSpec &resolved);
+
+    QJsonObject toJson() const;
+    static AgentProfile fromJson(const QJsonObject &obj);
+    static QString generateId();
+    // Los presets de sistema (orden: Chat liviano, Básico, Intermedio, Avanzado,
+    // Máximo). ids estables ("agent-basico"…) para que los launch los referencien.
+    static QList<AgentProfile> systemPresets();
+    static QString defaultPresetId();   // "agent-intermedio"
 };
 
 // Un nivel de la cadena de fallbacks del maestro. El agente local escala el
@@ -147,17 +248,36 @@ struct MasterConfig {
 
 struct LaunchProfile {
     QString id;
+    bool    system = false;   // perfil de sistema (bundled, inmutable, no persistido)
     QString name;
     QString alias;            // opcional; tiene prioridad sobre name en la UI
+    bool    best = false;     // perfil recomendado (rayo) y ordenado primero
     bool    favorite = false; // marcados con estrella y ordenados arriba
+    QStringList tags;          // etiquetas libres para filtrar perfiles
+    qint64 lastUsed = 0;       // epoch ms del último arranque exitoso
+    bool    benchmark = false; // candidato pendiente para la cola de benchmark
+    bool    systemBadge = false; // ícono de sistema; distinto de la inmutabilidad interna
+    bool    deprecated = false; // visible sólo en Perfiles; excluido de uso operativo
     QString backendProfileId;
     QString modelProfileId;
     QString runtimePresetId;
     QString harnessProfileId;
     QString workspaceProfileId;
+    // Perfil de agente por defecto al iniciar el modo agente con este launch.
+    // Vacío = usar el preset por defecto (AgentProfile::defaultPresetId()).
+    QString agentProfileId;
+    // Política de razonamiento por request. Vacío/-1 = comportamiento heredado.
+    QString reasoningEffort;       // "" | low | medium | high | xhigh | max
+    int reasoningBudget = -1;      // -1 = ilimitado/heredado; 0 = sin thinking
     QStringList extraArgs;
     QMap<QString, QString> envOverrides;
     MasterConfig master;      // supervisor opcional (maestro CLI/HTTP)
+    // Orquestación híbrida por turno. Cuando plannerProfileId no está vacío,
+    // el request se planifica con ese LaunchProfile y se ejecuta con éste.
+    // "sequential" permite compartir GPU/puerto descargando un modelo antes de
+    // cargar el siguiente; "concurrent" queda reservado para endpoints distintos.
+    QString plannerProfileId;
+    QString hybridMode = QStringLiteral("off"); // off | sequential | concurrent
     // Límite de potencia de GPU (W) aplicado vía nvidia-smi al arrancar el server
     // de este perfil. 0 = sin override (usa el global de Ajustes, si hay).
     int powerLimitW = 0;

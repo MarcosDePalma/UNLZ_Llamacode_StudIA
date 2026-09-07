@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "protocol": "llamacode-harness-v1",
+  "description": "Configuracion de ejemplo: cada variable de entorno debe contener un array JSON con el comando del adapter local.",
+  "adapters": [
+    {"id": "openclaw", "commandEnv": "LLAMACODE_HARNESS_OPENCLAW_CMD"},
+    {"id": "hermes", "commandEnv": "LLAMACODE_HARNESS_HERMES_CMD"},
+    {"id": "pi", "commandEnv": "LLAMACODE_HARNESS_PI_CMD"},
+    {"id": "nanobot", "commandEnv": "LLAMACODE_HARNESS_NANOBOT_CMD"}
+  ]
+}

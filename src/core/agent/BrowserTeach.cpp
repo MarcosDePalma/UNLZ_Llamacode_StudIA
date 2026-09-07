@@ -31,6 +31,15 @@ QString BrowserTeach::sanitize(const QString &name)
     return s;
 }
 
+QString BrowserTeach::profileDir(const QString &name)
+{
+    const QString slug = sanitize(name);
+    if (slug.isEmpty()) return QString();
+    const QString dir = skillsDir() + QStringLiteral("/profiles/") + slug;
+    QDir().mkpath(dir);
+    return dir;
+}
+
 QString BrowserTeach::skillPath(const QString &name)
 {
     const QString slug = sanitize(name);
@@ -66,7 +75,11 @@ QString BrowserTeach::recordCommand(const QString &name, const QString &url)
     if (p.isEmpty()) return QString();
     // Playwright codegen: abre browser + inspector, graba las acciones y al cerrar
     // escribe el script en -o. --target=javascript = script plano con require('playwright').
-    QString cmd = QStringLiteral("npx playwright codegen --target=javascript -o \"%1\"").arg(p);
+    // --user-data-dir: perfil persistente → el .mjs generado usa launchPersistentContext
+    // y el replay reusa la sesión logueada (no re-loguear en cada corrida).
+    QString cmd = QStringLiteral("npx playwright codegen --target=javascript "
+                                 "--user-data-dir=\"%1\" -o \"%2\"")
+                      .arg(profileDir(name), p);
     const QString u = url.trimmed();
     if (!u.isEmpty() && u.startsWith(QLatin1String("http")))
         cmd += QLatin1Char(' ') + u;

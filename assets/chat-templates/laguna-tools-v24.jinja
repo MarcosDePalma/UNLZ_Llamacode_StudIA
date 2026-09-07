@@ -1,0 +1,688 @@
+{%- set template_version = "laguna-s21-froggeric-v24.0-loopguard" -%}
+{#- Native Laguna format: <system>, <user>, <assistant>, <think>, <tool_call>/<arg_key>/<arg_value>, <tool_response>. -#}
+{{- "〈|EOS|〉" -}}
+{%- set enable_thinking = enable_thinking if enable_thinking is defined else true -%}
+{%- set preserve_thinking = preserve_thinking if preserve_thinking is defined else true -%}
+{%- set add_generation_prompt = add_generation_prompt if add_generation_prompt is defined else false -%}
+{%- set auto_disable_thinking_with_tools = auto_disable_thinking_with_tools if auto_disable_thinking_with_tools is defined else false -%}
+{%- set max_tool_arg_chars = max_tool_arg_chars if max_tool_arg_chars is defined else 0 -%}
+{%- set max_tool_response_chars = max_tool_response_chars if max_tool_response_chars is defined else 0 -%}
+{%- set sanitize_tool_tokens = sanitize_tool_tokens if sanitize_tool_tokens is defined else true -%}
+{%- set _tool_format = tool_call_format if tool_call_format is defined else 'xml' -%}
+{%- set enable_toolcall_instructions = enable_toolcall_instructions if enable_toolcall_instructions is defined else false -%}
+
+{#- LOOP-GUARD thresholds -#}
+{%- set fail_warn_after = fail_warn_after if fail_warn_after is defined else 2 -%}
+{%- set fail_halt_after = fail_halt_after if fail_halt_after is defined else 5 -%}
+{%- set repeat_warn_after = repeat_warn_after if repeat_warn_after is defined else 2 -%}
+{%- set repeat_halt_after = repeat_halt_after if repeat_halt_after is defined else 4 -%}
+{%- set repeat_nudge_after = repeat_nudge_after if repeat_nudge_after is defined else 6 -%}
+{%- set pingpong_nudge_after = pingpong_nudge_after if pingpong_nudge_after is defined else 4 -%}
+{%- set think_on_tool_failure = think_on_tool_failure if think_on_tool_failure is defined else true -%}
+{%- set warn_vanished_tools = warn_vanished_tools if warn_vanished_tools is defined else true -%}
+{%- set vanished_tools_window = vanished_tools_window if vanished_tools_window is defined else 10 -%}
+{%- set mutating_tools = mutating_tools if mutating_tools is defined else 'write edit multiedit patch apply_patch str_replace str_replace_editor str_replace_based_edit_tool write_file write_to_file replace_in_file replace_file_content apply_diff insert_content search_and_replace search_replace edit_file builtin_edit_existing_file create_file create_new_file builtin_create_new_file create replace text_editor notebookedit fs_write move_file create_directory reapply delete delete_file move rename mkdir bash terminal shell exec execute_code execute_command execute_bash run_shell_command run_terminal_command run_terminal_cmd run_command todo todowrite memory skill_manage delegate_task send_message cronjob process use_aws browser_click browser_type browser_press browser_scroll browser_navigate browser_action' -%}
+{%- set read_tools = read_tools if read_tools is defined else 'read read_file read_text_file read_multiple_files cat grep glob list ls search view fetch webfetch web_fetch websearch web_search web_search_exa rg ripgrep find find_file list_files list_directory list_dir glob_files codebase_search file_search head tail tree' -%}
+
+{%- macro render_content(content, is_system_content=false) -%}
+    {%- if content is string -%}
+        {{- content -}}
+    {%- elif content is iterable and content is not mapping -%}
+        {%- for item in content -%}
+            {%- if item is mapping -%}
+                {%- if 'text' in item -%}
+                    {{- item.text -}}
+                {%- elif item.type == 'image' or 'image' in item or 'image_url' in item -%}
+                    {%- if is_system_content -%}
+                        {{- raise_exception('System message cannot contain images.') -}}
+                    {%- endif -%}
+                    {{- '[image]' -}}
+                {%- elif item.type == 'video' or 'video' in item -%}
+                    {%- if is_system_content -%}
+                        {{- raise_exception('System message cannot contain videos.') -}}
+                    {%- endif -%}
+                    {{- '[video]' -}}
+                {%- else -%}
+                    {{- raise_exception('Unexpected item type in content.') -}}
+                {%- endif -%}
+            {%- else -%}
+                {{- item | string -}}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- elif content is none or content is undefined -%}
+        {{- '' -}}
+    {%- else -%}
+        {{- raise_exception('Unexpected content type.') -}}
+    {%- endif -%}
+{%- endmacro -%}
+
+{%- if not messages -%}
+    {{- raise_exception('No messages provided.') -}}
+{%- endif -%}
+
+{%- set _has_tools = (tools is defined and tools and tools is iterable and tools is not mapping) -%}
+{%- set cfg = namespace(thinking=enable_thinking) -%}
+{%- set skill_cfg = namespace(loader=false) -%}
+{%- set ns_deleg = namespace(name='') -%}
+{%- if auto_disable_thinking_with_tools and _has_tools -%}
+    {%- set cfg.thinking = false -%}
+{%- endif -%}
+
+{#- ───── system message ───── -#}
+{%- set system_message = "You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations." -%}
+{%- set _msgs = messages -%}
+{#- BACKPORT (v21): accept a leading developer message as the system message. Laguna has
+   no native developer tag, so developer folds into <system> exactly like system does. -#}
+{%- if messages and (messages[0].role == "system" or messages[0].role == "developer") -%}
+    {%- set system_message = render_content(messages[0].content, true) | trim -%}
+    {%- set _msgs = messages[1:] -%}
+    {%- if '<|think_off|>' in system_message -%}
+        {%- set cfg.thinking = false -%}
+        {%- set system_message = system_message.split('<|think_off|>') | join('') | trim -%}
+    {%- elif '<|think_on|>' in system_message -%}
+        {%- set cfg.thinking = true -%}
+        {%- set system_message = system_message.split('<|think_on|>') | join('') | trim -%}
+    {%- endif -%}
+    {#- BACKPORT (v13, via v21): strip llama.cpp <__media__> markers injected by --mmproj vision runs. #}
+    {%- if messages[0].content is string and '<__media__>' in system_message -%}
+        {%- set system_message = system_message.split('<__media__>') | join('') -%}
+    {%- endif -%}
+{%- endif -%}
+
+{#- PRE-SCAN -#}
+{%- set _prescan = namespace(failures=0, last_tool='', tool_ids='') -%}
+{%- for _pm in _msgs -%}
+    {%- if _pm.role == 'user' -%}
+        {%- set _prescan.failures = 0 -%}
+        {%- set _prescan.last_tool = '' -%}
+        {%- set _prescan.tool_ids = '' -%}
+    {%- elif _pm.role == 'assistant' -%}
+        {%- if _pm.tool_calls is defined and _pm.tool_calls and _pm.tool_calls is iterable and _pm.tool_calls is not mapping -%}
+            {%- set _pns = namespace(first='', n=0, ids='') -%}
+            {%- for _ptc in _pm.tool_calls -%}
+                {%- if _ptc.function is defined and _ptc.function is not none -%}
+                    {%- set _pf = _ptc.function -%}
+                {%- else -%}
+                    {%- set _pf = _ptc -%}
+                {%- endif -%}
+                {%- if _ptc.id is defined and _ptc.id and _pf.name -%}
+                    {%- set _pns.ids = _pns.ids ~ '|' ~ _ptc.id ~ ':' ~ _pf.name -%}
+                {%- endif -%}
+                {%- set _pns.n = _pns.n + 1 -%}
+                {%- if _pns.n == 1 -%}
+                    {%- set _pns.first = _pf.name -%}
+                {%- elif _pf.name != _pns.first -%}
+                    {%- set _pns.first = '' -%}
+                {%- endif -%}
+            {%- endfor -%}
+            {%- set _prescan.last_tool = _pns.first -%}
+            {%- set _prescan.tool_ids = _pns.ids -%}
+        {%- else -%}
+            {%- set _prescan.last_tool = '' -%}
+            {%- set _prescan.tool_ids = '' -%}
+        {%- endif -%}
+    {%- elif _pm.role == 'tool' -%}
+        {%- set _prc_raw = render_content(_pm.content, false) | trim -%}
+        {%- if sanitize_tool_tokens -%}
+            {%- if '<|think_off|>' in _prc_raw -%}
+                {%- set _prc_raw = _prc_raw.split('<|think_off|>') | join('') | trim -%}
+            {%- endif -%}
+            {%- if '<|think_on|>' in _prc_raw -%}
+                {%- set _prc_raw = _prc_raw.split('<|think_on|>') | join('') | trim -%}
+            {%- endif -%}
+        {%- endif -%}
+        {%- set _prc = _prc_raw | lower -%}
+        {%- set _p_head80 = _prc[:80] -%}
+        {%- set _p_head160 = _prc[:160] -%}
+        {%- set _p_result_tool = _prescan.last_tool -%}
+        {%- if _pm.tool_call_id is defined and _pm.tool_call_id and _prescan.tool_ids -%}
+            {%- set _p_idp = '|' ~ _pm.tool_call_id ~ ':' -%}
+            {%- if _p_idp in _prescan.tool_ids -%}
+                {%- set _p_result_tool = _prescan.tool_ids.split(_p_idp)[-1].split('|')[0] -%}
+            {%- endif -%}
+        {%- endif -%}
+        {%- set _p_read = _p_result_tool and (' ' ~ (_p_result_tool | lower) ~ ' ') in (' ' ~ (read_tools | lower) ~ ' ') -%}
+        {%- set _p_hard = (not _p_read) and (_p_head80.startswith('traceback') or _p_head80.startswith('error:') or _p_head80.startswith('fatal:') or _p_head80.startswith('exception:') or _p_head80.startswith('err:')) -%}
+        {%- set _p_harness = ('invalid input for tool' in _p_head80 or 'json parsing failed' in _p_head80 or 'unknown tool' in _p_head80 or 'error repairing' in _p_head80 or 'tool execution failed' in _p_head80) -%}
+        {%- set _p_generic = (not _p_read) and (
+            '"error":' in _p_head160 or 'error:' in _p_head160 or (' err:' in _p_head160 or '\nerr:' in _p_head160) or 'err!' in _p_head160 or 'fatal:' in _p_head160 or 'exception:' in _p_head160 or
+            'traceback' in _p_head160 or 'command not found' in _p_head160 or
+            'invalid syntax' in _p_head160 or 'failed to' in _p_head160 or
+            'no such file' in _p_head160 or 'permission denied' in _p_head160 or
+            'not found' in _p_head160 or 'cannot' in _p_head160 or 'undefined' in _p_head160 or
+            'timed out' in _p_head160 or 'connection refused' in _p_head160 or
+            'too large' in _p_head160 or 'exceeds' in _p_head160 or 'size limit' in _p_head160 or
+            'access is denied' in _p_head160 or 'access denied' in _p_head160 or
+            'requires elevation' in _p_head160 or 'run as administrator' in _p_head160) -%}
+        {%- set _p_perm = (_prc | length < 1000 and (
+            'access is denied' in _prc or 'access denied' in _prc or 'permission denied' in _prc or
+            'requires elevation' in _prc or 'run as administrator' in _prc or
+            'operation requires' in _prc)) -%}
+        {%- if '$ ' not in _prc_raw and 'took ' not in _prc and (_p_hard or (_prc | length < 500 and _p_harness) or (_prc | length < 1000 and _p_generic) or _p_perm) -%}
+            {%- set _prescan.failures = _prescan.failures + 1 -%}
+        {%- else -%}
+            {%- set _prescan.failures = 0 -%}
+        {%- endif -%}
+    {%- endif -%}
+{%- endfor -%}
+{%- set _tools_suspended = (_has_tools and _prescan.failures >= fail_halt_after) -%}
+
+{%- set has_sys = system_message and system_message.strip() -%}
+{%- if has_sys or _has_tools -%}
+    {{- "<system>" -}}
+    {%- if has_sys -%}
+        {{- system_message.rstrip() -}}
+        {%- if _has_tools -%}{{- "\n\n" -}}{%- endif -%}
+    {%- endif -%}
+    {%- if _has_tools and not _tools_suspended -%}
+        {{- "### Tools\n\n" -}}
+        {{- "You may call functions to assist with the user query.\n" -}}
+        {{- "All available function signatures are listed below:\n" -}}
+        {{- "<available_tools>\n" -}}
+        {%- for tool in tools -%}
+            {%- if tool is mapping and tool.function is defined and tool.function is not none -%}
+                {%- if tool.function.name is defined and (tool.function.name | lower) == 'skill' -%}
+                    {%- set skill_cfg.loader = true -%}
+                {%- endif -%}
+                {%- if tool.function.name is defined and ((tool.function.name | lower) == 'task' or (tool.function.name | lower) == 'agent') -%}
+                    {%- set ns_deleg.name = tool.function.name -%}
+                {%- endif -%}
+                {{- (tool.function | tojson) ~ "\n" -}}
+            {%- else -%}
+                {%- if tool is mapping and tool.name is defined and tool.name and (tool.name | lower) == 'skill' -%}
+                    {%- set skill_cfg.loader = true -%}
+                {%- endif -%}
+                {%- if tool is mapping and tool.name is defined and tool.name and ((tool.name | lower) == 'task' or (tool.name | lower) == 'agent') -%}
+                    {%- set ns_deleg.name = tool.name -%}
+                {%- endif -%}
+                {{- (tool | tojson) ~ "\n" -}}
+            {%- endif -%}
+        {%- endfor -%}
+        {{- "</available_tools>\n\n" -}}
+        {%- if enable_toolcall_instructions -%}
+        {%- if cfg.thinking -%}
+            {%- set tool_instructions -%}
+If you choose to call a function ONLY reply in the following format with NO suffix:
+
+{%- if _tool_format == 'json' %}
+
+<tool_call>
+{"name": "function_name", "arguments": {"parameter_1": "value_1", "parameter_2": "value_2"}}
+</tool_call>
+{%- else %}
+
+<tool_call>function_name<arg_key>parameter_1</arg_key><arg_value>value_1</arg_value><arg_key>parameter_2</arg_key><arg_value>value_2</arg_value></tool_call>
+{%- endif %}
+
+<IMPORTANT>
+Reminder:
+- You can use the <think></think> block to plan your next tool call OR to synthesize data and formulate your final response to the user.
+- ALL explanation and reasoning MUST be placed strictly inside the <think></think> block.
+{%- if _tool_format == 'json' %}
+- Function calls MUST follow the specified format: a single JSON object with "name" and "arguments" keys inside <tool_call></tool_call> tags.
+{%- else %}
+- Function calls MUST follow the specified format: <tool_call> tags containing <arg_key> and <arg_value> pairs.
+{%- endif %}
+- If you choose to call a tool, you MUST output the <tool_call> block IMMEDIATELY after thinking, with NO conversational text before it.
+- To call multiple functions, output a separate, completely closed <tool_call></tool_call> block for EACH function.
+- Take every required argument value from the user request, visible repository state, the current tool schema, or a previous tool result. If a required value is unknown, inspect first.
+- For edit/write tools, take exact file paths and exact replacement strings from visible repository state or prior tool output - read the file first if you have not seen its current content.
+- Keep working until the user's request is complete: after making a change, verify it, then move on to the next step. Prefer small concrete actions over long deliberation - when the next step is unclear, take the smallest informative action.
+- End your turn when the task is done, you are blocked, you need the user's input, or you have reached a meaningful checkpoint worth showing. When you end, state your result or progress directly, without a tool call.
+- If you have all necessary data, provide your final answer directly to the user without any tool call.
+</IMPORTANT>
+            {%- endset -%}
+        {%- else -%}
+            {%- set tool_instructions -%}
+If you choose to call a function ONLY reply in the following format with NO suffix:
+
+{%- if _tool_format == 'json' %}
+
+<tool_call>
+{"name": "function_name", "arguments": {"parameter_1": "value_1", "parameter_2": "value_2"}}
+</tool_call>
+{%- else %}
+
+<tool_call>function_name<arg_key>parameter_1</arg_key><arg_value>value_1</arg_value><arg_key>parameter_2</arg_key><arg_value>value_2</arg_value></tool_call>
+{%- endif %}
+
+<IMPORTANT>
+Reminder:
+{%- if _tool_format == 'json' %}
+- Function calls MUST follow the specified format: a single JSON object with "name" and "arguments" keys inside <tool_call></tool_call> tags.
+{%- else %}
+- Function calls MUST follow the specified format: <tool_call> tags containing <arg_key> and <arg_value> pairs.
+{%- endif %}
+- If you choose to call a tool, you MUST output the <tool_call> block at the very start of your response, with NO conversational text before it.
+- To call multiple functions, output a separate, completely closed <tool_call></tool_call> block for EACH function.
+- Take every required argument value from the user request, visible repository state, the current tool schema, or a previous tool result. If a required value is unknown, inspect first.
+- For edit/write tools, take exact file paths and exact replacement strings from visible repository state or prior tool output - read the file first if you have not seen its current content.
+- Keep working until the user's request is complete: after making a change, verify it, then move on to the next step. Prefer small concrete actions over long deliberation - when the next step is unclear, take the smallest informative action.
+- End your turn when the task is done, you are blocked, you need the user's input, or you have reached a meaningful checkpoint worth showing. When you end, state your result or progress directly, without a tool call.
+- If you have all necessary data, provide your final answer directly to the user without any tool call.
+</IMPORTANT>
+            {%- endset -%}
+        {%- endif -%}
+        {{- tool_instructions | trim -}}
+        {%- endif -%}
+    {%- elif _tools_suspended -%}
+        {{- '# Tool Use Suspended\n\n' -}}
+        {{- 'You have encountered ' ~ _prescan.failures ~ ' consecutive tool errors. Tool calling has been automatically suspended for this response. You MUST answer in plain text only — do NOT attempt to call any tool or produce a <tool_call> block. Explain clearly what failed and why the automatic approach cannot succeed, then give the user concrete manual steps to resolve the issue.' -}}
+    {%- endif -%}
+    {%- if strftime_now is defined -%}
+        {{- '\n\nToday is ' + strftime_now('%Y-%m-%d') + '.' -}}
+    {%- endif -%}
+    {{- "</system>\n" -}}
+{%- endif -%}
+
+{%- set _last_idx = _msgs | length - 1 -%}
+{%- set _long_ctx_threshold = 50 -%}
+{%- set ctx = namespace(multi_step_tool=true, last_query_index=_last_idx) -%}
+{%- for message in _msgs[::-1] -%}
+    {%- set index = (_msgs | length - 1) - loop.index0 -%}
+    {%- if ctx.multi_step_tool and message.role == 'user' -%}
+        {%- set _rc = render_content(message.content, false) | trim -%}
+        {%- if not (_rc.startswith('<tool_response>') and _rc.endswith('</tool_response>')) -%}
+            {%- set ctx.multi_step_tool = false -%}
+            {%- set ctx.last_query_index = index -%}
+        {%- endif -%}
+    {%- endif -%}
+{%- endfor -%}
+{%- if ctx.multi_step_tool -%}
+    {%- if _last_idx > _long_ctx_threshold -%}
+        {%- set ctx.last_query_index = _last_idx -%}
+    {%- else -%}
+        {%- set ctx.last_query_index = 0 -%}
+    {%- endif -%}
+{%- endif -%}
+
+{%- set loop_state = namespace(prev_role='', consecutive_failures=0, last_tool_permission_error=false, sig1='', sig2='', repeat_count=0, sig_repeat=0, prev1='', prev2='', result_repeat=0, last_tool='', tool_ids='', skill_checkpoint_sent=false, loaded_skills=' ', loaded_skill_list='') -%}
+
+{#- ───── main loop ───── -#}
+{%- for message in _msgs -%}
+    {#- BACKPORT (v21): treat a mid-conversation developer message as a system message
+       (folded into <system>) instead of letting it fall through to the generic role branch. -#}
+    {%- set is_system = (message.role == "system" or message.role == "developer") -%}
+    {%- set content = render_content(message.content, is_system) | trim -%}
+    {%- if is_system -%}
+        {%- if '<|think_off|>' in content -%}
+            {%- set cfg.thinking = false -%}
+            {%- set content = content.split('<|think_off|>') | join('') | trim -%}
+        {%- elif '<|think_on|>' in content -%}
+            {%- set cfg.thinking = true -%}
+            {%- set content = content.split('<|think_on|>') | join('') | trim -%}
+        {%- endif -%}
+        {{- "<system>" + content + "</system>\n" -}}
+    {%- elif message.role == "user" -%}
+        {%- if '<|think_off|>' in content -%}
+            {%- set content = content.split('<|think_off|>') | join('') | trim -%}
+        {%- endif -%}
+        {%- if '<|think_on|>' in content -%}
+            {%- set content = content.split('<|think_on|>') | join('') | trim -%}
+        {%- endif -%}
+        {%- set loop_state.consecutive_failures = 0 -%}
+        {%- set loop_state.last_tool_permission_error = false -%}
+        {%- set loop_state.sig1 = '' -%}
+        {%- set loop_state.sig2 = '' -%}
+        {%- set loop_state.repeat_count = 0 -%}
+        {%- set loop_state.sig_repeat = 0 -%}
+        {%- set loop_state.prev1 = '' -%}
+        {%- set loop_state.prev2 = '' -%}
+        {%- set loop_state.result_repeat = 0 -%}
+        {%- set loop_state.last_tool = '' -%}
+        {%- set loop_state.tool_ids = '' -%}
+        {%- set _user_envelope = (content.startswith('<tool_response>') and content.endswith('</tool_response>')) or content.startswith('Attached media from tool result:') -%}
+        {%- if skill_cfg.loader and not _user_envelope and not loop_state.skill_checkpoint_sent -%}
+            {%- set content = content + '\n\nSYSTEM CHECKPOINT:\nSkill selection and loading is the first tool phase. Make one complete pass over the distinct work types in the task (languages, platforms, failure domains, security surfaces, and requested deliverables) against the available skill descriptions before planning, delegation, research, memory access, or any other tool call. Finding one match does not end comparison.\n\nComplete the match set first: any description that says to load for this kind of task belongs in the set. Then emit one skill call for every set member together in the same skill-only response. Wait for every result, then combine and apply their guidance before continuing.\n\nReserve skill loading for direct matches; weak or incidental relationships are insufficient.' ~ ('\n\nSequence the opening phases: complete the skill-only response and wait for every selected skill result. After combining their guidance, make one delegation pass before planning the main work: name every part of this task that could run on its own - background research, independent exploration, or isolated verification. Listing them is the step to complete here; a task that reads as one piece often hides several. Hand each named part to the ' ~ ns_deleg.name ~ ' tool, in parallel where possible, and keep only the work that depends on your ongoing changes in this session.' if ns_deleg.name else '') -%}
+            {%- set loop_state.skill_checkpoint_sent = true -%}
+        {%- elif skill_cfg.loader and not _user_envelope -%}
+            {%- set content = content ~ '\n\nSYSTEM CHECKPOINT - CONTINUATION:\nPreviously loaded skills: ' ~ (loop_state.loaded_skill_list if loop_state.loaded_skill_list else 'none') ~ '.\n\nContinue applying any guidance listed above to the same work. When this request adds a distinct work type or exposes a new direct match, complete the match set from the remaining available skills and load every member together in one skill-only response before any other tool.\n\nReserve skill loading for direct matches; weak or incidental relationships are insufficient.' -%}
+        {%- endif -%}
+        {{- "<user>" + content + "</user>\n" -}}
+    {%- elif message.role == "assistant" -%}
+        {%- generation -%}
+            {{- "<assistant>" -}}
+            {#- BACKPORT (v13, via v21): strip llama.cpp <__media__> markers (--mmproj vision runs). #}
+            {%- if '<__media__>' in content -%}
+                {%- set content = content.split('<__media__>') | join('') -%}
+            {%- endif -%}
+            {%- set reasoning_content = '' -%}
+            {%- if message.reasoning is string -%}
+                {%- set reasoning_content = message.reasoning -%}
+            {%- elif message.reasoning_content is defined and message.reasoning_content is not none -%}
+                {%- if message.reasoning_content is string -%}
+                    {%- set reasoning_content = message.reasoning_content -%}
+                {%- else -%}
+                    {%- set reasoning_content = message.reasoning_content | string -%}
+                {%- endif -%}
+            {%- elif message.thinking is defined and message.thinking is not none -%}
+                {%- if message.thinking is string -%}
+                    {%- set reasoning_content = message.thinking -%}
+                {%- else -%}
+                    {%- set reasoning_content = message.thinking | string -%}
+                {%- endif -%}
+            {%- else -%}
+                {#- BACKPORT (v21.3, via v21): recognize the <thinking> alt-spelling plus
+                   whitespace-typo variants, each paired with the matching open tag. #}
+                {%- set _think_end = '' -%}
+                {%- if content.startswith('</think>') -%}
+                    {%- set _think_end = '</think>' -%}
+                {%- elif content.startswith('</thinking>') -%}
+                    {%- set _think_end = '</thinking>' -%}
+                {%- elif '\n</think>' in content -%}
+                    {%- set _think_end = '\n</think>' -%}
+                {%- elif '\n</thinking>' in content -%}
+                    {%- set _think_end = '\n</thinking>' -%}
+                {%- elif '\n</ think>' in content -%}
+                    {%- set _think_end = '\n</ think>' -%}
+                {%- elif '\n</think >' in content -%}
+                    {%- set _think_end = '\n</think >' -%}
+                {%- endif -%}
+                {%- if _think_end -%}
+                    {%- if 'thinking' in _think_end -%}
+                        {%- set _think_start = '<thinking>' -%}
+                    {%- else -%}
+                        {%- set _think_start = '<think>' -%}
+                    {%- endif -%}
+                    {%- set reasoning_content = content.split(_think_end)[0].rstrip('\n') -%}
+                    {%- if _think_start in reasoning_content -%}
+                        {%- set reasoning_content = reasoning_content.split(_think_start)[-1].lstrip('\n') -%}
+                    {%- endif -%}
+                    {%- set content = content.split(_think_end)[-1].lstrip('\n') -%}
+                {%- elif '\n<tool_call>' in content -%}
+                    {%- set _before = content.split('\n<tool_call>')[0] -%}
+                    {%- set _cut = (_before | length) + 1 -%}
+                    {%- set content = content[_cut:] -%}
+                    {%- set reasoning_content = _before.rstrip('\n') -%}
+                    {%- if '<think>' in reasoning_content -%}
+                        {%- set reasoning_content = reasoning_content.split('<think>')[-1].lstrip('\n') -%}
+                    {%- endif -%}
+                {%- endif -%}
+            {%- endif -%}
+            {%- if '<__media__>' in reasoning_content -%}
+                {%- set reasoning_content = reasoning_content.split('<__media__>') | join('') -%}
+            {%- endif -%}
+            {%- set reasoning_content = reasoning_content | trim -%}
+            {%- if (preserve_thinking or loop.index0 > ctx.last_query_index) and reasoning_content -%}
+                {{- '<think>' + reasoning_content + '</think>' -}}
+            {%- elif not cfg.thinking -%}
+                {{- '</think>' -}}
+            {%- endif -%}
+            {%- if content -%}
+                {{- content -}}
+            {%- endif -%}
+            {%- set _has_calls = (message.tool_calls is defined and message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping) -%}
+            {%- if _has_calls -%}
+                {%- set ns3 = namespace(first='', n=0, sig='', ids='') -%}
+                {%- for tool_call in message.tool_calls -%}
+                    {%- if tool_call.function is defined and tool_call.function is not none -%}
+                        {%- set _tcf = tool_call.function -%}
+                    {%- else -%}
+                        {%- set _tcf = tool_call -%}
+                    {%- endif -%}
+                    {%- set _tn = _tcf.name -%}
+                    {%- if tool_call.id is defined and tool_call.id and _tn -%}
+                        {%- set ns3.ids = ns3.ids ~ '|' ~ tool_call.id ~ ':' ~ _tn -%}
+                    {%- endif -%}
+                    {%- set ns3.n = ns3.n + 1 -%}
+                    {%- if ns3.n == 1 -%}
+                        {%- set ns3.first = _tn -%}
+                    {%- elif _tn != ns3.first -%}
+                        {%- set ns3.first = '' -%}
+                    {%- endif -%}
+                    {%- if _tcf.arguments is defined and _tcf.arguments is not none -%}
+                        {%- if _tcf.arguments is mapping -%}
+                            {%- set ns3.sig = ns3.sig ~ '|' ~ _tn ~ ':' ~ (_tcf.arguments | tojson) -%}
+                        {%- else -%}
+                            {%- set ns3.sig = ns3.sig ~ '|' ~ _tn ~ ':' ~ (_tcf.arguments | string) -%}
+                        {%- endif -%}
+                    {%- else -%}
+                        {%- set ns3.sig = ns3.sig ~ '|' ~ _tn ~ ':' -%}
+                    {%- endif -%}
+                {%- endfor -%}
+                {%- set loop_state.last_tool = ns3.first -%}
+                {%- set loop_state.tool_ids = ns3.ids -%}
+                {%- set _turn_mut = ns3.first and (' ' ~ (ns3.first | lower) ~ ' ') in (' ' ~ (mutating_tools | lower) ~ ' ') -%}
+                {%- set _sig_match = ns3.sig and (ns3.sig == loop_state.sig1 or ns3.sig == loop_state.sig2) -%}
+                {%- if _turn_mut -%}
+                    {%- set loop_state.repeat_count = 0 -%}
+                {%- elif _sig_match -%}
+                    {%- set loop_state.repeat_count = loop_state.repeat_count + 1 -%}
+                {%- else -%}
+                    {%- set loop_state.repeat_count = 1 -%}
+                {%- endif -%}
+                {%- if _sig_match -%}
+                    {%- set loop_state.sig_repeat = loop_state.sig_repeat + 1 -%}
+                {%- else -%}
+                    {%- set loop_state.sig_repeat = 0 -%}
+                {%- endif -%}
+                {%- set loop_state.sig2 = loop_state.sig1 -%}
+                {%- set loop_state.sig1 = ns3.sig -%}
+                {%- for tool_call in message.tool_calls -%}
+                    {%- if tool_call.function is defined and tool_call.function is not none -%}
+                        {%- set tc = tool_call.function -%}
+                    {%- else -%}
+                        {%- set tc = tool_call -%}
+                    {%- endif -%}
+                    {%- if _tool_format == 'json' -%}
+                        {%- set _args = '{}' -%}
+                        {%- if tc.arguments is defined and tc.arguments is not none -%}
+                            {%- if tc.arguments is mapping -%}
+                                {%- set _args = tc.arguments | tojson -%}
+                            {%- elif tc.arguments is string and tc.arguments -%}
+                                {%- set _args = tc.arguments -%}
+                            {%- endif -%}
+                        {%- endif -%}
+                        {%- if max_tool_arg_chars > 0 and _args | length > max_tool_arg_chars -%}
+                            {%- set _args = _args[:max_tool_arg_chars] + '...[TRUNCATED — original length ' ~ (_args | length | string) ~ ' chars]' -%}
+                        {%- endif -%}
+                        {{- '<tool_call>\n{"name": ' }}{{- tc.name | tojson }}{{- ', "arguments": ' }}{{- _args }}{{- '}\n</tool_call>' -}}
+                    {%- else -%}
+                    {{- '<tool_call>' + tc.name -}}
+                    {%- if tc.arguments is defined and tc.arguments is not none -%}
+                        {%- if tc.arguments is mapping -%}
+                            {%- for args_name, args_value in tc.arguments.items() -%}
+                                {{- '<arg_key>' + args_name + '</arg_key>' -}}
+                                {{- '<arg_value>' -}}
+                                {%- if args_value is mapping or (args_value is sequence and args_value is not string) -%}
+                                    {%- set _av = args_value | tojson -%}
+                                {%- else -%}
+                                    {%- set _av = args_value | string -%}
+                                {%- endif -%}
+                                {%- if max_tool_arg_chars > 0 and _av | length > max_tool_arg_chars -%}
+                                    {{- _av[:max_tool_arg_chars] + '\n[TRUNCATED — original length ' ~ (_av | length | string) ~ ' chars]' -}}
+                                {%- else -%}
+                                    {{- _av -}}
+                                {%- endif -%}
+                                {{- '</arg_value>' -}}
+                            {%- endfor -%}
+                        {%- elif tc.arguments is string and tc.arguments -%}
+                            {{- '<arguments_json>' -}}
+                            {%- if max_tool_arg_chars > 0 and tc.arguments | length > max_tool_arg_chars -%}
+                                {{- tc.arguments[:max_tool_arg_chars] + '\n[TRUNCATED — original length ' ~ (tc.arguments | length | string) ~ ' chars]' -}}
+                            {%- else -%}
+                                {{- tc.arguments -}}
+                            {%- endif -%}
+                            {{- '</arguments_json>' -}}
+                        {%- endif -%}
+                    {%- endif -%}
+                    {{- '</tool_call>' -}}
+                    {%- endif -%}
+                {%- endfor -%}
+            {%- else -%}
+                {%- set loop_state.last_tool = '' -%}
+                {%- set loop_state.tool_ids = '' -%}
+                {%- set loop_state.repeat_count = 0 -%}
+                {%- set loop_state.sig_repeat = 0 -%}
+                {%- set loop_state.sig1 = '' -%}
+                {%- set loop_state.sig2 = '' -%}
+            {%- endif -%}
+            {{- "</assistant>\n" -}}
+        {%- endgeneration -%}
+    {%- elif message.role == "tool" -%}
+        {%- set _tr = render_content(message.content, false) -%}
+        {%- if sanitize_tool_tokens -%}
+            {%- if '<|think_off|>' in content -%}
+                {%- set content = content.split('<|think_off|>') | join('') | trim -%}
+            {%- endif -%}
+            {%- if '<|think_on|>' in content -%}
+                {%- set content = content.split('<|think_on|>') | join('') | trim -%}
+            {%- endif -%}
+            {%- if '<|think_off|>' in _tr -%}
+                {%- set _tr = _tr.split('<|think_off|>') | join('') -%}
+            {%- endif -%}
+            {%- if '<|think_on|>' in _tr -%}
+                {%- set _tr = _tr.split('<|think_on|>') | join('') -%}
+            {%- endif -%}
+        {%- endif -%}
+        {%- set _cl = content | lower -%}
+        {%- set _head80 = _cl[:80] -%}
+        {%- set _head160 = _cl[:160] -%}
+        {%- set _result_tool = loop_state.last_tool -%}
+        {%- if message.tool_call_id is defined and message.tool_call_id and loop_state.tool_ids -%}
+            {%- set _id_prefix = '|' ~ message.tool_call_id ~ ':' -%}
+            {%- if _id_prefix in loop_state.tool_ids -%}
+                {%- set _result_tool = loop_state.tool_ids.split(_id_prefix)[-1].split('|')[0] -%}
+            {%- endif -%}
+        {%- endif -%}
+        {%- set _read_tool = _result_tool and (' ' ~ (_result_tool | lower) ~ ' ') in (' ' ~ (read_tools | lower) ~ ' ') -%}
+        {%- set _mut_tool = _result_tool and (' ' ~ (_result_tool | lower) ~ ' ') in (' ' ~ (mutating_tools | lower) ~ ' ') -%}
+        {%- if skill_cfg.loader and _result_tool and (_result_tool | lower) == 'skill' and '<skill_content name="' in content -%}
+            {%- set _loaded_name = (content.split('<skill_content name="')[-1].split('"')[0]) | trim -%}
+            {%- set _loaded_token = '|' ~ (_loaded_name | lower) ~ '|' -%}
+            {%- if _loaded_name and _loaded_token not in loop_state.loaded_skills -%}
+                {%- set loop_state.loaded_skills = loop_state.loaded_skills ~ _loaded_token -%}
+                {%- set loop_state.loaded_skill_list = loop_state.loaded_skill_list ~ (', ' if loop_state.loaded_skill_list else '') ~ _loaded_name -%}
+            {%- endif -%}
+        {%- endif -%}
+        {%- if content and (content == loop_state.prev1 or content == loop_state.prev2) and not _mut_tool -%}
+            {%- set loop_state.result_repeat = loop_state.result_repeat + 1 -%}
+        {%- else -%}
+            {%- set loop_state.result_repeat = 0 -%}
+        {%- endif -%}
+        {%- set _same_as_prev = content and content == loop_state.prev1 -%}
+        {%- set loop_state.prev2 = loop_state.prev1 -%}
+        {%- set loop_state.prev1 = content -%}
+        {%- set _hard_fail = (not _read_tool) and (_head80.startswith('traceback') or _head80.startswith('error:') or _head80.startswith('fatal:') or _head80.startswith('exception:') or _head80.startswith('err:')) -%}
+        {%- set _harness_err = ('invalid input for tool' in _head80 or 'json parsing failed' in _head80 or 'unknown tool' in _head80 or 'error repairing' in _head80 or 'tool execution failed' in _head80) -%}
+        {%- set _generic_err = (not _read_tool) and (
+            '"error":' in _head160 or 'error:' in _head160 or (' err:' in _head160 or '\nerr:' in _head160) or 'err!' in _head160 or 'fatal:' in _head160 or 'exception:' in _head160 or
+            'traceback' in _head160 or 'command not found' in _head160 or
+            'invalid syntax' in _head160 or 'failed to' in _head160 or
+            'no such file' in _head160 or 'permission denied' in _head160 or
+            'not found' in _head160 or 'cannot' in _head160 or 'undefined' in _head160 or
+            'timed out' in _head160 or 'connection refused' in _head160 or
+            'too large' in _head160 or 'exceeds' in _head160 or 'size limit' in _head160 or
+            'access is denied' in _head160 or 'access denied' in _head160 or
+            'requires elevation' in _head160 or 'run as administrator' in _head160) -%}
+        {%- set _is_permission_error = (content | length < 1000 and (
+            'access is denied' in _cl or 'access denied' in _cl or 'permission denied' in _cl or
+            'requires elevation' in _cl or 'run as administrator' in _cl or
+            'operation requires' in _cl)) -%}
+        {%- set _is_failure = ('$ ' not in content and 'took ' not in _cl and (_hard_fail or (content | length < 500 and _harness_err) or (content | length < 1000 and _generic_err) or _is_permission_error)) -%}
+        {%- if _is_failure -%}
+            {%- set loop_state.consecutive_failures = loop_state.consecutive_failures + 1 -%}
+        {%- else -%}
+            {%- set loop_state.consecutive_failures = 0 -%}
+        {%- endif -%}
+        {%- set loop_state.last_tool_permission_error = _is_permission_error -%}
+        {%- if max_tool_response_chars > 0 and _tr | length > max_tool_response_chars -%}
+            {%- set _half = (max_tool_response_chars / 2) | int -%}
+            {%- set _tr = _tr[:_half] + '\n[TRUNCATED — original length ' ~ (_tr | length | string) ~ ' chars]\n' + _tr[(_tr | length) - _half:] -%}
+        {%- endif -%}
+        {{- "<tool_response>" + _tr -}}
+        {%- if _is_permission_error -%}
+            {{- '\n\n⚠️ SYSTEM WARNING: This operation requires elevated privileges (Administrator/root) that you do not have. DO NOT attempt to execute this command again. Instead, provide the exact command to the user and instruct them to run it manually in an elevated shell (Run as Administrator).' -}}
+        {%- endif -%}
+        {%- if loop_state.consecutive_failures >= fail_halt_after -%}
+            {{- '\n\n🚫 SYSTEM HALT: ' ~ loop_state.consecutive_failures ~ ' consecutive tool failures. STOP retrying. Do NOT call any tool using the same method. Explain the limitation to the user and provide a manual or alternative approach instead.' -}}
+        {%- elif loop_state.consecutive_failures >= fail_warn_after and _same_as_prev -%}
+            {{- '\n\n⚠️ SYSTEM WARNING: ' ~ loop_state.consecutive_failures ~ ' consecutive tool errors, and the latest error is identical to the previous one. Retrying the same way will produce the same error - change the approach itself: a different tool, a different strategy' ~ (', a skill whose description directly matches this problem (load it now)' if skill_cfg.loader else '') ~ ', or stop and report what you found to the user.' -}}
+        {%- elif loop_state.consecutive_failures >= fail_warn_after -%}
+            {{- '\n\n⚠️ SYSTEM WARNING: ' ~ loop_state.consecutive_failures ~ ' consecutive tool errors. The latest error differs from the previous one - if each fix is resolving one cause and exposing the next, you are making progress; continue. If the errors look unrelated, step back and diagnose the root cause before the next attempt.' -}}
+        {%- elif loop_state.consecutive_failures == 1 -%}
+            {{- '\n\n⚠️ SYSTEM WARNING: The previous tool call returned an error. If this is an expected failure you are working through (a failing test or build mid-fix), continue your normal fix cycle. Otherwise diagnose the cause, then retry with corrected arguments or a corrected approach.' -}}
+        {%- endif -%}
+        {%- if not _is_failure and loop_state.repeat_count >= repeat_halt_after -%}
+            {{- '\n\n🚫 SYSTEM HALT: You have made the same tool call (same name, same arguments) ' ~ loop_state.repeat_count ~ ' times in a row — or keep alternating between the same two calls — and it keeps returning the same result. Calling it again will not change anything. STOP repeating it. If you are deliberately polling for a state change, say what you are waiting for and space out the checks. Otherwise take a materially different action, or explain the situation to the user and ask how they want to proceed.' -}}
+        {%- elif not _is_failure and loop_state.repeat_count >= repeat_warn_after -%}
+            {{- '\n\n⚠️ SYSTEM WARNING: This call is identical (same tool, same arguments) to one of your previous two — ' ~ loop_state.repeat_count ~ ' time(s) in a row now — and it returned the same result again. Repeating it further will not help. If you are deliberately polling, state what you are waiting for; otherwise choose a genuinely different next step.' -}}
+        {%- elif not _is_failure and repeat_nudge_after > 0 and loop_state.result_repeat >= repeat_nudge_after -%}
+            {{- '\n\n⚠️ SYSTEM WARNING: The last ' ~ loop_state.result_repeat ~ ' tool results are identical to earlier ones — no new information is entering this loop. If you are deliberately polling for a state change, say what you are waiting for and space out the checks. Otherwise re-examine whether your action has any effect and whether your verification can observe it; use a different tool, a different strategy' ~ (', a skill whose description directly matches this problem (load it now)' if skill_cfg.loader else '') ~ ', or stop and report the situation to the user.' -}}
+        {%- elif not _is_failure and pingpong_nudge_after > 0 and loop_state.sig_repeat >= pingpong_nudge_after and loop_state.prev_role != 'tool' -%}
+            {{- '\n\n⚠️ SYSTEM WARNING: You have repeated the exact same tool call (same tool, same arguments) ' ~ loop_state.sig_repeat ~ ' times, or are alternating between the same two calls. Repeating this action cannot help unless external state has changed. If you are deliberately waiting or polling, state what you are waiting for and what has changed. Otherwise take a genuinely different action: a different tool, a different strategy' ~ (', a skill whose description directly matches this problem (load it now)' if skill_cfg.loader else '') ~ ', or stop and report the situation to the user.' -}}
+        {%- endif -%}
+        {{- "</tool_response>\n" -}}
+    {%- else -%}
+        {{- "<user>[" + message.role + "]: " + content + "</user>\n" -}}
+    {%- endif -%}
+    {%- set loop_state.prev_role = message.role -%}
+{%- endfor -%}
+
+{#- Vanished tools warning -#}
+{%- if warn_vanished_tools and _has_tools and not _tools_suspended -%}
+    {%- set ns_vt = namespace(avail=' ', gone_names=' ', gone_list='') -%}
+    {%- for tool in tools -%}
+        {%- if tool is mapping and tool.function is defined and tool.function is not none and tool.function.name is defined -%}
+            {%- set ns_vt.avail = ns_vt.avail ~ (tool.function.name | lower) ~ ' ' -%}
+        {%- elif tool is mapping and tool.name is defined and tool.name -%}
+            {%- set ns_vt.avail = ns_vt.avail ~ (tool.name | lower) ~ ' ' -%}
+        {%- endif -%}
+    {%- endfor -%}
+    {%- if vanished_tools_window > 0 and (_msgs | length) > vanished_tools_window -%}
+        {%- set _vt_msgs = _msgs[((_msgs | length) - vanished_tools_window):] -%}
+    {%- else -%}
+        {%- set _vt_msgs = _msgs -%}
+    {%- endif -%}
+    {%- for m in _vt_msgs -%}
+        {%- if m.role == 'assistant' and m.tool_calls is defined and m.tool_calls and m.tool_calls is iterable and m.tool_calls is not mapping -%}
+            {%- for tc_v in m.tool_calls -%}
+                {%- if tc_v.function is defined and tc_v.function is not none -%}
+                    {%- set _vn = tc_v.function.name -%}
+                {%- else -%}
+                    {%- set _vn = tc_v.name -%}
+                {%- endif -%}
+                {%- if _vn -%}
+                    {%- set _vnl = ' ' ~ (_vn | lower) ~ ' ' -%}
+                    {%- if _vnl not in ns_vt.avail and _vnl not in ns_vt.gone_names -%}
+                        {%- set ns_vt.gone_names = ns_vt.gone_names ~ (_vn | lower) ~ ' ' -%}
+                        {%- set ns_vt.gone_list = ns_vt.gone_list ~ (', ' if ns_vt.gone_list else '') ~ _vn -%}
+                    {%- endif -%}
+                {%- endif -%}
+            {%- endfor -%}
+        {%- endif -%}
+    {%- endfor -%}
+    {%- if ns_vt.gone_list -%}
+        {{- "<system>SYSTEM NOTE: the following tools were used earlier in this session but are NO LONGER AVAILABLE: " ~ ns_vt.gone_list ~ ". Work only with the tools in the current tool list - the missing ones cannot be restarted or repaired from here. If the task truly requires a missing tool, stop and report that to the user. If the task can be completed safely with the remaining tools, continue with those.</system>\n" -}}
+    {%- endif -%}
+{%- endif -%}
+
+{#- ───── generation prompt ───── -#}
+{%- if add_generation_prompt -%}
+    {{- "<assistant>" -}}
+    {%- if not cfg.thinking -%}
+        {{- '</think>' -}}
+    {%- elif loop_state.consecutive_failures >= fail_halt_after -%}
+        {%- if loop_state.last_tool_permission_error -%}
+            {{- '<think>I have failed ' ~ loop_state.consecutive_failures ~ ' consecutive times due to insufficient privileges. Tool use is suspended this turn. I must not attempt any tool calls. I will give the user the exact commands to run as Administrator.</think>After ' ~ loop_state.consecutive_failures ~ ' failed attempts due to insufficient privileges, here are the exact commands you need to run manually as Administrator:\n\n' -}}
+        {%- else -%}
+            {{- '<think>I have failed ' ~ loop_state.consecutive_failures ~ ' consecutive times. Tool use is suspended this turn. I must not attempt any tool calls. I will explain what went wrong and provide concrete manual steps.</think>After ' ~ loop_state.consecutive_failures ~ ' failed attempts, I cannot fix this automatically. Here is what went wrong and what you need to do manually:\n\n' -}}
+        {%- endif -%}
+    {%- elif loop_state.consecutive_failures >= fail_warn_after -%}
+        {%- if not think_on_tool_failure -%}
+            {{- '</think>' -}}
+        {%- elif loop_state.last_tool_permission_error -%}
+            {{- '<think>The previous tool calls failed due to insufficient privileges (Access Denied). I cannot execute elevated commands directly. I should provide the necessary commands to the user and instruct them to run these manually as Administrator. Let me formulate the exact commands they need to run.\n' -}}
+        {%- else -%}
+            {{- '<think>The previous tool calls failed repeatedly. Diagnose the root cause before retrying with a fundamentally different approach.\n' -}}
+        {%- endif -%}
+    {%- elif loop_state.repeat_count >= repeat_halt_after -%}
+        {{- '<think>I have called the same tool with the same arguments ' ~ loop_state.repeat_count ~ ' times in a row and gotten the same result every time. Repeating it again is pointless. I will stop and explain the situation to the user.</think>I have tried the same action ' ~ loop_state.repeat_count ~ ' times and it keeps producing the same result. Here is what is happening and what to try instead:\n\n' -}}
+    {%- elif loop_state.repeat_count >= repeat_warn_after -%}
+        {{- '<think>My last call was identical to one of the two before it (same tool, same arguments) and returned the same result. Repeating it again will not change anything — let me pick a genuinely different next step.\n' -}}
+    {%- else -%}
+        {{- '<think>' -}}
+    {%- endif -%}
+{%- endif -%}
+
+

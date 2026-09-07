@@ -1,0 +1,965 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Benchmarks LlamaCode</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #121a2d;
+      --panel-2: #17213a;
+      --line: #293754;
+      --text: #edf3ff;
+      --muted: #99a9c7;
+      --accent: #67a3ff;
+      --good: #45d39a;
+      --warn: #f5c46b;
+      --bad: #ff7f91;
+      --info: #9c8cff;
+      --shadow: 0 16px 42px rgba(0, 0, 0, .24);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: radial-gradient(circle at top right, #1b3156 0, transparent 34rem), var(--bg);
+      color: var(--text);
+      font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+    main { width: calc(100% - 48px); max-width: none; margin: 24px 24px 48px; }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
+    h1 { margin: 0 0 4px; font-size: clamp(22px, 3vw, 32px); letter-spacing: -.02em; }
+    h2 { margin: 0; font-size: 16px; }
+    p { margin: 0; color: var(--muted); }
+    code { color: #c8d7ff; }
+    .live { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); white-space: nowrap; }
+    .live::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
+    .live.ok::before { background: var(--good); box-shadow: 0 0 0 4px rgba(69, 211, 154, .12); }
+    .live.busy::before { background: var(--warn); box-shadow: 0 0 0 4px rgba(245, 196, 107, .12); }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .card { background: rgba(18, 26, 45, .92); border: 1px solid var(--line); border-radius: 14px; padding: 15px 16px; box-shadow: var(--shadow); }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; }
+    .value { margin-top: 4px; font-size: 23px; font-weight: 600; }
+    .value.small { font-size: 15px; overflow-wrap: anywhere; }
+    .current { margin-bottom: 18px; }
+    .current-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 10px; }
+    .current-status { color: #d7e3ff; overflow-wrap: anywhere; }
+    .progress-track { height: 9px; overflow: hidden; border-radius: 999px; background: #202d49; }
+    .progress-bar { height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--info)); transition: width .3s ease; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    #filter { min-width: min(390px, 100%); flex: 1; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: var(--panel-2); color: var(--text); outline: none; }
+    #filter:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(103, 163, 255, .14); }
+    .toolbar .meta { color: var(--muted); font-size: 12px; }
+    .toolbar-button { border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; background: var(--panel-2); color: #d7e3ff; cursor: pointer; white-space: nowrap; }
+    .toolbar-button:hover { border-color: var(--accent); }
+    .column-picker { position: relative; min-width: 260px; }
+    .column-picker summary { cursor: pointer; list-style: none; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; background: var(--panel-2); color: #d7e3ff; }
+    .column-picker summary::-webkit-details-marker { display: none; }
+    .column-picker[open] summary { border-color: var(--accent); }
+    .column-panel { position: absolute; right: 0; top: 44px; z-index: 3; width: min(560px, 92vw); padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #121a2d; box-shadow: var(--shadow); }
+    .column-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+    .column-actions button { border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; background: var(--panel-2); color: var(--muted); cursor: pointer; }
+    .column-actions button:hover { border-color: var(--accent); color: var(--text); }
+    .column-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 14px; max-height: 310px; overflow: auto; }
+    .column-option { display: flex; min-width: 0; gap: 7px; align-items: center; color: #c6d4ed; font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+    .column-option input { flex: 0 0 auto; width: 13px; min-width: 13px; height: 13px; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; outline: none; accent-color: var(--accent); }
+    .column-option span { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: rgba(18, 26, 45, .9); box-shadow: var(--shadow); }
+    table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; }
+    th, td { padding: 10px 11px; text-align: left; vertical-align: top; border-bottom: 1px solid rgba(41, 55, 84, .75); }
+    th { position: sticky; top: 0; height: 42px; vertical-align: middle; background: #17213a; color: #b9c8e4; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; z-index: 1; }
+    .sort-button { display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; white-space: nowrap; }
+    .sort-button:hover { color: var(--text); }
+    .sort-indicator { color: var(--accent); font-size: 13px; }
+    .column-filter-button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 5px; padding: 2px 4px; background: transparent; color: #8195bb; cursor: pointer; font-size: 12px; }
+    .column-filter-button:hover, .column-filter-button.active { border-color: var(--accent); color: var(--accent); background: rgba(103, 163, 255, .12); }
+    .drag-handle { display: inline-block; margin-right: 5px; color: #6f83aa; cursor: grab; user-select: none; font-size: 14px; letter-spacing: -3px; }
+    th[data-column-header] { cursor: grab; white-space: nowrap; }
+    th.drag-over { background: #22345a; }
+    tr:last-child td { border-bottom: 0; }
+    tr.active { background: rgba(103, 163, 255, .08); }
+    .id { color: #9db4e4; font: 12px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; max-width: 180px; overflow-wrap: anywhere; }
+    .stage-fixed { min-width: 70px; color: var(--accent); font-weight: 600; white-space: nowrap; }
+    .dynamic-cell { min-width: 110px; max-width: 360px; max-height: 4.1em; line-height: 1.35; white-space: pre-wrap; overflow: hidden; overflow-wrap: anywhere; font-size: 12px; }
+    .dynamic-cell.spec-cell { min-width: 280px; max-width: 380px; max-height: none; }
+    .dynamic-cell.numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .dynamic-cell.muted { color: var(--muted); }
+    .dynamic-cell.good { color: var(--good); }
+    .dynamic-cell.warn { color: var(--warn); }
+    .dynamic-cell.bad { color: var(--bad); }
+    .empty, .error { padding: 28px 18px; color: var(--muted); text-align: center; }
+    .error { color: var(--bad); }
+    .column-filter-popover { position: fixed; z-index: 10; width: min(330px, calc(100vw - 20px)); max-height: min(460px, calc(100vh - 20px)); overflow: hidden; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #121a2d; box-shadow: var(--shadow); }
+    .column-filter-popover[hidden] { display: none; }
+    .column-filter-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; color: var(--text); font-size: 13px; font-weight: 600; }
+    .column-filter-title small { color: var(--muted); font-weight: 400; }
+    .column-filter-search { width: 100%; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; background: var(--panel-2); color: var(--text); outline: none; }
+    .column-filter-search:focus { border-color: var(--accent); }
+    .column-filter-options { max-height: 285px; overflow: auto; display: grid; gap: 4px; margin: 0 -2px 10px 0; padding-right: 3px; }
+    .column-filter-option { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; color: #c6d4ed; font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; cursor: pointer; }
+    .column-filter-option:hover { background: rgba(103, 163, 255, .08); }
+    .column-filter-option input { flex: 0 0 auto; accent-color: var(--accent); }
+    .column-filter-option span { min-width: 0; overflow-wrap: anywhere; }
+    .column-filter-empty { padding: 10px 4px; color: var(--muted); font-size: 12px; }
+    .column-filter-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+    .column-filter-actions button { border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; background: var(--panel-2); color: var(--muted); cursor: pointer; }
+    .column-filter-actions button:hover { border-color: var(--accent); color: var(--text); }
+    footer { margin-top: 12px; color: var(--muted); font-size: 12px; }
+    @media (max-width: 760px) {
+      main { width: calc(100% - 20px); max-width: none; margin: 15px 10px 32px; }
+      header { flex-direction: column; }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .card { padding: 12px; }
+      .value { font-size: 19px; }
+      .column-panel { left: 0; right: auto; }
+      .column-list { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Cola de benchmarks</h1>
+        <p>Estado vivo de LlamaCode · API <code id="api-label"></code></p>
+      </div>
+      <div id="live-pill" class="live">conectando…</div>
+    </header>
+
+    <section class="summary" aria-label="Resumen">
+      <div class="card"><div class="label">Estado</div><div id="state-value" class="value small">Conectando…</div></div>
+      <div class="card"><div class="label">Perfiles activos</div><div id="profiles-value" class="value">—</div></div>
+      <div class="card"><div class="label">Completos</div><div id="complete-value" class="value">—</div></div>
+      <div class="card"><div class="label">Incompletos</div><div id="incomplete-value" class="value">—</div></div>
+      <div class="card"><div class="label">No listos</div><div id="not-ready-value" class="value">—</div></div>
+      <div class="card"><div class="label">Retirados</div><div id="retired-value" class="value">—</div></div>
+      <div class="card"><div class="label">Cobertura</div><div id="coverage-value" class="value small">—</div></div>
+      <div class="card"><div class="label">Etapas registradas</div><div id="stages-value" class="value">—</div></div>
+      <div class="card"><div class="label">Última actualización</div><div id="updated-value" class="value small">—</div></div>
+    </section>
+
+    <section class="card current" aria-live="polite">
+      <div class="current-top"><h2>Benchmark activo</h2><span id="current-detail" class="current-status">Sin actividad</span></div>
+      <div class="progress-track" role="progressbar" aria-label="Progreso del benchmark" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-bar" class="progress-bar"></div></div>
+      <p id="status-text" style="margin-top:9px">Esperando datos…</p>
+    </section>
+
+    <div class="toolbar">
+      <input id="filter" type="search" placeholder="Filtrar por perfil o ID…" aria-label="Filtrar perfiles">
+      <select id="coverage-filter" class="toolbar-button" aria-label="Filtrar por cobertura">
+        <option value="">Todos los estados</option><option value="complete">Completos</option><option value="incomplete">Incompletos</option><option value="not-ready">No listos</option><option value="retired">Retirados</option>
+      </select>
+      <details class="column-picker">
+        <summary>Columnas visibles</summary>
+        <div class="column-panel">
+          <div class="column-actions"><button id="recommended-columns" type="button">Recomendadas</button><button id="all-columns" type="button">Todas</button></div>
+          <div id="column-list" class="column-list"></div>
+        </div>
+      </details>
+      <button id="clear-column-filters" class="toolbar-button" type="button" hidden>Limpiar filtros</button>
+      <span id="table-meta" class="meta">Corridas registradas en la API</span>
+    </div>
+
+    <section class="table-wrap">
+      <table>
+        <thead id="table-head"><tr><th>#</th><th>Corrida</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="2" class="empty">Cargando resultados…</td></tr></tbody>
+      </table>
+    </section>
+    <div id="column-filter-popover" class="column-filter-popover" hidden></div>
+    <footer>Actualización automática: estado cada 1,5 s · resultados cada 4 s · sólo lectura.</footer>
+  </main>
+
+  <script>
+    (() => {
+      // El daemon puede cambiar de puerto en cada ejecución. El servidor del
+      // dashboard expone benchmark-api.json, que descubre sólo ControlApi
+      // locales con benchmarkRunning, benchmarkResults y sus propiedades.
+      // Se conserva ?api=... para poder observar un puerto explícitamente.
+      const apiOverride = new URLSearchParams(location.search).get('api');
+      let api = apiOverride || '';
+      const fallbackApis = ['http://127.0.0.1:8765', 'http://127.0.0.1:8877', 'http://127.0.0.1:18774'];
+      let apiDiscoveryPromise = null;
+      const stageNames = ['HE0', 'HE20', 'BCB'];
+      const recommendedColumns = ['profileName', 'profileId', 'coverageState', 'nextStage', 'stageSummary', 'harness', 'thinking', 'specs', 'vision', 'drafter', 'contextK', 'kvCache', 'reasoning', 'scoreHE0', 'scoreHE20', 'scoreBCB', 'secsHE0', 'secsHE20', 'secsBCB', 'failureKindHE0', 'failureKindHE20', 'failureKindBCB', 'timedOutHE0', 'timedOutHE20', 'timedOutBCB', 'avgTpsHE0', 'avgTpsHE20', 'avgTpsBCB', 'avgTtftMsHE0', 'avgTtftMsHE20', 'avgTtftMsBCB', 'elapsedSecHE0', 'elapsedSecHE20', 'elapsedSecBCB', 'runDirHE0', 'runDirHE20', 'runDirBCB', 'timestampHE0', 'timestampHE20', 'timestampBCB'];
+      const columnLabels = { coverageState: 'Cobertura', nextStage: 'Siguiente etapa', stageSummary: 'Etapa', harness: 'Harness', thinking: 'Thinking', thinkingObserved: 'Thinking observado', specs: 'SPECS', vision: 'Visión', drafter: 'Drafter', contextK: 'Contexto', kvCache: 'KV cache', reasoning: 'Reasoning', sampling: 'Sampling', offload: 'Offload', model: 'Modelo', runtime: 'Runtime', parallel: 'Slots / runtime', scoreHE0: 'Score HE0', scoreHE20: 'Score HE20', scoreBCB: 'Score BCB', secsHE0: 'Secs HE0', secsHE20: 'Secs HE20', secsBCB: 'Secs BCB' };
+      const specColumnKeys = ['specs', 'vision', 'drafter', 'contextK', 'kvCache', 'reasoning', 'sampling', 'offload', 'model', 'runtime', 'parallel'];
+      const preferenceKey = 'llamacode-benchmark-dashboard-preferences-v1';
+      let savedPreferences = {};
+      try { savedPreferences = JSON.parse(localStorage.getItem(preferenceKey) || '{}') || {}; } catch (_) { savedPreferences = {}; }
+      let addThinkingColumnOnce = savedPreferences.thinkingColumnAdded !== true;
+      let addHarnessColumnOnce = savedPreferences.harnessColumnAdded !== true;
+      let addSpecColumnsOnce = savedPreferences.specColumnsAdded !== true;
+      const profileResourceCache = { launch: new Map(), model: new Map(), runtime: new Map(), backend: new Map() };
+      const state = { running: false, progress: 0, status: '', activeId: '', results: [], coverage: [], error: '', offline: false, updated: null, rows: [], columns: [], profileDetails: new Map(), profileDetailsAt: 0, visibleColumns: Array.isArray(savedPreferences.visibleColumns) ? savedPreferences.visibleColumns : [], columnFilters: savedPreferences.columnFilters && typeof savedPreferences.columnFilters === 'object' ? savedPreferences.columnFilters : {}, sortKey: savedPreferences.sortKey || 'timestamp', sortDir: savedPreferences.sortDir === 1 ? 1 : -1 };
+      let openFilterKey = null;
+      let draftFilterValues = new Set();
+      let snapshotPromise = null;
+      const $ = (id) => document.getElementById(id);
+      const normalizeApi = (value) => String(value || '').replace(/\/+$/, '');
+      const setApi = (value) => {
+        api = normalizeApi(value);
+        $('api-label').textContent = api || 'buscando daemon…';
+      };
+      setApi(api);
+
+      function fetchWithTimeout(url, options = {}, timeoutMs = 1400) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+      }
+
+      async function probeApi(candidate) {
+        const base = normalizeApi(candidate);
+        if (!base) return null;
+        try {
+          const health = await fetchWithTimeout(`${base}/health`, { cache: 'no-store' }, 5000);
+          if (!health.ok) return null;
+          const methodsResponse = await fetchWithTimeout(`${base}/methods`, { cache: 'no-store' }, 5000);
+          if (!methodsResponse.ok) return null;
+          const methods = await methodsResponse.json();
+          const names = new Set((methods.properties || []).map((property) => property.name));
+          return names.has('benchmarkRunning') && names.has('benchmarkResults') ? base : null;
+        } catch (_) { return null; }
+      }
+
+      async function discoverApi(force = false) {
+        if (apiOverride) { setApi(apiOverride); return api; }
+        if (apiDiscoveryPromise && !force) return apiDiscoveryPromise;
+        apiDiscoveryPromise = (async () => {
+          const candidates = [];
+          try {
+            const response = await fetchWithTimeout(`${location.origin}/benchmark-api.json?ts=${Date.now()}`, { cache: 'no-store' }, 1800);
+            if (response.ok) {
+              const payload = await response.json();
+              for (const item of (payload.apis || [])) candidates.push(item.url || item);
+            }
+          } catch (_) { }
+          candidates.push(...fallbackApis);
+          const uniqueCandidates = [...new Set(candidates.map(normalizeApi).filter(Boolean))];
+          const probed = await Promise.all(uniqueCandidates.map(async (candidate) => ({ candidate, valid: await probeApi(candidate) })));
+          const winner = probed.find((item) => item.valid)?.valid;
+          if (winner) { setApi(winner); return winner; }
+          setApi('');
+          throw new Error('no se encontró un daemon ControlApi con benchmark');
+        })().finally(() => { apiDiscoveryPromise = null; });
+        return apiDiscoveryPromise;
+      }
+
+      async function readProps(names) {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          await discoverApi();
+          try { return await Promise.all(names.map((name) => prop(name))); }
+          catch (error) {
+            if (apiOverride || attempt > 0) throw error;
+            setApi('');
+          }
+        }
+        throw new Error('no se pudo leer el estado del daemon');
+      }
+
+      async function prop(name) {
+        const response = await fetchWithTimeout(`${api}/prop?name=${encodeURIComponent(name)}`, { cache: 'no-store' }, 6000);
+        if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
+        const body = await response.json();
+        return body.value;
+      }
+
+      async function readFilesystemSnapshot() {
+        if (!snapshotPromise) {
+          snapshotPromise = fetchWithTimeout(`${location.origin}/benchmark-snapshot.json?ts=${Date.now()}`, { cache: 'no-store' }, 10000)
+            .then((response) => { if (!response.ok) throw new Error(`snapshot HTTP ${response.status}`); return response.json(); })
+            .finally(() => { snapshotPromise = null; });
+        }
+        const snapshot = await snapshotPromise;
+        if (Array.isArray(snapshot.results)) state.results = snapshot.results;
+        if (Array.isArray(snapshot.coverage)) state.coverage = snapshot.coverage;
+        state.running = Boolean(snapshot.running);
+        state.progress = Number(snapshot.progress) || 0;
+        state.status = String(snapshot.status || 'Resultados guardados en disco.');
+        state.offline = true;
+        state.updated = new Date();
+      }
+
+      async function invoke(target, method, args = []) {
+        const response = await fetch(`${api}/invoke?target=${encodeURIComponent(target)}`, {
+          method: 'POST',
+          cache: 'no-store',
+          // El daemon permite CORS simple entre puertos, pero no responde al
+          // preflight de application/json. text/plain sigue transportando el
+          // mismo JSON y evita perder el enriquecimiento de SPECS.
+          headers: { 'content-type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify({ method, args })
+        });
+        if (!response.ok) throw new Error(`${target}.${method}: HTTP ${response.status}`);
+        const body = await response.json();
+        if (body.ok !== true) throw new Error(body.error || `${target}.${method}: API error`);
+        return body.result;
+      }
+
+      function cachedResource(kind, target, method, id) {
+        if (!id) return Promise.resolve(null);
+        const cache = profileResourceCache[kind];
+        if (!cache) return Promise.resolve(null);
+        if (!cache.has(id)) cache.set(id, invoke(target, method, [id]).catch(() => null));
+        return cache.get(id);
+      }
+
+      async function refreshProfileDetails() {
+        const ids = [...new Set((Array.isArray(state.results) ? state.results : []).map((result) => result.profileId).filter(Boolean))];
+        const stale = Date.now() - state.profileDetailsAt > 20000;
+        const loadIds = ids.filter((id) => stale || !state.profileDetails.has(id));
+        if (!loadIds.length) return;
+        if (stale) for (const id of loadIds) profileResourceCache.launch.delete(id);
+        const launches = await Promise.all(loadIds.map((id) => cachedResource('launch', 'profileManager', 'getLaunchProfile', id)));
+        await Promise.all(loadIds.map(async (id, index) => {
+          const launch = launches[index];
+          if (!launch) return;
+          const [model, runtime, backend] = await Promise.all([
+            cachedResource('model', 'profileManager', 'getModelProfile', launch.modelProfileId),
+            cachedResource('runtime', 'profileManager', 'getRuntimePreset', launch.runtimePresetId),
+            cachedResource('backend', 'profileManager', 'getBackend', launch.backendProfileId)
+          ]);
+          state.profileDetails.set(id, { launch, model, runtime, backend });
+        }));
+        state.profileDetailsAt = Date.now();
+      }
+
+      function savePreferences() {
+        try { localStorage.setItem(preferenceKey, JSON.stringify({ visibleColumns: state.visibleColumns, columnFilters: state.columnFilters, sortKey: state.sortKey, sortDir: state.sortDir, thinkingColumnAdded: true, harnessColumnAdded: true, specColumnsAdded: true })); } catch (_) { }
+      }
+
+      function stageFor(name) {
+        const text = String(name || '');
+        if (/BigCodeBench/i.test(text)) return 'BCB';
+        if (/HumanEval.*20/i.test(text)) return 'HE20';
+        if (/HumanEval/i.test(text)) return 'HE0';
+        return null;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+      }
+
+      function currentStage() {
+        const text = state.status;
+        if (/BigCodeBench/i.test(text)) return 'BCB';
+        if (/HumanEval.*20/i.test(text)) return 'HE20';
+        if (/HumanEval/i.test(text)) return 'HE0';
+        const completed = new Set((Array.isArray(state.results) ? state.results : [])
+          .filter((result) => result.profileId === state.activeId)
+          .map((result) => stageFor(result.benchmarkName || result.runLabel))
+          .filter(Boolean));
+        for (const stage of stageNames) {
+          if (!completed.has(stage)) return stage;
+        }
+        return null;
+      }
+
+      function currentProfileName() {
+        return state.status.replace(/^\[\d+\/\d+\]\s*/, '').split(' — ')[0] || state.activeId || '—';
+      }
+
+      function executionIdentity(result) {
+        const harness = [result.harnessProfileId, result.harnessEngineId, result.harnessEngineVersion, result.harnessSpecHash].map((value) => value === undefined || value === null || value === '' ? '∅' : String(value)).join('|');
+        const agent = result.agentProfileId || result.agentProfileName || 'agent:∅';
+        const fingerprint = result.profileConfigFingerprint || 'fingerprint:∅';
+        return [result.profileId || 'profile:∅', fingerprint, agent, harness].join('|');
+      }
+
+      function executionLabel(result) {
+        const agent = result?.agentProfileName || result?.agentProfileId || 'agente desconocido';
+        const engine = result?.harnessEngineId ? `${result.harnessEngineId}${result.harnessEngineVersion ? ` v${result.harnessEngineVersion}` : ''}` : 'harness histórico';
+        const spec = result?.harnessSpecHash ? ` · ${String(result.harnessSpecHash).slice(-8)}` : '';
+        return `${agent} · ${engine}${spec}`;
+      }
+
+      function argValue(args, flag) {
+        const list = Array.isArray(args) ? args.map((item) => String(item)) : [];
+        const prefix = `${flag}=`;
+        for (let index = 0; index < list.length; index += 1) {
+          if (list[index] === flag) return list[index + 1] ?? null;
+          if (list[index].startsWith(prefix)) return list[index].slice(prefix.length);
+        }
+        return null;
+      }
+
+      function hasArg(args, flag) {
+        const list = Array.isArray(args) ? args.map((item) => String(item)) : [];
+        return list.includes(flag) || list.some((item) => item.startsWith(`${flag}=`));
+      }
+
+      function formatContext(tokens) {
+        const value = Number(tokens);
+        if (!Number.isFinite(value) || value <= 0) return '—';
+        const k = value / 1024;
+        const rounded = Math.abs(k - Math.round(k)) < 0.05 ? Math.round(k) : Number(k.toFixed(1));
+        return `${rounded}k`;
+      }
+
+      function inferContext(name) {
+        const match = String(name || '').match(/(?:^|[^\d])([0-9]{2,4})\s*k(?:\b|[^\w])/i);
+        return match ? Number(match[1]) * 1024 : null;
+      }
+
+      function inferNameSpecs(name) {
+        const text = String(name || '');
+        const drafter = [];
+        const mtp = text.match(/\bMTP\s*([0-9]+)?\b/i);
+        const dflash = text.match(/\bDFLASH\s*([0-9]+)?\b/i);
+        if (dflash) drafter.push(`DFlash${dflash[1] || ''}`);
+        else if (mtp) drafter.push(`MTP${mtp[1] || ''}`);
+        if (/\bNGRAM\b/i.test(text)) drafter.push('NGRAM');
+        const noVision = /\b(?:sin|no)\s+visi[oó]n\b/i.test(text);
+        const explicitVision = /\bvisi[oó]n\b/i.test(text);
+        const mentionsDrafter = /\b(?:MTP|DFLASH|NGRAM)\b/i.test(text);
+        const kv = text.match(/\bKV\s*([a-z0-9_+-]+)\b/i);
+        const thinking = text.match(/\b(?:thinking|reasoning)\s*(?:[:=]\s*|\s+)(off|disabled|desactivado|low|medium|high|xhigh|ultrahigh)\b/i);
+        const temperature = text.match(/\btemp(?:erature)?\s*[:=]?\s*(-?\d+(?:\.\d+)?)\b/i);
+        return {
+          vision: noVision ? false : (explicitVision ? true : null),
+          drafter: drafter.join(' + ') || null,
+          suppressDrafter: /\b(?:sin|no)\s+(?:MTP|DFLASH|NGRAM|drafter)\b/i.test(text)
+            || (/\bBrowser Agent\b/i.test(text) && !mentionsDrafter),
+          contextTokens: inferContext(text),
+          kvCache: kv ? kv[1] : null,
+          reasoning: thinking ? thinking[1] : null,
+          sampling: temperature ? `T${formatNumber(temperature[1])}` : null
+        };
+      }
+
+      function specForProfile(profileId, representative) {
+        const detail = state.profileDetails.get(profileId) || {};
+        const launch = detail.launch || {};
+        const model = detail.model || {};
+        const runtime = detail.runtime || {};
+        const backend = detail.backend || {};
+        const args = Array.isArray(launch.extraArgs) ? launch.extraArgs : [];
+        const tags = Array.isArray(launch.tags) ? launch.tags : (launch.tags ? [launch.tags] : []);
+        const name = representative?.profileName || launch.name || profileId;
+        const nameSpecs = inferNameSpecs(name);
+        const tagText = tags.join(' ');
+        const argsText = args.join(' ');
+        const liveProfileAvailable = Object.prototype.hasOwnProperty.call(detail, 'launch') && detail.launch !== null;
+        const vision = nameSpecs.vision !== null
+          ? nameSpecs.vision
+          : (liveProfileAvailable ? Boolean(model.mmprojId || argValue(args, '--mmproj')) : null);
+        const specType = String(argValue(args, '--spec-type') || model.specType || '').toLowerCase();
+        const draftModel = String(argValue(args, '--spec-draft-model') || model.draftModelId || '').toLowerCase();
+        const draftN = argValue(args, '--spec-draft-n-max') || argValue(args, '--spec-draft-n') || model.specDraftNMax;
+        const ngramMatch = argValue(args, '--spec-ngram-mod-n-match');
+        const ngramMin = argValue(args, '--spec-ngram-mod-n-min');
+        const ngramMax = argValue(args, '--spec-ngram-mod-n-max');
+        const drafterParts = [];
+        if (specType.includes('dflash') || draftModel.includes('dflash')) drafterParts.push(`DFlash${draftN ? draftN : ''}`);
+        else if (specType.includes('draft-mtp') || model.draftModelId || draftModel) drafterParts.push(`MTP${draftN ? draftN : ''}`);
+        if (specType.includes('ngram') || /ngram/i.test(argsText) || /ngram/i.test(tagText)) {
+          const ngramDetail = ngramMatch ? ` (${ngramMatch}${ngramMin || ngramMax ? `/${ngramMin || '—'}–${ngramMax || '—'}` : ''})` : '';
+          drafterParts.push(`NGRAM${ngramDetail}`);
+        }
+        const liveDrafter = drafterParts.join(' ');
+        const nameDrafterIsGenericMtp = nameSpecs.drafter && /^MTP$/i.test(nameSpecs.drafter);
+        const drafter = nameSpecs.suppressDrafter
+          ? 'ninguno'
+          : (nameSpecs.drafter && !nameDrafterIsGenericMtp
+            ? nameSpecs.drafter
+            : (liveDrafter || nameSpecs.drafter || 'ninguno'));
+        const contextTokens = nameSpecs.contextTokens || Number(runtime.ctx) || Number(argValue(args, '--ctx-size'));
+        const cacheK = argValue(args, '--cache-type-k');
+        const cacheV = argValue(args, '--cache-type-v');
+        const kvCache = nameSpecs.kvCache || (cacheK || cacheV ? `K ${cacheK || '—'} · V ${cacheV || '—'}` : (runtime.cacheType || '—'));
+        const reasoning = nameSpecs.reasoning || argValue(args, '--reasoning') || launch.reasoningEffort || '—';
+        const temperature = argValue(args, '--temp');
+        const topP = argValue(args, '--top-p');
+        const topK = argValue(args, '--top-k');
+        const sampling = nameSpecs.sampling || [temperature ? `T${formatNumber(temperature)}` : '', topP ? `P${formatNumber(topP)}` : '', topK ? `K${formatNumber(topK)}` : ''].filter(Boolean).join(' · ') || '—';
+        const offload = hasArg(args, '--no-mmproj-offload') ? 'mmproj RAM' : hasArg(args, '--mmproj-offload') ? 'mmproj GPU' : '—';
+        const slots = runtime.parallelSlots || argValue(args, '--parallel');
+        const parallel = [slots ? `slots ${slots}` : '', runtime.batch ? `batch ${runtime.batch}` : '', runtime.ubatch ? `ubatch ${runtime.ubatch}` : '', runtime.threads && runtime.threads > 0 ? `threads ${runtime.threads}` : ''].filter(Boolean).join(' · ') || '—';
+        const modelName = model.name || launch.modelProfileId || '—';
+        const runtimeName = [runtime.name, backend.name || backend.kind].filter(Boolean).join(' · ') || launch.runtimePresetId || '—';
+        const contextK = formatContext(contextTokens);
+        const specs = [
+          `Visión: ${vision === null ? '—' : (vision ? 'sí' : 'no')}`,
+          `Drafter: ${drafter}`,
+          `Contexto: ${contextK}`,
+          `KV: ${kvCache}`,
+          `Reasoning: ${reasoning}`,
+          `Offload: ${offload}`,
+          `Sampling: ${sampling}`,
+          `Modelo: ${modelName}`,
+          `Runtime: ${runtimeName}`,
+          `Slots: ${parallel}`
+        ].join('\n');
+        return { vision, drafter, contextK, kvCache, reasoning, sampling, offload, model: modelName, runtime: runtimeName, parallel, specs };
+      }
+
+      function normalizeRuns() {
+        const latest = new Map();
+        for (const result of Array.isArray(state.results) ? state.results : []) {
+          const stage = stageFor(result.benchmarkName || result.runLabel);
+          if (!stage || !result.profileId) continue;
+          const groupKey = executionIdentity(result);
+          const key = `${groupKey}|${stage}`;
+          const old = latest.get(key);
+          if (!old || Number(result.timestamp || 0) >= Number(old.timestamp || 0)) latest.set(key, { ...result, __stage: stage, __groupKey: groupKey, __active: false });
+        }
+        const profiles = new Map();
+        for (const result of latest.values()) {
+          const profile = profiles.get(result.__groupKey) || { groupKey: result.__groupKey, profileId: result.profileId, profileName: result.profileName || result.profileId, stages: {}, last: result, active: false, activeStage: null };
+          profile.profileName = result.profileName || profile.profileName;
+          profile.stages[result.__stage] = result;
+          if (Number(result.timestamp || 0) >= Number(profile.last?.timestamp || 0)) profile.last = result;
+          profiles.set(result.__groupKey, profile);
+        }
+        if (state.running && state.activeId) {
+          const activeStage = currentStage();
+          const activeCandidates = [...profiles.values()].filter((profile) => profile.profileId === state.activeId).sort((a, b) => Number(b.last?.timestamp || 0) - Number(a.last?.timestamp || 0));
+          const activeProfile = activeCandidates[0] || { groupKey: `${state.activeId}|active`, profileId: state.activeId, profileName: currentProfileName(), stages: {}, last: null, active: false, activeStage: null };
+          activeProfile.profileName = currentProfileName() || activeProfile.profileName;
+          activeProfile.active = true;
+          activeProfile.activeStage = activeStage;
+          profiles.set(activeProfile.groupKey, activeProfile);
+        }
+        const rows = [];
+        for (const profile of profiles.values()) {
+          const representative = stageNames.map((stage) => profile.stages[stage]).find(Boolean) || profile.last;
+          const row = { profileId: profile.profileId, profileName: profile.profileName, timestamp: profile.last?.timestamp || null, harness: representative ? executionLabel(representative) : 'harness desconocido', __stages: profile.stages, __active: profile.active, __activeStage: profile.activeStage };
+          Object.assign(row, specForProfile(profile.profileId, representative));
+          const combined = (key) => stageNames.filter((stage) => profile.stages[stage] && profile.stages[stage][key] !== undefined && profile.stages[stage][key] !== null).map((stage) => `${stage}: ${profile.stages[stage][key]}`).join('\n') || null;
+          row.benchmarkName = combined('benchmarkName');
+          row.runLabel = combined('runLabel');
+          row.failureKind = combined('failureKind');
+          row.timedOut = combined('timedOut');
+          row.avgTps = combined('avgTps');
+          row.avgTtftMs = combined('avgTtftMs');
+          row.elapsedSec = combined('elapsedSec');
+          row.agentProfileName = [...new Set(stageNames.map((stage) => profile.stages[stage]?.agentProfileName).filter(Boolean))].join(' · ') || null;
+          row.runDir = combined('runDir');
+          row.thinkingObserved = stageNames.map((stage) => {
+            const value = profile.stages[stage]?.thinkingEnabled;
+            if (value === undefined || value === null) return `${stage}: —`;
+            if (typeof value === 'boolean') return `${stage}: ${value ? 'activado' : 'desactivado'}`;
+            return `${stage}: ${formatTextValue(value, 'thinking')}`;
+          }).join('\n');
+          const configuredThinking = row.reasoning && row.reasoning !== '—' ? row.reasoning : null;
+          row.thinking = stageNames.map((stage) => `${stage}: ${configuredThinking || '—'}`).join('\n');
+          for (const stage of stageNames) {
+            const stageRow = profile.stages[stage];
+            const score = stageRow && (stageRow.finalScore ?? stageRow.qualityScore);
+            const total = stageRow && (stageRow.finalTotal ?? stageRow.qualityTotal);
+            row[`score${stage}`] = score !== undefined && total !== undefined ? `${formatNumber(score)}/${formatNumber(total)}` : null;
+            row[`secs${stage}`] = stageRow && Number.isFinite(Number(stageRow.elapsedSec)) ? Number(stageRow.elapsedSec) : null;
+            if (!stageRow) continue;
+            for (const [key, value] of Object.entries(stageRow)) {
+              if (!key.startsWith('__')) row[`${key}${stage}`] = value;
+            }
+          }
+          row.stageSummary = stageNames.map((stage) => {
+            if (profile.active && profile.activeStage === stage) return `${stage} en curso`;
+            return profile.stages[stage] ? `${stage} ✓` : `${stage} —`;
+          }).join(' · ');
+          const coverage = (Array.isArray(state.coverage) ? state.coverage : []).find((item) => item.profileId === row.profileId);
+          if (coverage) {
+            row.coverageState = coverage.coverageState;
+            row.nextStage = coverage.nextStage || null;
+            row.benchmarkEligible = coverage.benchmarkEligible;
+            row.retired = coverage.retired;
+            row.healthCodes = Array.isArray(coverage.healthCodes) ? coverage.healthCodes.join('\n') : null;
+            row.stageStates = coverage.stageStates || {};
+          }
+          rows.push(row);
+        }
+        // Keep eligible profiles with no historical result visible: they are
+        // the most important rows for an incremental benchmark queue.
+        for (const coverage of (Array.isArray(state.coverage) ? state.coverage : [])) {
+          if ([...profiles.values()].some((profile) => profile.profileId === coverage.profileId)) continue;
+          const row = {
+            profileId: coverage.profileId,
+            profileName: coverage.profileName || coverage.profileId,
+            coverageState: coverage.coverageState,
+            nextStage: coverage.nextStage || null,
+            benchmarkEligible: coverage.benchmarkEligible,
+            retired: coverage.retired,
+            healthCodes: Array.isArray(coverage.healthCodes) ? coverage.healthCodes.join('\n') : null,
+            stageStates: coverage.stageStates || {},
+            stageSummary: stageNames.map((stage) => `${stage}: ${coverage.stageStates?.[stage] || 'pending'}`).join('\n'),
+            harness: '—', __stages: {}, __active: false, __activeStage: null
+          };
+          Object.assign(row, specForProfile(coverage.profileId, null));
+          rows.push(row);
+        }
+        return rows;
+      }
+
+      function syncColumns() {
+        const keys = new Set();
+        for (const row of state.rows) {
+          for (const key of Object.keys(row)) if (!key.startsWith('__')) keys.add(key);
+        }
+        const columns = [...keys];
+        columns.sort((a, b) => {
+          const ai = recommendedColumns.indexOf(a);
+          const bi = recommendedColumns.indexOf(b);
+          if (ai !== -1 || bi !== -1) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+          return a.localeCompare(b);
+        });
+        state.columns = columns;
+        if (!columns.length) return;
+        if (!state.visibleColumns.length) {
+          state.visibleColumns = columns.filter((key) => recommendedColumns.includes(key));
+          if (!state.visibleColumns.length) state.visibleColumns = columns.slice(0, Math.min(8, columns.length));
+          addThinkingColumnOnce = false;
+          addHarnessColumnOnce = false;
+          return;
+        }
+        const retained = state.visibleColumns.filter((key) => columns.includes(key));
+        state.visibleColumns = retained.length ? retained : columns.filter((key) => recommendedColumns.includes(key));
+        if (!state.visibleColumns.length) state.visibleColumns = columns.slice(0, Math.min(8, columns.length));
+        if (addThinkingColumnOnce && columns.includes('thinking') && !state.visibleColumns.includes('thinking')) {
+          state.visibleColumns.push('thinking');
+          addThinkingColumnOnce = false;
+          savePreferences();
+        }
+        if (addHarnessColumnOnce && columns.includes('harness') && !state.visibleColumns.includes('harness')) {
+          state.visibleColumns.push('harness');
+          addHarnessColumnOnce = false;
+          savePreferences();
+        }
+        if (addSpecColumnsOnce) {
+          const additions = specColumnKeys.filter((key) => columns.includes(key) && !state.visibleColumns.includes(key));
+          if (additions.length) {
+            state.visibleColumns.push(...additions);
+            addSpecColumnsOnce = false;
+            savePreferences();
+          }
+        }
+      }
+
+      function renderColumnPicker() {
+        $('column-list').innerHTML = state.columns.map((key) => `<label class="column-option"><input type="checkbox" data-column="${escapeHtml(key)}" ${state.visibleColumns.includes(key) ? 'checked' : ''}><span>${escapeHtml(columnLabel(key))}</span></label>`).join('');
+      }
+
+      function filterValuesFor(key) {
+        const values = new Set();
+        for (const row of state.rows) values.add(cellData(row, key).text);
+        return [...values].sort((left, right) => {
+          const a = String(left);
+          const b = String(right);
+          return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        });
+      }
+
+      function activeFilterCount() {
+        return Object.values(state.columnFilters).filter((values) => Array.isArray(values) && values.length > 0).length;
+      }
+
+      function closeColumnFilter() {
+        openFilterKey = null;
+        $('column-filter-popover').hidden = true;
+        $('column-filter-popover').innerHTML = '';
+      }
+
+      function positionColumnFilter(anchor) {
+        const panel = $('column-filter-popover');
+        const rect = anchor.getBoundingClientRect();
+        const margin = 10;
+        const panelRect = panel.getBoundingClientRect();
+        let left = Math.min(rect.left, window.innerWidth - panelRect.width - margin);
+        let top = rect.bottom + 6;
+        if (top + panelRect.height > window.innerHeight - margin) top = Math.max(margin, rect.top - panelRect.height - 6);
+        left = Math.max(margin, left);
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+      }
+
+      function openColumnFilter(key, anchor) {
+        openFilterKey = key;
+        const values = filterValuesFor(key);
+        const saved = Array.isArray(state.columnFilters[key]) ? state.columnFilters[key] : values;
+        draftFilterValues = new Set(saved.filter((value) => values.includes(value)));
+        const panel = $('column-filter-popover');
+        panel.innerHTML = `<div class="column-filter-title"><span>Filtrar ${escapeHtml(columnLabel(key))}</span><small>${values.length} valores</small></div>
+          <input class="column-filter-search" type="search" placeholder="Buscar un valor…" aria-label="Buscar valores">
+          <div class="column-filter-options"></div>
+          <div class="column-filter-actions"><button type="button" data-filter-action="all">Todos</button><button type="button" data-filter-action="none">Ninguno</button><button type="button" data-filter-action="cancel">Cancelar</button><button type="button" data-filter-action="apply">Aplicar</button></div>`;
+        panel.hidden = false;
+        positionColumnFilter(anchor);
+        const renderOptions = () => {
+          const query = panel.querySelector('.column-filter-search').value.trim().toLowerCase();
+          const visibleValues = values.filter((value) => !query || String(value).toLowerCase().includes(query));
+          const options = panel.querySelector('.column-filter-options');
+          options.innerHTML = visibleValues.length ? visibleValues.map((value) => `<label class="column-filter-option"><input type="checkbox" data-filter-value="${escapeHtml(value)}" ${draftFilterValues.has(value) ? 'checked' : ''}><span>${escapeHtml(value)}</span></label>`).join('') : '<div class="column-filter-empty">No hay valores que coincidan.</div>';
+        };
+        renderOptions();
+        panel.querySelector('.column-filter-search').addEventListener('input', renderOptions);
+        panel.onchange = (event) => {
+          const input = event.target.closest('[data-filter-value]');
+          if (!input) return;
+          if (input.checked) draftFilterValues.add(input.dataset.filterValue);
+          else draftFilterValues.delete(input.dataset.filterValue);
+        };
+        panel.onclick = (event) => {
+          const action = event.target.closest('[data-filter-action]')?.dataset.filterAction;
+          if (!action) return;
+          if (action === 'all') { draftFilterValues = new Set(values); renderOptions(); return; }
+          if (action === 'none') { draftFilterValues = new Set(); renderOptions(); return; }
+          if (action === 'cancel') { closeColumnFilter(); return; }
+          if (action === 'apply') {
+            if (draftFilterValues.size === values.length) delete state.columnFilters[key];
+            else state.columnFilters[key] = [...draftFilterValues];
+            savePreferences();
+            closeColumnFilter();
+            render();
+          }
+        };
+      }
+
+      function columnLabel(key) {
+        if (columnLabels[key]) return columnLabels[key];
+        const match = String(key).match(/(HE20|HE0|BCB)$/);
+        const base = match ? key.slice(0, -match[1].length) : key;
+        const label = { benchmarkName: 'Benchmark', runLabel: 'Run label', failureKind: 'Failure kind', timedOut: 'Timed out', avgTps: 'Avg TPS', avgTtftMs: 'Avg TTFT ms', elapsedSec: 'Elapsed sec', runDir: 'Run dir' }[base] || base;
+        return match ? `${label} ${match[1]}` : label;
+      }
+
+      function cellData(row, key) {
+        const value = row[key];
+        if (value === undefined || value === null || value === '') return { text: '—', sort: null, title: '' };
+        if (/^timestamp(HE20|HE0|BCB)?$/.test(key)) {
+          const timestamp = Number(value);
+          return { text: Number.isFinite(timestamp) ? new Date(timestamp).toLocaleString() : String(value), sort: timestamp, title: String(value) };
+        }
+        if (/^score(HE0|HE20|BCB)$/.test(key)) {
+          const match = String(value).match(/^(-?\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/);
+          if (!match) return { text: String(value), sort: null, title: String(value) };
+          const numerator = Number(match[1]);
+          const denominator = Number(match[2]);
+          return { text: String(value), sort: denominator === 0 ? (numerator === 0 ? 0 : null) : numerator / denominator, title: String(value) };
+        }
+        if (key === 'contextK') {
+          const context = String(value).match(/-?\d+(?:\.\d+)?/);
+          return { text: String(value), sort: context ? Number(context[0]) : null, title: String(value) };
+        }
+        if (typeof value === 'boolean') return { text: value ? 'sí' : 'no', sort: value ? 1 : 0, title: String(value) };
+        if (typeof value === 'number') return { text: formatNumber(value), sort: value, title: formatNumber(value) };
+        if (typeof value === 'object') {
+          const raw = JSON.stringify(value, (_, nested) => typeof nested === 'number' ? Number(nested.toFixed(2)) : nested);
+          return { text: raw.length > 260 ? `${raw.slice(0, 257)}…` : raw, sort: raw, title: raw };
+        }
+        const text = formatTextValue(value, key);
+        return { text, sort: String(value).toLowerCase(), title: text };
+      }
+
+      function formatNumber(value) {
+        if (!Number.isFinite(Number(value))) return String(value);
+        if (Number.isInteger(Number(value))) return String(value);
+        return String(Number(Number(value).toFixed(2)));
+      }
+
+      function formatTextValue(value, key) {
+        const text = String(value);
+        if (/^-?\d+(?:\.\d+)?$/.test(text)) return formatNumber(text);
+        if (!/^(avgTps|avgTtftMs|elapsedSec|secs)(HE20|HE0|BCB)?$/.test(key)) return text;
+        return text.replace(/-?\d+\.\d+/g, (token) => formatNumber(token));
+      }
+
+      function stageSummary(row) {
+        return stageNames.map((stage) => {
+          if (row.__active && row.__activeStage === stage) return `${stage} en curso`;
+          return row.__stages[stage] ? `${stage} ✓` : `${stage} —`;
+        }).join(' · ');
+      }
+
+      function cellTone(row, key) {
+        if (row.__active) return 'good';
+        if (/^timedOut(HE20|HE0|BCB)?$/.test(key) && /true/i.test(String(row[key]))) return 'bad';
+        if (/^failureKind(HE20|HE0|BCB)?$/.test(key)) {
+          const value = String(row[key] || '').toLowerCase();
+          if (/timeout|infrastructure/.test(value)) return 'bad';
+          if (value && value !== 'none' && !/^((he0|he20|bcb):?\s*none\s*)+$/.test(value)) return 'warn';
+          if (value === 'none' || value && !/quality/.test(value) && !/failed/.test(value)) return 'good';
+        }
+        return '';
+      }
+
+      function sortedRows(rows) {
+        const key = state.sortKey;
+        return [...rows].sort((a, b) => {
+          const av = cellData(a, key).sort;
+          const bv = cellData(b, key).sort;
+          if (av === null && bv === null) return 0;
+          if (av === null) return 1;
+          if (bv === null) return -1;
+          const left = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
+          return left * state.sortDir;
+        });
+      }
+
+      function render() {
+        state.rows = normalizeRuns();
+        syncColumns();
+        renderColumnPicker();
+        const filter = $('filter').value.trim().toLowerCase();
+        const coverageFilter = $('coverage-filter').value;
+        const filtered = state.rows.filter((row) => {
+          const matchesText = !filter || Object.entries(row).some(([key, value]) => !key.startsWith('__') && JSON.stringify(value).toLowerCase().includes(filter));
+          const matchesColumns = Object.entries(state.columnFilters).every(([key, values]) => !Array.isArray(values) || values.length === 0 || values.includes(cellData(row, key).text));
+          const matchesCoverage = !coverageFilter || row.coverageState === coverageFilter;
+          return matchesText && matchesColumns && matchesCoverage;
+        });
+        const visible = sortedRows(filtered);
+        const profileCount = new Set(state.rows.map((row) => row.profileId).filter(Boolean)).size;
+        const resultCount = state.rows.reduce((sum, row) => sum + Object.keys(row.__stages).length, 0);
+        const coverageRows = Array.isArray(state.coverage) ? state.coverage : [];
+        const countState = (name) => coverageRows.filter((row) => row.coverageState === name).length;
+        const activeCount = coverageRows.filter((row) => row.benchmarkEligible).length;
+        const completeCount = countState('complete');
+        $('profiles-value').textContent = activeCount;
+        $('complete-value').textContent = completeCount;
+        $('incomplete-value').textContent = countState('incomplete');
+        $('not-ready-value').textContent = countState('not-ready');
+        $('retired-value').textContent = countState('retired');
+        const coveredStages = coverageRows.filter((row) => row.benchmarkEligible).reduce((sum, row) => sum + Object.values(row.stageStates || {}).filter((value) => value === 'valid').length, 0);
+        const totalStages = activeCount * 3;
+        $('coverage-value').textContent = totalStages ? `${coveredStages}/${totalStages} · ${Math.round(coveredStages * 100 / totalStages)}%` : '0/0';
+        $('stages-value').textContent = resultCount;
+        $('updated-value').textContent = state.updated ? state.updated.toLocaleTimeString() : '—';
+        $('state-value').textContent = state.error ? (state.offline ? 'Resultados guardados' : 'API no disponible') : (state.running ? 'Ejecutando' : 'En espera');
+        $('status-text').textContent = state.error || state.status || 'Sin actividad';
+        $('current-detail').textContent = state.running ? `${currentProfileName()} · ${currentStage() || 'etapa en curso'}` : 'Sin benchmark activo';
+        $('live-pill').textContent = state.error ? (state.offline ? 'caché local' : 'desconectado') : (state.running ? 'corriendo' : 'conectado');
+        $('live-pill').className = `live ${state.error ? (state.offline ? 'busy' : '') : (state.running ? 'busy' : 'ok')}`;
+        const percentage = Math.max(0, Math.min(100, Number(state.progress) || 0));
+        $('progress-bar').style.width = `${percentage}%`;
+        $('progress-bar').parentElement.setAttribute('aria-valuenow', percentage);
+        $('table-meta').textContent = `${visible.length} perfiles visibles · ${resultCount} etapas registradas · ${state.visibleColumns.length}/${state.columns.length} columnas${activeFilterCount() ? ` · ${activeFilterCount()} filtros activos` : ''} · sólo lectura`;
+        $('clear-column-filters').hidden = activeFilterCount() === 0;
+        const header = `<tr><th>#</th>${state.visibleColumns.map((key) => {
+          const indicator = state.sortKey === key ? (state.sortDir === 1 ? '↑' : '↓') : '↕';
+          const label = columnLabel(key);
+          const active = Array.isArray(state.columnFilters[key]) && state.columnFilters[key].length > 0;
+          return `<th draggable="true" data-column-header="${escapeHtml(key)}"><span class="drag-handle" aria-hidden="true">⋮⋮</span><button type="button" class="sort-button" data-sort="${escapeHtml(key)}" aria-label="Ordenar por ${escapeHtml(label)}">${escapeHtml(label)} <span class="sort-indicator">${indicator}</span></button><button type="button" class="column-filter-button ${active ? 'active' : ''}" data-filter="${escapeHtml(key)}" aria-label="Filtrar por ${escapeHtml(label)}" title="Filtrar por ${escapeHtml(label)}">${active ? '●' : '▽'}</button></th>`;
+        }).join('')}</tr>`;
+        $('table-head').innerHTML = header;
+        const colSpan = state.visibleColumns.length + 1;
+        $('rows').innerHTML = visible.length ? visible.map((row, index) => `<tr class="${row.__active ? 'active' : ''}">
+          <td>${index + 1}</td>
+          ${state.visibleColumns.map((key) => { const data = cellData(row, key); const numeric = typeof data.sort === 'number' ? 'numeric' : ''; const specClass = key === 'specs' ? 'spec-cell' : ''; return `<td class="dynamic-cell ${specClass} ${numeric} ${cellTone(row, key)}" title="${escapeHtml(data.title)}">${escapeHtml(data.text)}</td>`; }).join('')}
+        </tr>`).join('') : `<tr><td colspan="${colSpan}" class="${state.error ? 'error' : 'empty'}">${escapeHtml(state.error || 'Todavía no hay resultados registrados para mostrar.')}</td></tr>`;
+      }
+
+      async function refreshLive() {
+        try {
+          const [running, progress, status, activeId] = await readProps(['benchmarkRunning', 'benchmarkProgress', 'benchmarkStatus', 'activeLaunchId']);
+          state.running = Boolean(running);
+          state.progress = Number(progress) || 0;
+          state.status = String(status || '');
+          state.activeId = String(activeId || '');
+          state.error = '';
+          state.updated = new Date();
+        } catch (error) {
+          try { await readFilesystemSnapshot(); state.error = 'ControlApi ocupado; mostrando resultados guardados en disco.'; }
+          catch (_) { state.error = `No se puede leer el daemon${api ? ` (${api})` : ''}: ${error.message}`; state.offline = false; }
+        }
+        render();
+      }
+
+      async function refreshResults() {
+        try { [state.results, state.coverage] = await readProps(['benchmarkResults', 'benchmarkCoverage']); await refreshProfileDetails(); state.error = ''; state.offline = false; state.updated = new Date(); }
+        catch (error) {
+          try { await readFilesystemSnapshot(); state.error = 'ControlApi ocupado; mostrando resultados guardados en disco.'; }
+          catch (_) { state.error = `No se pueden leer los resultados: ${error.message}`; state.offline = false; }
+        }
+        render();
+      }
+
+      $('filter').addEventListener('input', render);
+      $('coverage-filter').addEventListener('change', render);
+      $('table-head').addEventListener('click', (event) => {
+        const filterButton = event.target.closest('[data-filter]');
+        if (filterButton) {
+          event.stopPropagation();
+          openColumnFilter(filterButton.dataset.filter, filterButton);
+          return;
+        }
+        const button = event.target.closest('[data-sort]');
+        if (!button) return;
+        const key = button.dataset.sort;
+        if (state.sortKey === key) state.sortDir *= -1;
+        else { state.sortKey = key; state.sortDir = 1; }
+        savePreferences();
+        render();
+      });
+      $('clear-column-filters').addEventListener('click', () => {
+        state.columnFilters = {};
+        savePreferences();
+        closeColumnFilter();
+        render();
+      });
+      document.addEventListener('click', (event) => {
+        if (openFilterKey && !event.target.closest('#column-filter-popover') && !event.target.closest('[data-filter]')) closeColumnFilter();
+      });
+      window.addEventListener('resize', () => { if (openFilterKey) closeColumnFilter(); });
+      let draggingColumn = null;
+      $('table-head').addEventListener('dragstart', (event) => {
+        const header = event.target.closest('[data-column-header]');
+        if (!header) return;
+        draggingColumn = header.dataset.columnHeader;
+        header.classList.add('drag-over');
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', draggingColumn);
+      });
+      $('table-head').addEventListener('dragover', (event) => {
+        const header = event.target.closest('[data-column-header]');
+        if (!header || header.dataset.columnHeader === draggingColumn) return;
+        event.preventDefault();
+        for (const item of $('table-head').querySelectorAll('.drag-over')) item.classList.remove('drag-over');
+        header.classList.add('drag-over');
+      });
+      $('table-head').addEventListener('drop', (event) => {
+        const header = event.target.closest('[data-column-header]');
+        if (!header || !draggingColumn) return;
+        event.preventDefault();
+        const targetColumn = header.dataset.columnHeader;
+        const from = state.visibleColumns.indexOf(draggingColumn);
+        const to = state.visibleColumns.indexOf(targetColumn);
+        if (from !== -1 && to !== -1 && from !== to) {
+          const [moved] = state.visibleColumns.splice(from, 1);
+          state.visibleColumns.splice(to, 0, moved);
+          savePreferences();
+          render();
+        }
+        draggingColumn = null;
+      });
+      $('table-head').addEventListener('dragend', () => {
+        draggingColumn = null;
+        for (const item of $('table-head').querySelectorAll('.drag-over')) item.classList.remove('drag-over');
+      });
+      $('column-list').addEventListener('change', (event) => {
+        const input = event.target.closest('[data-column]');
+        if (!input) return;
+        const key = input.dataset.column;
+        if (input.checked) state.visibleColumns = [...new Set([...state.visibleColumns, key])];
+        else if (state.visibleColumns.length > 1) state.visibleColumns = state.visibleColumns.filter((column) => column !== key);
+        else input.checked = true;
+        savePreferences();
+        render();
+      });
+      $('recommended-columns').addEventListener('click', () => { state.visibleColumns = state.columns.filter((key) => recommendedColumns.includes(key)); savePreferences(); render(); });
+      $('all-columns').addEventListener('click', () => { state.visibleColumns = [...state.columns]; savePreferences(); render(); });
+      discoverApi().catch(async () => {
+        try { await readFilesystemSnapshot(); state.error = 'ControlApi ocupado; mostrando resultados guardados en disco.'; }
+        catch (_) { state.error = 'No se encontró un daemon ControlApi local'; }
+        render();
+      });
+      refreshLive();
+      refreshResults();
+      setInterval(refreshLive, 1500);
+      setInterval(refreshResults, 4000);
+    })();
+  </script>
+</body>
+</html>

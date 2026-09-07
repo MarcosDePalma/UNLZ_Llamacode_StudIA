@@ -1,4 +1,5 @@
 #include "OpencodeBackend.h"
+#include "AgentLifecycle.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -7,6 +8,7 @@
 #include <QTimer>
 #include <QSettings>
 #include <QDateTime>
+#include <QUuid>
 #include <algorithm>
 
 static int estimateTokens(const QString &text)
@@ -43,12 +45,115 @@ QString OpencodeBackend::projectNameFromDir(const QString &dir)
     return parts.isEmpty() ? QStringLiteral("(sin proyecto)") : parts.last();
 }
 
+QVariantList &OpencodeBackend::messagesForSession(const QString &sessionId)
+{
+    return m_sessionMessages[sessionId];
+}
+
+int &OpencodeBackend::assistantIndexForSession(const QString &sessionId)
+{
+    return m_sessionAssistantIndices[sessionId];
+}
+
+void OpencodeBackend::publishSessionMessages(const QString &sessionId)
+{
+    if (sessionId != m_sessionId) return;
+    m_messages = messagesForSession(sessionId);
+    m_curAsstIdx = assistantIndexForSession(sessionId);
+    emit messagesChanged();
+}
+
 void OpencodeBackend::start(const AgentContext &ctx)
 {
     if (running()) return;
     m_ctx = ctx;
     m_stopping = false;
+    m_correlationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     launchProcess();
+}
+
+void OpencodeBackend::emitSessionLifecycle()
+{
+    if (m_sessionId.isEmpty() || m_sessionId == m_lifecycleSessionId) return;
+    m_lifecycleSessionId = m_sessionId;
+    emit agentLifecycleEvent(AgentLifecycle::sessionStart(
+        m_sessionId, currentProjectDir(), lifecycleCorrelation(m_sessionId),
+        m_ctx.harnessProfileId.isEmpty() ? m_ctx.launchProfileId : m_ctx.harnessProfileId,
+        QStringLiteral("opencode"), 1));
+}
+
+QString OpencodeBackend::lifecycleCorrelation(const QString &sessionId) const
+{
+    return m_sessionCorrelations.value(sessionId, m_correlationId);
+}
+
+QString OpencodeBackend::compactJson(const QJsonObject &object)
+{
+    return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
+}
+
+void OpencodeBackend::emitToolRequest(const QString &sessionId, const QString &callId,
+                                      const QString &tool, const QString &arguments,
+                                      const QStringList &paths)
+{
+    if (sessionId.isEmpty() || callId.isEmpty()) return;
+    const QString key = sessionId + QLatin1Char(':') + callId;
+    if (m_lifecycleRequested.contains(key)) return;
+    m_lifecycleRequested.insert(key);
+    m_lifecycleTools.insert(key, {{QStringLiteral("sessionId"), sessionId},
+                                  {QStringLiteral("callId"), callId},
+                                  {QStringLiteral("tool"), tool},
+                                  {QStringLiteral("arguments"), arguments},
+                                  {QStringLiteral("paths"), paths}});
+    emit agentLifecycleEvent(AgentLifecycle::toolEvent(
+        QStringLiteral("tool.request"), sessionId, currentProjectDir(),
+        lifecycleCorrelation(sessionId), callId, tool, arguments, paths));
+}
+
+void OpencodeBackend::emitToolStart(const QString &sessionId, const QString &callId,
+                                    const QString &tool, const QString &arguments,
+                                    const QStringList &paths)
+{
+    if (sessionId.isEmpty() || callId.isEmpty()) return;
+    const QString key = sessionId + QLatin1Char(':') + callId;
+    emitToolRequest(sessionId, callId, tool, arguments, paths);
+    if (m_lifecycleStarted.contains(key) || m_lifecycleFinished.contains(key)) return;
+    m_lifecycleStarted.insert(key);
+    emit agentLifecycleEvent(AgentLifecycle::toolEvent(
+        QStringLiteral("tool.start"), sessionId, currentProjectDir(),
+        lifecycleCorrelation(sessionId), callId, tool, arguments, paths));
+}
+
+void OpencodeBackend::emitToolFinish(const QString &sessionId, const QString &callId,
+                                     const QString &tool, bool ok, const QString &result,
+                                     const QStringList &paths)
+{
+    if (sessionId.isEmpty() || callId.isEmpty()) return;
+    const QString key = sessionId + QLatin1Char(':') + callId;
+    emitToolRequest(sessionId, callId, tool, {}, paths);
+    if (m_lifecycleFinished.contains(key)) return;
+    m_lifecycleFinished.insert(key);
+    const QString kind = toolKind(tool);
+    emit agentLifecycleEvent(AgentLifecycle::toolResult(
+        sessionId, currentProjectDir(), lifecycleCorrelation(sessionId), callId,
+        tool, ok, kind == QLatin1String("write"), kind == QLatin1String("shell"),
+        result, paths));
+}
+
+void OpencodeBackend::finishOpenLifecycleTools(const QString &sessionId, const QString &reason)
+{
+    const auto open = m_lifecycleTools;
+    for (auto it = open.cbegin(); it != open.cend(); ++it) {
+        if (m_lifecycleFinished.contains(it.key())) continue;
+        const QVariantMap data = it.value();
+        if (!sessionId.isEmpty()
+            && data.value(QStringLiteral("sessionId")).toString() != sessionId)
+            continue;
+        emitToolFinish(data.value(QStringLiteral("sessionId")).toString(),
+                       data.value(QStringLiteral("callId")).toString(),
+                       data.value(QStringLiteral("tool")).toString(), false,
+                       reason, data.value(QStringLiteral("paths")).toStringList());
+    }
 }
 
 void OpencodeBackend::launchProcess()
@@ -84,12 +189,16 @@ void OpencodeBackend::launchProcess()
     });
     connect(m_proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, [this](int code, QProcess::ExitStatus) {
+        finishOpenLifecycleTools(QString(), QStringLiteral("[OpenCode finalizó el proceso]"));
         emit logAppended(QStringLiteral("\n[agent exited with code %1]\n").arg(code));
         if (m_proc) { m_proc->deleteLater(); m_proc = nullptr; }
         if (m_eventReply) { m_eventReply->abort(); m_eventReply->deleteLater(); m_eventReply = nullptr; }
         m_sessionId.clear();
+        m_lifecycleSessionId.clear();
         m_messages.clear();
         m_curAsstIdx = -1;
+        m_sessionMessages.clear();
+        m_sessionAssistantIndices.clear();
         emit messagesChanged();
         m_stopping = false;
         emit runningChanged();
@@ -116,8 +225,10 @@ void OpencodeBackend::launchProcess()
 void OpencodeBackend::stop()
 {
     m_stopping = true;
+    finishOpenLifecycleTools(QString(), QStringLiteral("[OpenCode detenido por el usuario]"));
     if (m_eventReply) { m_eventReply->abort(); m_eventReply->deleteLater(); m_eventReply = nullptr; }
     m_sessionId.clear();
+    m_lifecycleSessionId.clear();
     if (!m_proc) { emit runningChanged(); return; }
 #ifdef Q_OS_WIN
     const qint64 pid = m_proc->processId();
@@ -178,6 +289,7 @@ void OpencodeBackend::resumeOrCreateSession()
             if (v.toMap().value(QStringLiteral("id")).toString() == savedId) {
                 m_sessionId = savedId;
                 m_sessionTitle = v.toMap().value(QStringLiteral("title")).toString();
+                emitSessionLifecycle();
                 emit sessionsChanged();
                 emit logAppended(QStringLiteral("[opencode session resumed]\n"));
                 loadSessionMessages(savedId);
@@ -204,6 +316,7 @@ void OpencodeBackend::doCreateSession()
         const QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
         m_sessionId    = obj.value(QStringLiteral("id")).toString();
         m_sessionTitle = obj.value(QStringLiteral("title")).toString();
+        emitSessionLifecycle();
         QSettings().setValue(QStringLiteral("opencode/lastSessionId"), m_sessionId);
         const QString cwd = currentProjectDir();
         AgentSession e;
@@ -214,6 +327,8 @@ void OpencodeBackend::doCreateSession()
         e.projectName = projectNameFromDir(cwd);
         e.projectDir  = cwd;
         m_sessions.prepend(e.toMap());
+        m_sessionMessages.insert(m_sessionId, {});
+        m_sessionAssistantIndices.insert(m_sessionId, -1);
         emit sessionsChanged();
         emit logAppended(QStringLiteral("[opencode session ready]\n"));
         subscribeEvents();
@@ -224,12 +339,11 @@ void OpencodeBackend::loadSessionMessages(const QString &sessionId)
 {
     const QUrl url(m_attachUrl + QStringLiteral("/session/") + sessionId + QStringLiteral("/message"));
     auto *reply = m_nam->get(QNetworkRequest(url));
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, sessionId]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) return;
         const QJsonArray msgs = QJsonDocument::fromJson(reply->readAll()).array();
-        m_messages.clear();
-        m_curAsstIdx = -1;
+        QVariantList loaded;
         for (const QJsonValue &mv : msgs) {
             const QJsonObject msg = mv.toObject();
             const QString role = msg.value(QStringLiteral("info")).toObject().value(QStringLiteral("role")).toString();
@@ -248,9 +362,11 @@ void OpencodeBackend::loadSessionMessages(const QString &sessionId)
             mm[QStringLiteral("elapsedMs")] = 0;
             mm[QStringLiteral("tokens")] = estimateTokens(text);
             mm[QStringLiteral("tps")] = 0.0;
-            m_messages.append(mm);
+            loaded.append(mm);
         }
-        emit messagesChanged();
+        m_sessionMessages.insert(sessionId, loaded);
+        m_sessionAssistantIndices.insert(sessionId, -1);
+        publishSessionMessages(sessionId);
     });
 }
 
@@ -267,22 +383,28 @@ void OpencodeBackend::sendMessage(const QString &text)
     umMap[QStringLiteral("elapsedMs")] = 0;
     umMap[QStringLiteral("tokens")] = estimateTokens(text);
     umMap[QStringLiteral("tps")] = 0.0;
-    m_messages.append(umMap);
+    const QString sessionId = m_sessionId;
+    QVariantList &messages = messagesForSession(sessionId);
+    messages.append(umMap);
     AgentMessage am; am.role = QStringLiteral("assistant"); am.typing = true;
     QVariantMap amMap = am.toMap();
     amMap[QStringLiteral("createdAt")] = static_cast<double>(nowMs);
     amMap[QStringLiteral("elapsedMs")] = 0;
     amMap[QStringLiteral("tokens")] = 0;
     amMap[QStringLiteral("tps")] = 0.0;
-    m_messages.append(amMap);
-    m_curAsstIdx = m_messages.size() - 1;
-    emit messagesChanged();
+    messages.append(amMap);
+    assistantIndexForSession(sessionId) = messages.size() - 1;
+    publishSessionMessages(sessionId);
 
     if (m_sessionId.isEmpty()) {
         emit logAppended(QStringLiteral("[waiting: opencode session not ready yet]\n"));
         return;
     }
-    QNetworkRequest req(QUrl(m_attachUrl + QStringLiteral("/session/") + m_sessionId
+    m_correlationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_sessionCorrelations[sessionId] = m_correlationId;
+    emit agentLifecycleEvent(AgentLifecycle::promptSubmit(
+        sessionId, currentProjectDir(), m_correlationId, text, 0));
+    QNetworkRequest req(QUrl(m_attachUrl + QStringLiteral("/session/") + sessionId
                              + QStringLiteral("/prompt_async")));
     req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/json"));
     const QJsonObject partObj{{QStringLiteral("type"), QStringLiteral("text")}, {QStringLiteral("text"), text}};
@@ -331,8 +453,8 @@ void OpencodeBackend::switchSession(const QString &sessionId)
 {
     if (sessionId == m_sessionId) return;
     m_sessionId = sessionId;
-    m_messages.clear();
-    m_curAsstIdx = -1;
+    m_messages = messagesForSession(sessionId);
+    m_curAsstIdx = assistantIndexForSession(sessionId);
     for (const QVariant &v : std::as_const(m_sessions)) {
         const QVariantMap m = v.toMap();
         if (m.value(QStringLiteral("id")).toString() == sessionId) {
@@ -343,7 +465,10 @@ void OpencodeBackend::switchSession(const QString &sessionId)
     QSettings().setValue(QStringLiteral("opencode/lastSessionId"), sessionId);
     emit sessionsChanged();
     emit messagesChanged();
-    loadSessionMessages(sessionId);
+    // Si ya llegó streaming para esta sesión, su cache es la fuente de verdad;
+    // una lectura HTTP tardía no debe pisar la respuesta que sigue en curso.
+    if (!m_sessionMessages.contains(sessionId))
+        loadSessionMessages(sessionId);
 }
 
 void OpencodeBackend::refreshSessions()
@@ -417,6 +542,10 @@ void OpencodeBackend::forkSession(const QString &sessionId)
 
 void OpencodeBackend::subscribeEvents()
 {
+    // Es un único stream global que OpenCode multiplexa por sessionID. Crear
+    // otro al abrir una sesión reemplazaba m_eventReply y dejaba la respuesta
+    // previa sin consumidor efectivo.
+    if (m_eventReply) return;
     QNetworkRequest req(QUrl(m_attachUrl + QStringLiteral("/event")));
     req.setRawHeader(QByteArrayLiteral("Accept"), QByteArrayLiteral("text/event-stream"));
     req.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
@@ -433,13 +562,49 @@ void OpencodeBackend::subscribeEvents()
             const QJsonObject obj = doc.object();
             const QString type = obj.value(QStringLiteral("type")).toString();
             const QJsonObject props = obj.value(QStringLiteral("properties")).toObject();
-            if (type == QLatin1String("message.part.delta")) {
+            // OpenCode multiplexa las sesiones por el mismo SSE. Nunca usar la
+            // sesión visible como destino de un evento: durante una generación
+            // el usuario puede crear o abrir otra sesión.
+            const QString eventSessionId = props.value(QStringLiteral("sessionID")).toString();
+            if (type == QLatin1String("message.part.updated")) {
+                QJsonObject part = props.value(QStringLiteral("part")).toObject();
+                if (part.isEmpty()) part = props;
+                const QString partSessionId = part.value(QStringLiteral("sessionID")).toString().isEmpty()
+                    ? eventSessionId : part.value(QStringLiteral("sessionID")).toString();
+                const QString callId = part.value(QStringLiteral("callID")).toString(
+                    part.value(QStringLiteral("callId")).toString());
+                const QString tool = part.value(QStringLiteral("tool")).toString(
+                    part.value(QStringLiteral("name")).toString());
+                if (part.value(QStringLiteral("type")).toString() == QLatin1String("tool")
+                    && !partSessionId.isEmpty() && !callId.isEmpty()) {
+                    QJsonObject state = part.value(QStringLiteral("state")).toObject();
+                    QJsonObject input = state.value(QStringLiteral("input")).toObject();
+                    if (input.isEmpty()) input = part.value(QStringLiteral("input")).toObject();
+                    const QString args = compactJson(input);
+                    const QStringList paths = AgentLifecycle::changedPathsFromToolInput(tool, input);
+                    emitToolRequest(partSessionId, callId, tool, args, paths);
+                    const QString status = state.value(QStringLiteral("status")).toString(
+                        part.value(QStringLiteral("status")).toString()).toLower();
+                    if (status == QLatin1String("running") || status == QLatin1String("calling")
+                        || status == QLatin1String("completed") || status == QLatin1String("error"))
+                        emitToolStart(partSessionId, callId, tool, args, paths);
+                    if (status == QLatin1String("completed") || status == QLatin1String("error")) {
+                        const QString result = state.value(QStringLiteral("output")).toString(
+                            state.value(QStringLiteral("error")).toString(
+                                part.value(QStringLiteral("output")).toString()));
+                        emitToolFinish(partSessionId, callId, tool,
+                                       status == QLatin1String("completed"), result, paths);
+                    }
+                }
+            } else if (type == QLatin1String("message.part.delta")) {
                 if (props.value(QStringLiteral("field")).toString() == QLatin1String("text")) {
                     const QString delta = props.value(QStringLiteral("delta")).toString();
                     if (!delta.isEmpty()) {
                         emit logAppended(delta);
-                        if (m_curAsstIdx >= 0 && m_curAsstIdx < m_messages.size()) {
-                            auto msg = m_messages[m_curAsstIdx].toMap();
+                        const int index = assistantIndexForSession(eventSessionId);
+                        QVariantList &messages = messagesForSession(eventSessionId);
+                        if (!eventSessionId.isEmpty() && index >= 0 && index < messages.size()) {
+                            auto msg = messages[index].toMap();
                             const QString content = msg[QStringLiteral("content")].toString() + delta;
                             msg[QStringLiteral("content")] = content;
                             const qint64 startedAt = static_cast<qint64>(msg.value(QStringLiteral("createdAt")).toDouble());
@@ -450,8 +615,8 @@ void OpencodeBackend::subscribeEvents()
                             msg[QStringLiteral("tps")] = (elapsedMs > 0 && toks > 0)
                                 ? (1000.0 * static_cast<double>(toks) / static_cast<double>(elapsedMs))
                                 : 0.0;
-                            m_messages[m_curAsstIdx] = msg;
-                            emit messagesChanged();
+                            messages[index] = msg;
+                            publishSessionMessages(eventSessionId);
                         }
                     }
                 }
@@ -473,9 +638,13 @@ void OpencodeBackend::subscribeEvents()
                 const QString status = props.value(QStringLiteral("status"))
                                             .toObject().value(QStringLiteral("type")).toString();
                 if (status == QLatin1String("idle")) {
+                    finishOpenLifecycleTools(eventSessionId, QStringLiteral(
+                        "[OpenCode informó sesión idle antes de cerrar la tool]"));
                     emit logAppended(QStringLiteral("\n"));
-                    if (m_curAsstIdx >= 0 && m_curAsstIdx < m_messages.size()) {
-                        auto msg = m_messages[m_curAsstIdx].toMap();
+                    const int index = assistantIndexForSession(eventSessionId);
+                    QVariantList &messages = messagesForSession(eventSessionId);
+                    if (!eventSessionId.isEmpty() && index >= 0 && index < messages.size()) {
+                        auto msg = messages[index].toMap();
                         msg[QStringLiteral("typing")] = false;
                         const qint64 doneAt = QDateTime::currentMSecsSinceEpoch();
                         const qint64 startedAt = static_cast<qint64>(msg.value(QStringLiteral("createdAt")).toDouble());
@@ -488,16 +657,21 @@ void OpencodeBackend::subscribeEvents()
                         msg[QStringLiteral("tps")] = (elapsedMs > 0 && toks > 0)
                             ? (1000.0 * static_cast<double>(toks) / static_cast<double>(elapsedMs))
                             : 0.0;
-                        m_messages[m_curAsstIdx] = msg;
-                        emit messagesChanged();
+                        messages[index] = msg;
+                        publishSessionMessages(eventSessionId);
                     }
-                    m_curAsstIdx = -1;
+                    assistantIndexForSession(eventSessionId) = -1;
+                    if (eventSessionId == m_sessionId) m_curAsstIdx = -1;
                 }
             } else if (type == QLatin1String("permission.asked")) {
                 const QString permId = props.value(QStringLiteral("id")).toString();
                 const QString sid    = props.value(QStringLiteral("sessionID")).toString();
                 const QString ptype  = props.value(QStringLiteral("type")).toString();
                 const QString kind   = toolKind(ptype);
+                const QJsonObject meta = props.value(QStringLiteral("metadata")).toObject();
+                const QString args = compactJson(meta);
+                const QStringList paths = AgentLifecycle::changedPathsFromToolInput(ptype, meta);
+                emitToolRequest(sid, permId, ptype, args, paths);
 
                 // Política de aprobación.
                 const bool autoAll  = (m_approvalMode == QLatin1String("auto"));
@@ -505,12 +679,12 @@ void OpencodeBackend::subscribeEvents()
                 const bool autoRead = (m_approvalMode == QLatin1String("ask")
                                        && kind == QLatin1String("read"));
                 if (autoAll || autoRead) {
+                    emitToolStart(sid, permId, ptype, args, paths);
                     respondPermission(sid, permId, QStringLiteral("always"));
                 } else {
                     Q_UNUSED(askAll)
                     // Pedir al usuario: guardar pendiente + emitir señal con detalle.
                     m_pendingPerm.insert(permId, sid);
-                    const QJsonObject meta = props.value(QStringLiteral("metadata")).toObject();
                     QString detail = meta.value(QStringLiteral("command")).toString();
                     if (detail.isEmpty()) detail = meta.value(QStringLiteral("filePath")).toString();
                     if (detail.isEmpty()) detail = meta.value(QStringLiteral("filepath")).toString();
@@ -529,9 +703,17 @@ void OpencodeBackend::subscribeEvents()
             } else if (type.contains(QLatin1String("error"))) {
                 const QString errMsg = props.value(QStringLiteral("message")).toString();
                 if (!errMsg.isEmpty()) {
+                    const QString callId = props.value(QStringLiteral("callID")).toString(
+                        props.value(QStringLiteral("callId")).toString());
+                    if (!callId.isEmpty())
+                        emitToolFinish(eventSessionId, callId,
+                                       props.value(QStringLiteral("tool")).toString(), false,
+                                       errMsg, {});
                     emit logAppended(QStringLiteral("[error: %1]\n").arg(errMsg));
-                    if (m_curAsstIdx >= 0 && m_curAsstIdx < m_messages.size()) {
-                        auto msg = m_messages[m_curAsstIdx].toMap();
+                    const int index = assistantIndexForSession(eventSessionId);
+                    QVariantList &messages = messagesForSession(eventSessionId);
+                    if (!eventSessionId.isEmpty() && index >= 0 && index < messages.size()) {
+                        auto msg = messages[index].toMap();
                         msg[QStringLiteral("content")] = QStringLiteral("[error: %1]").arg(errMsg);
                         msg[QStringLiteral("typing")] = false;
                         const qint64 doneAt = QDateTime::currentMSecsSinceEpoch();
@@ -545,10 +727,11 @@ void OpencodeBackend::subscribeEvents()
                         msg[QStringLiteral("tps")] = (elapsedMs > 0 && toks > 0)
                             ? (1000.0 * static_cast<double>(toks) / static_cast<double>(elapsedMs))
                             : 0.0;
-                        m_messages[m_curAsstIdx] = msg;
-                        emit messagesChanged();
+                        messages[index] = msg;
+                        publishSessionMessages(eventSessionId);
                     }
-                    m_curAsstIdx = -1;
+                    assistantIndexForSession(eventSessionId) = -1;
+                    if (eventSessionId == m_sessionId) m_curAsstIdx = -1;
                 }
             }
         }
@@ -592,6 +775,10 @@ void OpencodeBackend::approveTool(const QString &id, bool always)
 {
     const QString sid = m_pendingPerm.take(id);
     if (sid.isEmpty()) return;
+    const QVariantMap data = m_lifecycleTools.value(sid + QLatin1Char(':') + id);
+    emitToolStart(sid, id, data.value(QStringLiteral("tool")).toString(),
+                  data.value(QStringLiteral("arguments")).toString(),
+                  data.value(QStringLiteral("paths")).toStringList());
     respondPermission(sid, id, always ? QStringLiteral("always") : QStringLiteral("once"));
 }
 
@@ -599,6 +786,10 @@ void OpencodeBackend::rejectTool(const QString &id)
 {
     const QString sid = m_pendingPerm.take(id);
     if (sid.isEmpty()) return;
+    const QVariantMap data = m_lifecycleTools.value(sid + QLatin1Char(':') + id);
+    emitToolFinish(sid, id, data.value(QStringLiteral("tool")).toString(), false,
+                   QStringLiteral("[el usuario rechazó la acción]"),
+                   data.value(QStringLiteral("paths")).toStringList());
     respondPermission(sid, id, QStringLiteral("reject"));
 }
 

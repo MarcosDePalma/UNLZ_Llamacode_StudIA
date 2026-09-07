@@ -19,6 +19,7 @@ public:
         PathValidRole,
         HasCapabilitiesRole,
         BinaryHashRole,
+        KvTypesRole,
         DisplayLabelRole   // name + carpeta padre, para desambiguar duplicados
     };
 
@@ -45,6 +46,7 @@ public:
     Q_INVOKABLE QVariantMap get(const QString &id) const;
     Q_INVOKABLE void refresh();
     Q_INVOKABLE QStringList supportedFlags(const QString &id) const;
+    Q_INVOKABLE QStringList kvTypes(const QString &id) const;
 
     // Infiere el backend ("cuda"/"vulkan"/"cpu") inspeccionando las DLLs/.so
     // que acompañan al ejecutable. Devuelve "" si no puede determinarlo.

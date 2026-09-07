@@ -7,8 +7,10 @@
 
 #include <QtTest>
 #include <QSignalSpy>
+#include <QDir>
 #include <QFile>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include "core/MermaidRenderer.h"
 
 class MermaidTests : public QObject
@@ -29,6 +31,10 @@ private slots:
     void requestRender_emitsResult();
     void renderSvg_validProducesPng();
     void renderSvg_invalidReturnsEmpty();
+    void exportSource_writesVerbatim();
+    void exportPng_svgProducesFile();
+    void exportPng_uncachedReturnsFalse();
+    void export_emptyDestReturnsFalse();
 };
 
 static QString segType(const QVariantList &l, int i)
@@ -154,6 +160,53 @@ void MermaidTests::renderSvg_invalidReturnsEmpty()
 {
     MermaidRenderer m;
     QVERIFY(m.renderSvg("no es svg en absoluto <<<").isEmpty());
+}
+
+void MermaidTests::exportSource_writesVerbatim()
+{
+    // exportSource escribe el source crudo byte a byte.
+    MermaidRenderer m;
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString dest = dir.filePath("out.mmd");
+    const QString src = "graph TD;A-->B;\nstyle A fill:#f00";
+    QVERIFY(m.exportSource(src, dest));
+    QFile f(dest);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QCOMPARE(QString::fromUtf8(f.readAll()), src);
+}
+
+void MermaidTests::exportPng_svgProducesFile()
+{
+    // svg: exportPng rasteriza (si hace falta) y copia el PNG al destino.
+    MermaidRenderer m;
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString dest = dir.filePath("out.png");
+    const QString svg =
+        "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='30'>"
+        "<rect width='40' height='30' fill='blue'/></svg>";
+    QVERIFY(m.exportPng(svg, dest));
+    QVERIFY(QFile::exists(dest));
+    QVERIFY(QFileInfo(dest).size() > 0);
+    // Idempotente: pisa un destino existente sin fallar.
+    QVERIFY(m.exportPng(svg, dest));
+}
+
+void MermaidTests::exportPng_uncachedReturnsFalse()
+{
+    // mermaid sin render previo (y sin cache) → no hay PNG que copiar.
+    MermaidRenderer m;
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(!m.exportPng("graph TD;Z-->Q; %% nunca rendido xyz", dir.filePath("o.png")));
+}
+
+void MermaidTests::export_emptyDestReturnsFalse()
+{
+    MermaidRenderer m;
+    QVERIFY(!m.exportSource("x", ""));
+    QVERIFY(!m.exportPng("<svg/>", ""));
 }
 
 QTEST_MAIN(MermaidTests)

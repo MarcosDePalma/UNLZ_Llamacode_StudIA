@@ -12,6 +12,7 @@ struct LlamaBinary {
     QString backend;      // "cuda", "vulkan", "cpu", "metal"
     QString versionHint;
     QStringList supportedFlags;
+    QStringList kvTypes;
     QMap<QString, QString> flagAliases;  // alias -> canonical
     QStringList conflictingFlags;
     QMap<QString, QString> envDefaults;

@@ -1,6 +1,7 @@
 #pragma once
 #include "IAgentBackend.h"
 #include <QHash>
+#include <QJsonArray>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 
@@ -24,6 +25,8 @@ public:
     void queueMessage(const QString &text) override;
     int queuedCount() const override { return m_msgQueue.size(); }
     QStringList queuedMessages() const override { return m_msgQueue; }
+    bool updateQueuedMessage(int index, const QString &text) override;
+    bool removeQueuedMessage(int index) override;
     void clearQueue() override;
 
     void newSession() override;
@@ -48,9 +51,41 @@ public:
                               const QString &projectName, const QString &projectDir = QString());
     bool renameProject(const QString &oldName, const QString &newName);
     void setThinkingEnabled(bool enabled) { m_thinkingEnabled = enabled; }
+    void setReasoningEffort(const QString &effort) { m_reasoningEffort = effort; }
+    // Sampling por sesión. Un valor negativo significa heredar el default del
+    // servidor; los valores se persisten junto con la sesión activa.
+    QVariantMap sampling() const;
+    void setSampling(const QVariantMap &sampling);
+    void setSampling(double temperature, double topP, int topK);
+    double temperature() const { return sampling().value(QStringLiteral("temperature"), -1.0).toDouble(); }
+    double topP() const { return sampling().value(QStringLiteral("topP"), -1.0).toDouble(); }
+    int topK() const { return sampling().value(QStringLiteral("topK"), -1).toInt(); }
     void setPendingAttachments(const QStringList &paths) { m_pendingAttachments = paths; }
+    // Persona "Diseño": sesga al modelo a responder con artifacts visuales
+    // (bloques ```mermaid / ```svg) que la UI rinde inline.
+    void setPersonaDesigner(bool enabled) { m_personaDesigner = enabled; }
+
+
+    // System prompt de la persona Diseño (público para test).
+    static QString designerSystemPrompt();
+    // Mensajes de sistema a prepender al request, según flags. Pura/testeable.
+    // `systemExtra`: instrucciones persistentes del perfil para el modo Chat
+    // (modulo `chat` del HarnessSpec). Van PRIMERAS: son las del usuario, no un
+    // detalle de formato. Pura y estatica -> unit-testeable.
+    static QJsonArray buildSystemPreamble(bool thinkingEnabled, bool designerPersona,
+                                          const QString &systemExtra = QString());
+    void setSystemExtra(const QString &extra) { m_systemExtra = extra; }
+    QString systemExtra() const { return m_systemExtra; }
+    // Salida estructurada: grammar GBNF o JSON schema (string JSON). Vacío = libre.
+    void setStructuredOutput(const QString &grammar, const QString &jsonSchema) {
+        m_grammar = grammar; m_jsonSchema = jsonSchema;
+    }
+    // Descarta sesiones sin ningún mensaje (creadas y abandonadas). `keepId`
+    // nunca se toca (la sesión recién creada / recién abierta).
+    void pruneEmptySessions(const QString &keepId);
 
 private:
+    void emitSessionLifecycle();
     QString storageDir() const;
     QString sessionFilePath(const QString &sessionId) const;
     void loadFromDisk();
@@ -70,13 +105,21 @@ private:
     bool m_running = false;
     bool m_stopping = false;
     bool m_thinkingEnabled = false;
+    QString m_reasoningEffort;
+    bool m_personaDesigner = false;
+    QString m_systemExtra;              // instrucciones del perfil (modulo `chat`)
+    QString m_grammar;       // GBNF (passthrough a llama-server)
+    QString m_jsonSchema;    // JSON schema (string) → response_format
 
     QString m_sessionId;
+    QString m_correlationId;
+    QString m_lifecycleSessionId;
     QString m_sessionTitle;
     QString m_projectDir;
     QVariantList m_messages;
     QVariantList m_sessions;
     QHash<QString, QVariantList> m_sessionMessages;
+    QHash<QString, QVariantMap> m_sessionSampling;
     int m_curAsstIdx = -1;
     QByteArray m_sseBuf;
     QString m_reasonBuf;   // reasoning_content acumulado (thinking)
