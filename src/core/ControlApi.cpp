@@ -5,6 +5,7 @@
 #include <QMetaObject>
 #include <QMetaMethod>
 #include <QMetaProperty>
+#include <QMetaType>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -179,8 +180,14 @@ static QJsonArray childTargets(QObject *obj)
     const QMetaObject *mo = obj->metaObject();
     for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i) {
         const QMetaProperty pr = mo->property(i);
-        const QVariant v = obj->property(pr.name());
-        if (v.value<QObject *>())
+        // Descartar por metatipo ANTES de leer el valor. obj->property() EJECUTA
+        // el getter, y en AppController son 178 propiedades de las que sólo 14
+        // son QObject*: leerlas todas disparaba los getters caros (listados de
+        // sesiones de chat, corridas de agente, timelines de tareas), que hacían
+        // que GET /methods tardara ~27 s en vez de milisegundos.
+        if (!(pr.metaType().flags() & QMetaType::PointerToQObject))
+            continue;
+        if (obj->property(pr.name()).value<QObject *>())
             out.append(QString::fromUtf8(pr.name()));
     }
     return out;
