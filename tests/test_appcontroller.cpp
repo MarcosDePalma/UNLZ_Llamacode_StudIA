@@ -545,6 +545,10 @@ void AppControllerTests::initTestCase()
     QCoreApplication::setOrganizationName(QStringLiteral("LlamaCode"));
     QCoreApplication::setApplicationName(QStringLiteral("LlamaCode"));
     QVERIFY(m_tmp.isValid());
+    // Y los perfiles, que viven en Documentos y NO los redirige el modo test.
+    // Sin esto, createRecommendedLaunchProfileBuildsProfile() creaba un perfil
+    // real por cada corrida de la suite en la máquina de quien la ejecuta.
+    qputenv("LLAMACODE_PROFILES_DIR", m_tmp.filePath(QStringLiteral("profiles")).toLocal8Bit());
     qputenv("LLAMACODE_RUN_HISTORY_DIR",
             QFile::encodeName(QDir(m_tmp.path()).filePath(QStringLiteral("run_history"))));
 }

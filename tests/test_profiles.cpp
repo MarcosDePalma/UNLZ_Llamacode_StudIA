@@ -9,6 +9,9 @@
 // primer ProfileManager del proceso (lo hacemos en initTestCase).
 
 #include <QtTest>
+#include <QCoreApplication>
+#include <QProcess>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <algorithm>
 #include "core/profiles/ProfileTypes.h"
@@ -44,6 +47,13 @@ private slots:
     void manager_persistsAcrossInstances();
     void manager_exportImportBundle();
     void manager_profileChangeHistory();
+
+    void migracion_copiaLosPerfilesSiElDestinoEstaVacio();
+    void migracion_noPisaLoQueYaHayEnElDestino();
+    void migracion_sinOrigenNoHaceNada();
+    void rutaDePerfiles_respetaLaVariableDeEntorno();
+    void rutaDePerfiles_bajoTestNuncaEsLaDelUsuario();
+    void rutaDePerfiles_imprimeLaRaiz();
 
 private:
     QTemporaryDir m_dir;
@@ -522,6 +532,114 @@ void ProfilesTests::manager_persistsAcrossInstances()
         ProfileManager pm2;  // recarga de disco en el ctor
         QCOMPARE(pm2.getBackend(id).value("name").toString(), QStringLiteral("persist"));
     }
+}
+
+// ── Migración de la ruta de perfiles ─────────────────────────────────────────
+// Antes la carpeta estaba escrita a mano y apuntaba al usuario del
+// desarrollador original; ahora usa Documentos del usuario actual. La migración
+// tiene que traer los perfiles existentes sin pisar los del destino.
+
+void ProfilesTests::migracion_copiaLosPerfilesSiElDestinoEstaVacio()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString origen  = tmp.filePath(QStringLiteral("viejo"));
+    const QString destino = tmp.filePath(QStringLiteral("nuevo"));
+    QVERIFY(QDir().mkpath(origen));
+
+    for (const QString &e : {QStringLiteral("backends"), QStringLiteral("launches")}) {
+        QFile f(origen + QLatin1Char('/') + e + QStringLiteral(".json"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("[]");
+    }
+    QCOMPARE(ProfileManager::migrarPerfiles(destino, origen), 2);
+    QVERIFY(QFile::exists(destino + QStringLiteral("/backends.json")));
+    QVERIFY(QFile::exists(destino + QStringLiteral("/launches.json")));
+    // El origen no se toca: la migración copia, no mueve.
+    QVERIFY(QFile::exists(origen + QStringLiteral("/backends.json")));
+}
+
+void ProfilesTests::migracion_noPisaLoQueYaHayEnElDestino()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString origen  = tmp.filePath(QStringLiteral("viejo"));
+    const QString destino = tmp.filePath(QStringLiteral("nuevo"));
+    QVERIFY(QDir().mkpath(origen));
+    QVERIFY(QDir().mkpath(destino));
+
+    QFile viejo(origen + QStringLiteral("/backends.json"));
+    QVERIFY(viejo.open(QIODevice::WriteOnly));
+    viejo.write("[\"del origen\"]");
+    viejo.close();
+
+    QFile nuevo(destino + QStringLiteral("/backends.json"));
+    QVERIFY(nuevo.open(QIODevice::WriteOnly));
+    nuevo.write("[\"del usuario\"]");
+    nuevo.close();
+
+    QCOMPARE(ProfileManager::migrarPerfiles(destino, origen), 0);
+    QFile chequeo(destino + QStringLiteral("/backends.json"));
+    QVERIFY(chequeo.open(QIODevice::ReadOnly));
+    QCOMPARE(chequeo.readAll(), QByteArrayLiteral("[\"del usuario\"]"));
+}
+
+void ProfilesTests::migracion_sinOrigenNoHaceNada()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    QCOMPARE(ProfileManager::migrarPerfiles(tmp.filePath(QStringLiteral("nuevo")),
+                                            tmp.filePath(QStringLiteral("no-existe"))), 0);
+    // Y si origen y destino son el mismo, tampoco.
+    const QString mismo = tmp.filePath(QStringLiteral("igual"));
+    QVERIFY(QDir().mkpath(mismo));
+    QCOMPARE(ProfileManager::migrarPerfiles(mismo, mismo), 0);
+}
+
+void ProfilesTests::rutaDePerfiles_respetaLaVariableDeEntorno()
+{
+    // initTestCase la setea; la raíz se cachea, así que debe coincidir.
+    QCOMPARE(QDir::cleanPath(ProfileManager::profilesRoot()),
+             QDir::cleanPath(QString::fromLocal8Bit(qgetenv("LLAMACODE_PROFILES_DIR"))));
+    // Y la ruta vieja ya no se usa como default.
+    QVERIFY(!ProfileManager::profilesRoot().contains(QStringLiteral("cristian")));
+}
+
+void ProfilesTests::rutaDePerfiles_bajoTestNuncaEsLaDelUsuario()
+{
+    // Los perfiles viven en Documentos, y setTestModeEnabled() NO redirige esa
+    // carpeta: sólo AppData y AppLocalData. Un test que se olvide de setear
+    // LLAMACODE_PROFILES_DIR escribía perfiles de verdad en la máquina de quien
+    // corre la suite —pasó: se acumularon 29 perfiles basura antes de notarlo—.
+    //
+    // Se comprueba en un proceso aparte porque profilesRoot() cachea su
+    // resultado en un static: dentro de este binario ya quedó fijado por la
+    // variable de entorno de initTestCase.
+    QProcess p;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.remove(QStringLiteral("LLAMACODE_PROFILES_DIR"));
+    p.setProcessEnvironment(env);
+    p.start(QCoreApplication::applicationFilePath(),
+            {QStringLiteral("rutaDePerfiles_imprimeLaRaiz")});
+    QVERIFY(p.waitForFinished(30000));
+    const QString salida = QString::fromLocal8Bit(p.readAllStandardOutput());
+
+    const QString docs =
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    QVERIFY2(!docs.isEmpty(), "sin carpeta de Documentos no se puede comprobar");
+    const QString raiz = salida.section(QStringLiteral("RAIZ="), 1).section('\n', 0, 0).trimmed();
+    QVERIFY2(!raiz.isEmpty(), qPrintable(salida));
+    QVERIFY2(!QDir::cleanPath(raiz).startsWith(QDir::cleanPath(docs)),
+             qPrintable(QStringLiteral("los tests escribirían en %1").arg(raiz)));
+}
+
+void ProfilesTests::rutaDePerfiles_imprimeLaRaiz()
+{
+    // Caso auxiliar del anterior: corre en el subproceso, sin la variable de
+    // entorno, y sólo informa dónde caerían los perfiles.
+    QStandardPaths::setTestModeEnabled(true);
+    printf("RAIZ=%s\n", qPrintable(ProfileManager::profilesRoot()));
+    fflush(stdout);
 }
 
 void ProfilesTests::manager_exportImportBundle()
