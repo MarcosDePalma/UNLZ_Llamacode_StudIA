@@ -1458,7 +1458,7 @@ void SystemProfilesTests::bundle_48gbFamilyIsBenchmarkableAndDualGpu()
         marked += it.value().value("favorite").toBool() ? 1 : 0;
     QCOMPARE(marked, 4);
     QCOMPARE(found.value(QStringLiteral("sys-48-dsv4-nospec")).value("displayName").toString(),
-             QStringLiteral("DeepSeek V4-7-8-26"));
+             QStringLiteral("SUPERIOR - DeepSeek V4-7-8-26"));
 
     const QJsonObject hyb = found.value(QStringLiteral("sys-48-hybrid-tc-kat"));
     QCOMPARE(hyb.value("plannerProfileId").toString(), QStringLiteral("sys-48-thinkingcap-mtp"));
