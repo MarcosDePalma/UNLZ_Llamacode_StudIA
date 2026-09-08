@@ -8,9 +8,11 @@
 #   2. Junta los scripts sueltos (tools\studia, installer) dentro de
 #      build\Release\StudIA, que es lo que el .iss empaqueta.
 #
-# Los documentos originales (7,7 GB) NO van en el instalador: no entran en un
-# .exe, que Windows limita a 4,2 GB, y sus rutas pasan los 260 caracteres que
-# admite. Van aparte con copiar_documentos.ps1.
+# El material de estudio NO va en el instalador. Viaja aparte, en una carpeta
+# con studia.db y DATA_StudIA adentro, que el usuario copia donde quiera y elige
+# desde la app. No entra en un .exe (Windows lo limita a 4,2 GB) y ademas separa
+# dos cosas con ritmos distintos: el programa cambia con cada version, el indice
+# solo cuando se reindexa.
 
 param()
 
@@ -39,7 +41,7 @@ Titulo "Inno Setup"; Ok $iscc
 
 # ── Que este el build ────────────────────────────────────────────────────────
 Titulo "Build"
-foreach ($f in @("LlamaCode.exe", "StudIA\studia.db")) {
+foreach ($f in @("LlamaCode.exe")) {
     $p = Join-Path $release $f
     if (-not (Test-Path $p)) {
         Write-Host "  falta $p" -ForegroundColor Red
@@ -49,12 +51,14 @@ foreach ($f in @("LlamaCode.exe", "StudIA\studia.db")) {
     Ok ("$f  " + [math]::Round((Get-Item $p).Length / 1MB, 1) + " MB")
 }
 
-# SQLite en modo WAL guarda escrituras pendientes en el -wal. Si se empaqueta el
-# .db sin el, esas escrituras se pierden. Con la app cerrada el -wal queda en 0.
-$wal = Join-Path $release "StudIA\studia.db-wal"
-if ((Test-Path $wal) -and ((Get-Item $wal).Length -gt 0)) {
-    Aviso "studia.db-wal tiene datos sin volcar: cerra StudIA y volve a correr esto."
-    exit 1
+# El modelo de embeddings si va adentro: sin el, la busqueda queda solo por
+# palabras. No es fatal, pero conviene enterarse antes de repartir el paquete.
+$modelos = Join-Path $release "StudIA\modelos"
+if ((Test-Path $modelos) -and (Get-ChildItem $modelos -Filter *.gguf -EA SilentlyContinue)) {
+    $g = Get-ChildItem $modelos -Filter *.gguf | Select-Object -First 1
+    Ok ("modelos\" + $g.Name + "  " + [math]::Round($g.Length / 1MB, 1) + " MB")
+} else {
+    Aviso "no hay modelo de embeddings en StudIA\modelos: la busqueda semantica no va a andar."
 }
 
 # ── Runtime de Visual C++ al lado del ejecutable ─────────────────────────────
@@ -79,9 +83,7 @@ Titulo "Scripts"
 $destino = Join-Path $release "StudIA"
 New-Item -ItemType Directory -Force -Path $destino | Out-Null
 foreach ($s in @("tools\studia\instalar_dependencias.bat",
-                 "tools\studia\instalar_dependencias.ps1",
-                 "installer\copiar_documentos.bat",
-                 "installer\copiar_documentos.ps1")) {
+                 "tools\studia\instalar_dependencias.ps1")) {
     $o = Join-Path $raiz $s
     if (Test-Path $o) { Copy-Item $o $destino -Force; Ok (Split-Path $s -Leaf) }
     else { Aviso "falta $s" }

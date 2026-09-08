@@ -102,9 +102,14 @@ public:
     StudiaPlot *graficos() { return &m_graficos; }
     QString urlEmbeddings() const { return m_embed.url(); }
     void setUrlEmbeddings(const QString &u);
-    // Ruta del corpus con el que trabajar. La empaquetada junto al ejecutable
-    // si existe; si no, la que se uso al indexar.
+    // Ruta del corpus con el que trabajar. Primero la carpeta DATA_StudIA que
+    // este al lado del indice abierto —la forma recomendada de instalar—; si no,
+    // la empaquetada junto al ejecutable, y por ultimo la que se uso al indexar.
     QString carpetaCorpus() const;
+
+    // Carpeta de documentos que corresponde a un indice: la DATA_StudIA hermana
+    // del .db. Estatica y pura (no toca disco) para poder testearla.
+    static QString carpetaJuntoAlIndice(const QString &dbPath);
 
     // Herramientas externas: cuales hay y que funcion habilita cada una. Sin
     // esto se apagaban en silencio y el estudiante no tenia como enterarse.

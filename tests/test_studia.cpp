@@ -2373,6 +2373,50 @@ private slots:
         QSettings().sync();
     }
 
+    void empaquetado_carpetaJuntoAlIndiceSaleDeLaRutaDelDb()
+    {
+        // Pura manipulacion de texto: la carpeta de documentos es la DATA_StudIA
+        // hermana del .db. Sin esto habria que adivinar donde quedaron los PDF.
+        QCOMPARE(StudiaController::carpetaJuntoAlIndice(
+                     QStringLiteral("C:/donde/sea/studia.db")),
+                 QStringLiteral("C:/donde/sea/DATA_StudIA"));
+
+        // Sin indice abierto no hay carpeta que derivar.
+        QVERIFY(StudiaController::carpetaJuntoAlIndice(QString()).isEmpty());
+        QVERIFY(StudiaController::carpetaJuntoAlIndice(QStringLiteral("   ")).isEmpty());
+    }
+
+    void empaquetado_laCarpetaHermanaDelIndiceMandaSobreLasDemas()
+    {
+        // La instalacion recomendada es dejar studia.db y DATA_StudIA juntos y
+        // elegir el .db desde la app: de ahi sale tambien donde estan los
+        // documentos, sin copiarlos a una ruta fija ni registrar nada. Tiene que
+        // ganarle a la carpeta que hubiera dejado el copiador.
+        QTemporaryDir sede;
+        QVERIFY(sede.isValid());
+        const QString db = sede.filePath(QStringLiteral("studia.db"));
+        QVERIFY(QFile::copy(m_db, db));
+        const QString docs = sede.filePath(QStringLiteral("DATA_StudIA"));
+        QVERIFY(QDir().mkpath(docs));
+
+        QTemporaryDir otra;                 // la del copiador, que debe perder
+        QVERIFY(otra.isValid());
+        QSettings().setValue(QStringLiteral("studia/carpetaDocumentos"), otra.path());
+        QSettings().sync();
+
+        StudiaController c;
+        QVERIFY(c.abrirIndice(db));
+        QCOMPARE(QDir(c.carpetaCorpus()).canonicalPath(), QDir(docs).canonicalPath());
+
+        // Si la hermana no existe, se sigue respetando la del copiador: no se
+        // devuelve una ruta inventada.
+        QVERIFY(QDir(docs).removeRecursively());
+        QCOMPARE(QDir(c.carpetaCorpus()).canonicalPath(), QDir(otra.path()).canonicalPath());
+
+        QSettings().remove(QStringLiteral("studia/carpetaDocumentos"));
+        QSettings().sync();
+    }
+
     void empaquetado_cuandoElDocumentoNoEstaSeExplicaPorQue()
     {
         // Un clic que no hace nada se lee como "se colgó". Y con la copia que se

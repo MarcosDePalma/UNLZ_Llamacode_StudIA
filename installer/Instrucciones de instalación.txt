@@ -1,0 +1,214 @@
+================================================================================
+  StudIA - INSTRUCCIONES DE INSTALACION
+  Asistente de estudio sobre material academico real
+================================================================================
+
+  Marcos Agustin De Palma - Practica Profesional Supervisada
+  Ingenieria Mecatronica - UNLZ
+
+
+--------------------------------------------------------------------------------
+  QUE RECIBISTE
+--------------------------------------------------------------------------------
+
+  1) El instalador           ->  StudIA-1.0-Setup.exe
+  2) La carpeta del material ->  una carpeta con DOS cosas adentro:
+
+        studia.db      el indice (el texto de todos los apuntes)
+        DATA_StudIA    los PDF originales
+
+  Esas dos cosas TIENEN QUE QUEDAR JUNTAS, en la misma carpeta. Es lo unico
+  importante de recordar: eligiendo el studia.db desde el programa, de ahi sale
+  tambien donde estan los documentos.
+
+  Podes ponerla donde quieras: el disco C, un disco externo, un pendrive.
+
+
+--------------------------------------------------------------------------------
+  ANTES DE EMPEZAR
+--------------------------------------------------------------------------------
+
+  Windows 10 u 11.
+  Unos 10 GB libres (el programa, el material y el motor que se baja solo).
+  Placa de video con 4 GB de memoria o mas. Con menos anda, pero lento.
+  Conexion a internet la primera vez, para bajar el modelo de lenguaje.
+
+  NO hace falta ser administrador.
+
+
+================================================================================
+  CASO A - NO TENES NADA INSTALADO
+================================================================================
+
+  PASO 1 - Instalar el programa
+  ------------------------------
+  Doble clic en StudIA-1.0-Setup.exe y seguir el asistente.
+
+  Al terminar deja marcada la opcion "Instalar las funciones extra" y aceptala.
+  Instala el runtime de Visual C++ (lo necesita el motor del modelo) y Python
+  con algunas librerias (habilitan los graficos y la exportacion a Anki).
+  Se abre una ventana negra que va contando lo que hace; es normal y puede
+  tardar unos minutos.
+
+
+  PASO 2 - Copiar el material
+  ----------------------------
+  Copia a tu disco la carpeta que tiene studia.db y DATA_StudIA adentro.
+
+  Anotate donde la dejaste. No la separes: las dos cosas van juntas.
+
+  (Si solo copias el studia.db, StudIA responde igual y sigue diciendo de que
+  apunte y que pagina saco cada cosa. Lo unico que perdes es poder hacer clic
+  en una cita y que se abra el PDF.)
+
+
+  PASO 3 - Abrir el programa
+  ---------------------------
+  Menu Inicio -> StudIA. O el acceso directo del escritorio.
+
+
+  PASO 4 - Bajar un modelo de lenguaje
+  -------------------------------------
+  Es el "cerebro" que redacta las respuestas. No viene con el instalador
+  porque son varios GB y conviene elegir el que le sirva a tu placa.
+
+  En el programa, entra a la pagina de perfiles y elegi uno segun tu placa:
+
+      Placa de 8 GB   ->  "[general] 8GB - Gemma 4 12B"      (recomendado)
+      Placa de 4 GB   ->  "[general] 4GB - Gemma 4 E4B"
+      Placa de 2 GB   ->  "[general] 2GB - Gemma 4 E2B"
+      Sin placa       ->  "[general] 0GB CPU - Qwen3.5 4B"   (lento)
+
+  El programa lo descarga solo. Es la espera mas larga de toda la instalacion.
+
+
+  PASO 5 - Arrancar el servidor y ESPERAR
+  ----------------------------------------
+  Arranca el servidor desde el programa y espera a que diga que esta listo.
+
+  >> IMPORTANTE: tarda unos 30 segundos en cargar el modelo. En ese rato el
+  >> cuadro de texto ya se habilita pero todavia no hay nadie del otro lado.
+  >> Si preguntas antes de tiempo vas a ver "[error: Connection refused]".
+  >> No esta roto: esperá a que termine de cargar y volve a preguntar.
+
+
+  PASO 6 - Conectar el material
+  ------------------------------
+  En el programa, entra a la seccion  StudIA  (el icono del birrete).
+
+  Apreta el boton "Abrir indice" y elegi el archivo studia.db de la carpeta
+  que copiaste en el paso 2.
+
+  Queda recordado: no hay que volver a hacerlo nunca mas.
+
+
+  PASO 7 - Usarlo
+  ----------------
+  Elegi una materia de la lista y escribi tu pregunta.
+
+  Arriba hay modos de estudio: conversacion, autoevaluacion, fichas de repaso
+  y plan de estudio. Cada uno cambia como te responde.
+
+  Las respuestas vienen con citas [1] [2] al material. Haciendo clic se abre
+  el PDF en la pagina exacta.
+
+  Si algo no esta en los apuntes, te lo dice en vez de inventarlo. Eso es a
+  proposito.
+
+
+================================================================================
+  CASO B - YA TENES UNLZ_LLAMACODE, PERO SIN StudIA
+================================================================================
+
+  Hay dos caminos segun que quieras hacer.
+
+
+  ---- OPCION B1: solo probarlo, sin compilar ----------------------------------
+
+  Segui el CASO A tal cual.
+
+  El instalador deja StudIA en su propia carpeta, aparte de tu instalacion
+  actual. Las dos conviven sin pisarse.
+
+  Si ya tenias modelos descargados, StudIA los reutiliza: en el paso 4 te van
+  a aparecer en la lista y no hace falta bajar nada.
+
+
+  ---- OPCION B2: ver el codigo integrado y compilarlo -------------------------
+
+  Para revisar como quedo StudIA integrado dentro del programa.
+
+  1) Traer la rama, sin tocar tu repositorio:
+
+        git remote add marcos https://github.com/MarcosDePalma/UNLZ_Llamacode_StudIA.git
+        git fetch marcos
+        git worktree add ../LlamaCode-studia -b studia marcos/feature/studia
+
+     Eso deja el proyecto integrado en una carpeta aparte y tu copia de
+     trabajo queda intacta.
+
+  2) Comprobar que la version actual del proyecto esta completa adentro:
+
+        git merge-base --is-ancestor main marcos/feature/studia && echo OK
+
+     Si imprime OK, no se perdio ningun cambio del proyecto original.
+
+  3) Ver que agrega StudIA, sin el ruido de la fusion:
+
+        git diff --stat main marcos/feature/studia
+
+     Son unos 51 archivos, casi todo bajo src/core/studia/,
+     qml/pages/StudiaPage.qml, tools/studia/ e installer/.
+
+  4) Compilar, dentro de la carpeta nueva:
+
+        build.bat Release
+
+     El primer build es completo, asi que tarda.
+
+  5) Abrir build\Release\LlamaCode.exe
+
+  6) Para que responda, seguir los pasos 2, 5 y 6 del CASO A: copiar el
+     material, arrancar el servidor y elegir el studia.db desde la app.
+
+
+================================================================================
+  SI ALGO NO ANDA
+================================================================================
+
+  "[error: Connection refused]" al preguntar
+      El modelo todavia se esta cargando. Espera a que el servidor diga que
+      esta listo (unos 30 segundos) y volve a preguntar.
+
+  "Abri un indice para empezar"
+      Falta el paso 6: elegir el studia.db con el boton "Abrir indice".
+
+  Hago clic en una cita y no abre el PDF
+      Falta la carpeta DATA_StudIA al lado del studia.db, o quedo separada de
+      el. Ponelas juntas y volve a elegir el indice.
+
+  Las respuestas son pobres o se inventa cosas
+      Probablemente el modelo sea chico para la tarea. Los modos con formato
+      estricto (autoevaluacion, fichas, plan) piden bastante: si tu placa lo
+      permite, usa uno mas grande.
+
+  La busqueda parece que ignora sinonimos
+      Es la busqueda por palabras. La semantica necesita el modelo de
+      embeddings, que viene con el instalador; si instalaste a mano, fijate
+      que exista la carpeta  StudIA\modelos  dentro del programa.
+
+  El programa no abre en una PC sin Visual Studio
+      Falta el runtime de Visual C++. Corre  "Instalar funciones extra"  desde
+      el menu Inicio, dentro del grupo StudIA.
+
+
+================================================================================
+  RESUMEN EN CUATRO LINEAS
+================================================================================
+
+  1. Instalar el .exe y aceptar las funciones extra.
+  2. Copiar la carpeta con studia.db y DATA_StudIA (juntos) a donde quieras.
+  3. Bajar un modelo, arrancar el servidor y ESPERAR a que cargue.
+  4. StudIA -> Abrir indice -> elegir el studia.db. Listo.
+
+================================================================================

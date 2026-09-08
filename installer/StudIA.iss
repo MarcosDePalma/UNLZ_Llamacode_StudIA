@@ -1,10 +1,16 @@
-; StudIA — instalador principal
+﻿; StudIA — instalador principal
 ;
-; Deja andando la app completa: ejecutable, indice del corpus (studia.db) y el
-; modelo de embeddings. Los documentos ORIGINALES no vienen aca: son 7,7 GB y
-; solo sirven para abrir el PDF desde una cita. El texto citado esta adentro del
-; indice, asi que el chat, las citas, la abstencion y los modos funcionan igual.
-; Quien los quiera instala despues StudIA-Corpus.
+; Instala el PROGRAMA: ejecutable, modelo de embeddings y las dependencias.
+;
+; El material de estudio NO viene aca. Viaja aparte, en una carpeta con dos
+; cosas adentro: studia.db (el indice) y DATA_StudIA (los PDF). Se copia donde
+; el usuario quiera y se elige el .db desde la app, en Abrir indice: de esa
+; misma ruta sale tambien donde estan los documentos. Sin scripts de copiado ni
+; rutas fijas: antes habia que dejar el corpus en C:\StudIA_Docs con robocopy.
+;
+; Separarlo tiene dos motivos. Uno practico: el indice cambia cada vez que se
+; reindexa y el programa no, asi que actualizar uno no obliga a rehacer el otro.
+; Otro de limites de Windows: un .exe no pasa de 4,2 GB y el material los supera.
 ;
 ; No requiere administrador: instala para el usuario actual.
 ;
@@ -62,16 +68,12 @@ Name: "extras"; Description: "Instalar las funciones extra (diagramas, OCR, graf
     GroupDescription: "Al terminar:"
 
 [Files]
-; La app. Se excluye la carpeta StudIA entera (va explicita mas abajo): ahi
-; adentro vive el enlace a DATA_StudIA y, si se dejara pasar, el compilador se
-; metaria a recorrer 7,7 GB de PDFs para despues descartarlos.
+; La app. Se excluye la carpeta StudIA entera (lo de adentro va explicito mas
+; abajo): si se dejara pasar, el compilador entraria a recorrer el indice y los
+; documentos que hubiera ahi para despues descartarlos.
 Source: "{#Origen}\*"; DestDir: "{app}"; \
     Excludes: "StudIA,*.exp,*.lib,*.pdb,qmltooling"; \
     Flags: recursesubdirs createallsubdirs ignoreversion
-
-; El indice: es el corazon de StudIA y lo unico que no se puede regenerar sin el
-; corpus original.
-Source: "{#Origen}\StudIA\studia.db"; DestDir: "{app}\StudIA"; Flags: ignoreversion
 
 ; Modelo de embeddings (bge-m3). Sin el la busqueda sigue andando, pero solo por
 ; palabras: se pierde la semantica.
@@ -80,21 +82,20 @@ Source: "{#Origen}\StudIA\modelos\*"; DestDir: "{app}\StudIA\modelos"; Flags: ig
 Source: "{#Origen}\StudIA\instalar_dependencias.bat"; DestDir: "{app}\StudIA"; Flags: ignoreversion
 Source: "{#Origen}\StudIA\instalar_dependencias.ps1"; DestDir: "{app}\StudIA"; Flags: ignoreversion
 
-; Para quien reciba ademas los documentos originales en un pendrive. No hacen
-; nada por si solos, pero tenerlos instalados evita depender de que el pendrive
-; traiga tambien los scripts.
-Source: "{#Origen}\StudIA\copiar_documentos.bat"; DestDir: "{app}\StudIA"; Flags: ignoreversion
-Source: "{#Origen}\StudIA\copiar_documentos.ps1"; DestDir: "{app}\StudIA"; Flags: ignoreversion
+; Las instrucciones, tambien instaladas: quien las pierda las tiene a mano desde
+; el menu Inicio en vez de tener que volver a pedirlas.
+Source: "Instrucciones de instalación.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#Nombre}"; Filename: "{app}\{#Ejecutable}"
 Name: "{group}\Instalar funciones extra"; Filename: "{app}\StudIA\instalar_dependencias.bat"
+Name: "{group}\Instrucciones de instalación"; Filename: "{app}\Instrucciones de instalación.txt"
 Name: "{group}\Desinstalar {#Nombre}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#Nombre}"; Filename: "{app}\{#Ejecutable}"; Tasks: escritorio
 
 [Registry]
-; Donde quedo instalado. Lo lee el instalador del corpus para dejar los
-; documentos en el lugar correcto sin preguntarle nada al usuario.
+; Donde quedo instalado. Queda para que cualquier herramienta externa sepa
+; encontrar la instalacion sin preguntarle nada al usuario.
 Root: HKA; Subkey: "Software\StudIA"; ValueType: string; ValueName: "InstallDir"; \
     ValueData: "{app}"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\StudIA"; ValueType: string; ValueName: "Version"; \
@@ -108,9 +109,11 @@ Filename: "{app}\{#Ejecutable}"; Description: "Abrir {#Nombre} ahora"; \
     Flags: postinstall nowait skipifsilent
 
 [UninstallDelete]
-; Los documentos que haya dejado el instalador del corpus: si no, desinstalar
-; deja 7,7 GB huerfanos que nadie encuentra despues.
+; Por si el usuario dejo el material adentro de la carpeta del programa: sin
+; esto, desinstalar deja varios GB huerfanos que despues nadie encuentra. Si lo
+; puso en otro lado (lo recomendado), no se toca: no es nuestro.
 Type: filesandordirs; Name: "{app}\StudIA\DATA_StudIA"
+Type: files; Name: "{app}\StudIA\studia.db"
 
 [Code]
 // StudIA descarga por su cuenta el motor del modelo (llama.cpp) y necesita

@@ -39,6 +39,11 @@ const char *kClaveCorpus  = "studia/carpetaDocumentos";
 // entrarian; aca afuera quedan 2.
 const char *kCorpusCorto  = "C:/StudIA_Docs";
 
+// Nombre de la carpeta de documentos. La forma recomendada de instalar StudIA
+// es dejarla al lado del studia.db: eligiendo el indice desde la app queda
+// resuelto tambien donde estan los PDF, sin copiar nada ni configurar rutas.
+const char *kNombreCorpus = "DATA_StudIA";
+
 // Cuantos turnos previos se le pasan al modelo como contexto y cuanto se
 // recorta cada uno. Alcanza para que entienda una repregunta sin inflar el
 // prompt (el grueso del contexto son los fragmentos).
@@ -123,12 +128,26 @@ QString StudiaController::indiceEmpaquetado()
     return QFileInfo::exists(p) ? p : QString();
 }
 
+QString StudiaController::carpetaJuntoAlIndice(const QString &dbPath)
+{
+    // Los documentos viven en una carpeta DATA_StudIA hermana del indice. Es
+    // pura manipulacion de texto (no toca disco) para poder testearla.
+    if (dbPath.trimmed().isEmpty())
+        return QString();
+    return QFileInfo(dbPath).absolutePath() + QStringLiteral("/") + kNombreCorpus;
+}
+
 QString StudiaController::carpetaCorpus() const
 {
     // De mas especifica a mas general. La primera que exista gana.
     const QStringList candidatas = {
+        // AL LADO DEL INDICE ABIERTO. Instalar StudIA es dejar studia.db y
+        // DATA_StudIA en la misma carpeta y elegir el .db desde la app: de ahi
+        // sale tambien donde estan los documentos. Antes habia que copiarlos
+        // aparte con robocopy a una ruta corta y registrarla; eso sobra.
+        carpetaJuntoAlIndice(rutaIndice()),
         // La que viaja con la app: es la que de verdad esta en esta maquina.
-        StudiaEmbedServer::carpetaEmpaquetada() + QStringLiteral("/DATA_StudIA"),
+        StudiaEmbedServer::carpetaEmpaquetada() + QStringLiteral("/") + kNombreCorpus,
         // La que eligio el copiador. Va antes que el destino por defecto porque
         // puede ser un disco externo que el estudiante prefirio no copiar.
         QSettings().value(QLatin1String(kClaveCorpus)).toString(),
